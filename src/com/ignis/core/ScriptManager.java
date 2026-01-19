@@ -298,12 +298,12 @@ public class ScriptManager {
         sb.append("public class ").append(className).append(" extends IgnisScript {\n");
         sb.append("\n");
         sb.append("    @Override\n");
-        sb.append("    public void start() {\n");
+        sb.append("    public void start() { // Called once when initializing world simulation\n");
         sb.append("        \n");
         sb.append("    }\n");
         sb.append("\n");
         sb.append("    @Override\n");
-        sb.append("    public void tick() {\n");
+        sb.append("    public void tick() { // Called once every frame\n");
         sb.append("        \n");
         sb.append("    }\n");
         sb.append("}\n");

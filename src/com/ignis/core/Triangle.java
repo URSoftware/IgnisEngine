@@ -39,6 +39,8 @@ public class Triangle extends GameObject {
 
     @Override
     public void render(Graphics g) {
+        if (!visible) return;
+        
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
@@ -122,12 +124,16 @@ public class Triangle extends GameObject {
             this.spritePath = props.getString("spritePath");
             loadSprite();
         }
+        if (props.has("visible")) {
+            this.visible = props.getBoolean("visible");
+        }
     }
 
     @Override
     public JSONObject saveProperties() {
         JSONObject props = new JSONObject();
         props.put("color", color.getRGB());
+        props.put("visible", visible);
         if (spritePath != null && !spritePath.isEmpty()) {
             props.put("spritePath", spritePath);
         }

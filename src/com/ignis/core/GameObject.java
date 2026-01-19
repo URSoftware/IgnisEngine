@@ -15,6 +15,7 @@ public abstract class GameObject {
     protected int width, height;
     protected Game game;
     protected String spritePath;
+    protected boolean visible = true; // Controls if object is rendered
     
     // Lista de scripts/componentes anexados a este objeto
     protected List<IgnisScript> scripts = new ArrayList<>();
@@ -31,11 +32,13 @@ public abstract class GameObject {
         this.width = width;
         this.height = height;
         this.spritePath = null;
+        this.visible = true;
     }
 
     // Construtor vazio para EntityFactory
     public GameObject() {
         this.id = java.util.UUID.randomUUID().toString();
+        this.visible = true;
     }
 
     public abstract void tick();
@@ -126,6 +129,14 @@ public abstract class GameObject {
 
     public void setSpritePath(String spritePath) {
         this.spritePath = spritePath;
+    }
+    
+    public boolean isVisible() {
+        return visible;
+    }
+    
+    public void setVisible(boolean visible) {
+        this.visible = visible;
     }
 
     // Metodo para obter o tipo da entidade (nome da classe)

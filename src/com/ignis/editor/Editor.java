@@ -8,7 +8,9 @@ import javax.swing.event.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.datatransfer.*;
+import java.awt.dnd.*;
 import java.io.*;
+import java.nio.file.*;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.List;
@@ -703,7 +705,7 @@ public class Editor extends JFrame {
         hierarchyList = new JList<>(hierarchyModel);
         hierarchyList.setBackground(new Color(60, 60, 60));
         hierarchyList.setForeground(Color.WHITE);
-        hierarchyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        hierarchyList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION); // Allow multiple selection with Shift/Ctrl
         hierarchyList.setSelectionBackground(new Color(0, 120, 215));
         hierarchyList.setSelectionForeground(Color.WHITE);
 
@@ -1023,6 +1025,28 @@ public class Editor extends JFrame {
         });
         inspectorNameField.addFocusListener(inspectorFocusAdapter);
         content.add(wrapFieldFullWidth(inspectorNameField));
+        content.add(Box.createVerticalStrut(10));
+        
+        // Visibility toggle
+        JPanel visibilityPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        visibilityPanel.setBackground(new Color(45, 45, 45));
+        visibilityPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        visibilityPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        
+        JCheckBox visibilityCheckbox = new JCheckBox("Visible");
+        visibilityCheckbox.setName("visibilityCheckbox");
+        visibilityCheckbox.setBackground(new Color(45, 45, 45));
+        visibilityCheckbox.setForeground(Color.WHITE);
+        visibilityCheckbox.setSelected(true);
+        visibilityCheckbox.addActionListener(e -> {
+            GameObject selected = hierarchyList.getSelectedValue();
+            if (selected != null) {
+                selected.setVisible(visibilityCheckbox.isSelected());
+                game.repaint();
+            }
+        });
+        visibilityPanel.add(visibilityCheckbox);
+        content.add(visibilityPanel);
         content.add(Box.createVerticalStrut(15));
 
         // Transform section header
@@ -1254,6 +1278,9 @@ public class Editor extends JFrame {
 
         isUpdatingInspector = true;
 
+        // Update visibility checkbox
+        JCheckBox visibilityCheckbox = (JCheckBox) findComponentByName(inspectorPanel, "visibilityCheckbox");
+        
         if (obj != null) {
             setInspectorEnabled(true);
             inspectorNameField.setText(obj.getName());
@@ -1262,6 +1289,11 @@ public class Editor extends JFrame {
             inspectorRotationField.setText(String.format("%.1f", obj.getRotation()));
             inspectorScaleXField.setText(String.valueOf(obj.getWidth()));
             inspectorScaleYField.setText(String.valueOf(obj.getHeight()));
+            
+            // Update visibility checkbox
+            if (visibilityCheckbox != null) {
+                visibilityCheckbox.setSelected(obj.isVisible());
+            }
             
             // Atualizar lista de scripts
             updateInspectorScripts(obj);
@@ -1276,6 +1308,11 @@ public class Editor extends JFrame {
             inspectorRotationField.setText("");
             inspectorScaleXField.setText("");
             inspectorScaleYField.setText("");
+            
+            // Reset visibility checkbox
+            if (visibilityCheckbox != null) {
+                visibilityCheckbox.setSelected(true);
+            }
             
             // Limpar lista de scripts
             updateInspectorScripts(null);
@@ -2199,6 +2236,9 @@ public class Editor extends JFrame {
             }
         });
 
+        // Enable drag and drop from external file explorers
+        setupFileTreeDragAndDrop();
+
         JScrollPane scrollPane = new JScrollPane(fileTree);
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setBackground(new Color(50, 50, 50));
@@ -2353,6 +2393,33 @@ public class Editor extends JFrame {
      * Custom renderer for file tree with drawn icons
      */
     private class FileTreeCellRenderer extends DefaultTreeCellRenderer {
+        
+        // Larger icon size for better drag and drop targeting
+        private static final int ICON_SIZE = 20;
+        
+        // Cached icons loaded from files
+        private ImageIcon audioFileIcon;
+        private ImageIcon prefabFileIcon;
+        
+        public FileTreeCellRenderer() {
+            // Load icons from core_assets/icons
+            try {
+                java.net.URL audioIconUrl = getClass().getResource("/com/ignis/core_assets/icons/sound_icon.ico");
+                java.net.URL prefabIconUrl = getClass().getResource("/com/ignis/core_assets/icons/util_gear.ico");
+                
+                if (audioIconUrl != null) {
+                    audioFileIcon = new ImageIcon(new ImageIcon(audioIconUrl).getImage()
+                        .getScaledInstance(ICON_SIZE, ICON_SIZE, java.awt.Image.SCALE_SMOOTH));
+                }
+                if (prefabIconUrl != null) {
+                    prefabFileIcon = new ImageIcon(new ImageIcon(prefabIconUrl).getImage()
+                        .getScaledInstance(ICON_SIZE, ICON_SIZE, java.awt.Image.SCALE_SMOOTH));
+                }
+            } catch (Exception e) {
+                System.err.println("[Editor] Failed to load file icons: " + e.getMessage());
+            }
+        }
+        
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value,
                 boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
@@ -2371,7 +2438,7 @@ public class Editor extends JFrame {
             } else {
                 String name = file.getName().toLowerCase();
                 if (name.endsWith(".prefab.json")) {
-                    setIcon(createPrefabFileIcon());
+                    setIcon(prefabFileIcon != null ? prefabFileIcon : createPrefabFileIcon());
                 } else if (name.endsWith(".java")) {
                     setIcon(createJavaFileIcon());
                 } else if (name.endsWith(".ignis")) {
@@ -2380,6 +2447,9 @@ public class Editor extends JFrame {
                     setIcon(createJsonFileIcon());
                 } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".gif")) {
                     setIcon(createImageFileIcon());
+                } else if (name.endsWith(".wav") || name.endsWith(".mp3") || name.endsWith(".aiff") || 
+                           name.endsWith(".au") || name.endsWith(".ogg") || name.endsWith(".flac")) {
+                    setIcon(audioFileIcon != null ? audioFileIcon : createAudioFileIcon());
                 } else {
                     setIcon(createFileIcon());
                 }
@@ -2400,23 +2470,23 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(255, 200, 80));
-                    // Folder body
-                    g2d.fillRect(x, y + 4, 14, 10);
+                    // Folder body (scaled for 20px)
+                    g2d.fillRect(x, y + 5, 18, 12);
                     // Folder tab
-                    g2d.fillRect(x, y + 2, 6, 3);
+                    g2d.fillRect(x, y + 3, 8, 4);
                     g2d.setColor(new Color(200, 150, 50));
-                    g2d.drawRect(x, y + 4, 14, 10);
+                    g2d.drawRect(x, y + 5, 18, 12);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2428,13 +2498,13 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(255, 220, 100));
-                    // Folder body (open)
-                    int[] xPoints = { x, x + 14, x + 16, x + 2 };
-                    int[] yPoints = { y + 6, y + 6, y + 14, y + 14 };
+                    // Folder body (open, scaled for 20px)
+                    int[] xPoints = { x, x + 17, x + 20, x + 3 };
+                    int[] yPoints = { y + 7, y + 7, y + 17, y + 17 };
                     g2d.fillPolygon(xPoints, yPoints, 4);
                     // Folder tab
                     g2d.setColor(new Color(255, 200, 80));
-                    g2d.fillRect(x, y + 2, 6, 5);
+                    g2d.fillRect(x, y + 3, 8, 6);
                     g2d.setColor(new Color(200, 150, 50));
                     g2d.drawPolygon(xPoints, yPoints, 4);
                     g2d.dispose();
@@ -2442,12 +2512,12 @@ public class Editor extends JFrame {
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2459,22 +2529,22 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 2, y, 10, 14);
+                    g2d.fillRect(x + 3, y, 13, 18);
                     g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 2, y, 10, 14);
+                    g2d.drawRect(x + 3, y, 13, 18);
                     // Corner fold
-                    g2d.drawLine(x + 8, y, x + 12, y + 4);
+                    g2d.drawLine(x + 10, y, x + 16, y + 5);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2486,23 +2556,23 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 2, y, 10, 14);
+                    g2d.fillRect(x + 3, y, 13, 18);
                     g2d.setColor(new Color(255, 120, 50));
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 9));
-                    g2d.drawString("J", x + 5, y + 11);
+                    g2d.setFont(new Font("Dialog", Font.BOLD, 11));
+                    g2d.drawString("J", x + 6, y + 14);
                     g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 2, y, 10, 14);
+                    g2d.drawRect(x + 3, y, 13, 18);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2515,25 +2585,25 @@ public class Editor extends JFrame {
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     // Fire-colored background
                     g2d.setColor(new Color(255, 100, 50));
-                    g2d.fillRect(x + 2, y, 10, 14);
+                    g2d.fillRect(x + 3, y, 13, 18);
                     // Flame
                     g2d.setColor(new Color(255, 200, 50));
-                    int[] fx = { x + 7, x + 4, x + 7, x + 10 };
-                    int[] fy = { y + 3, y + 10, y + 7, y + 10 };
+                    int[] fx = { x + 9, x + 5, x + 9, x + 13 };
+                    int[] fy = { y + 3, y + 13, y + 9, y + 13 };
                     g2d.fillPolygon(fx, fy, 4);
                     g2d.setColor(new Color(200, 50, 0));
-                    g2d.drawRect(x + 2, y, 10, 14);
+                    g2d.drawRect(x + 3, y, 13, 18);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2545,23 +2615,23 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 2, y, 10, 14);
+                    g2d.fillRect(x + 3, y, 13, 18);
                     g2d.setColor(new Color(100, 150, 200));
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 8));
-                    g2d.drawString("{}", x + 3, y + 10);
+                    g2d.setFont(new Font("Dialog", Font.BOLD, 10));
+                    g2d.drawString("{}", x + 4, y + 13);
                     g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 2, y, 10, 14);
+                    g2d.drawRect(x + 3, y, 13, 18);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2575,34 +2645,34 @@ public class Editor extends JFrame {
                     
                     // Box background
                     g2d.setColor(new Color(120, 80, 200));
-                    g2d.fillRoundRect(x + 1, y + 1, 13, 13, 3, 3);
+                    g2d.fillRoundRect(x + 1, y + 1, 17, 17, 4, 4);
                     
                     // 3D box effect - top
                     g2d.setColor(new Color(150, 110, 230));
-                    int[] topX = {x + 1, x + 7, x + 14, x + 7};
-                    int[] topY = {y + 4, y + 1, y + 4, y + 7};
+                    int[] topX = {x + 1, x + 9, x + 18, x + 9};
+                    int[] topY = {y + 5, y + 1, y + 5, y + 9};
                     g2d.fillPolygon(topX, topY, 4);
                     
                     // Border
                     g2d.setColor(new Color(80, 50, 150));
-                    g2d.drawRoundRect(x + 1, y + 1, 13, 13, 3, 3);
+                    g2d.drawRoundRect(x + 1, y + 1, 17, 17, 4, 4);
                     
                     // "P" letter
                     g2d.setColor(Color.WHITE);
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 9));
-                    g2d.drawString("P", x + 5, y + 11);
+                    g2d.setFont(new Font("Dialog", Font.BOLD, 11));
+                    g2d.drawString("P", x + 6, y + 14);
                     
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2614,28 +2684,72 @@ public class Editor extends JFrame {
                     Graphics2D g2d = (Graphics2D) g.create();
                     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 2, y, 10, 14);
+                    g2d.fillRect(x + 3, y, 13, 18);
                     // Mountain/image symbol
                     g2d.setColor(new Color(100, 180, 100));
-                    int[] mx = { x + 3, x + 7, x + 11 };
-                    int[] my = { y + 11, y + 5, y + 11 };
+                    int[] mx = { x + 4, x + 9, x + 15 };
+                    int[] my = { y + 14, y + 6, y + 14 };
                     g2d.fillPolygon(mx, my, 3);
                     // Sun
                     g2d.setColor(new Color(255, 200, 50));
-                    g2d.fillOval(x + 8, y + 3, 3, 3);
+                    g2d.fillOval(x + 10, y + 3, 4, 4);
                     g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 2, y, 10, 14);
+                    g2d.drawRect(x + 3, y, 13, 18);
                     g2d.dispose();
                 }
 
                 @Override
                 public int getIconWidth() {
-                    return 16;
+                    return ICON_SIZE;
                 }
 
                 @Override
                 public int getIconHeight() {
-                    return 16;
+                    return ICON_SIZE;
+                }
+            };
+        }
+        
+        private Icon createAudioFileIcon() {
+            return new Icon() {
+                @Override
+                public void paintIcon(Component c, Graphics g, int x, int y) {
+                    Graphics2D g2d = (Graphics2D) g.create();
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    
+                    // Background
+                    g2d.setColor(new Color(70, 70, 70));
+                    g2d.fillRoundRect(x, y, ICON_SIZE, ICON_SIZE, 4, 4);
+                    
+                    // Draw two eighth notes (colcheias) connected by a beam
+                    g2d.setColor(new Color(255, 150, 50)); // Orange/gold color for music
+                    g2d.setStroke(new BasicStroke(2f));
+                    
+                    // Left note stem
+                    g2d.drawLine(x + 5, y + 5, x + 5, y + 14);
+                    // Right note stem
+                    g2d.drawLine(x + 14, y + 5, x + 14, y + 12);
+                    
+                    // Beam connecting the two stems (at top)
+                    g2d.setStroke(new BasicStroke(3f));
+                    g2d.drawLine(x + 5, y + 5, x + 14, y + 5);
+                    
+                    // Left note head (filled ellipse)
+                    g2d.fillOval(x + 2, y + 12, 5, 4);
+                    // Right note head (filled ellipse)
+                    g2d.fillOval(x + 11, y + 10, 5, 4);
+                    
+                    g2d.dispose();
+                }
+
+                @Override
+                public int getIconWidth() {
+                    return ICON_SIZE;
+                }
+
+                @Override
+                public int getIconHeight() {
+                    return ICON_SIZE;
                 }
             };
         }
@@ -2776,6 +2890,244 @@ public class Editor extends JFrame {
         DefaultMutableTreeNode rootNode = createFileTreeNode(projectRoot);
         fileTreeModel.setRoot(rootNode);
         fileTreeModel.reload();
+    }
+
+    /**
+     * Sets up drag and drop support for the file tree.
+     * Allows importing files from external file explorers (Windows Explorer, etc.)
+     */
+    private void setupFileTreeDragAndDrop() {
+        new DropTarget(fileTree, DnDConstants.ACTION_COPY_OR_MOVE, new DropTargetListener() {
+            
+            private TreePath lastHighlightedPath = null;
+            
+            @Override
+            public void dragEnter(DropTargetDragEvent dtde) {
+                if (isDropAcceptable(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragOver(DropTargetDragEvent dtde) {
+                if (isDropAcceptable(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                    
+                    // Highlight the folder under the cursor
+                    Point pt = dtde.getLocation();
+                    TreePath path = fileTree.getPathForLocation(pt.x, pt.y);
+                    
+                    if (path != lastHighlightedPath) {
+                        lastHighlightedPath = path;
+                        fileTree.setSelectionPath(path);
+                    }
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dropActionChanged(DropTargetDragEvent dtde) {
+                if (isDropAcceptable(dtde)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragExit(DropTargetEvent dte) {
+                lastHighlightedPath = null;
+            }
+
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    if (!isDropAcceptable(dtde)) {
+                        dtde.rejectDrop();
+                        return;
+                    }
+                    
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    
+                    // Get the target folder
+                    Point pt = dtde.getLocation();
+                    TreePath path = fileTree.getPathForLocation(pt.x, pt.y);
+                    File targetFolder = projectRoot;
+                    
+                    if (path != null) {
+                        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                        File file = (File) node.getUserObject();
+                        targetFolder = file.isDirectory() ? file : file.getParentFile();
+                    }
+                    
+                    // Get the dropped files
+                    Transferable transferable = dtde.getTransferable();
+                    
+                    @SuppressWarnings("unchecked")
+                    java.util.List<File> droppedFiles = (java.util.List<File>) 
+                        transferable.getTransferData(DataFlavor.javaFileListFlavor);
+                    
+                    // Import the files
+                    int importedCount = importFiles(droppedFiles, targetFolder);
+                    
+                    dtde.dropComplete(true);
+                    
+                    // Refresh the tree and show result
+                    refreshFileTree();
+                    
+                    if (importedCount > 0) {
+                        showImportNotification(importedCount, targetFolder);
+                    }
+                    
+                } catch (Exception e) {
+                    System.err.println("Error during drop: " + e.getMessage());
+                    e.printStackTrace();
+                    dtde.dropComplete(false);
+                }
+                
+                lastHighlightedPath = null;
+            }
+            
+            private boolean isDropAcceptable(DropTargetDragEvent dtde) {
+                return dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+            }
+            
+            private boolean isDropAcceptable(DropTargetDropEvent dtde) {
+                return dtde.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+            }
+        }, true);
+    }
+
+    /**
+     * Imports files to the target folder.
+     * @param files List of files to import
+     * @param targetFolder Destination folder
+     * @return Number of files successfully imported
+     */
+    private int importFiles(java.util.List<File> files, File targetFolder) {
+        int imported = 0;
+        java.util.List<String> errors = new ArrayList<>();
+        
+        for (File sourceFile : files) {
+            try {
+                if (sourceFile.isDirectory()) {
+                    // Copy entire directory
+                    imported += copyDirectory(sourceFile, new File(targetFolder, sourceFile.getName()));
+                } else {
+                    // Copy single file
+                    File destFile = new File(targetFolder, sourceFile.getName());
+                    
+                    // Check if file already exists
+                    if (destFile.exists()) {
+                        int option = JOptionPane.showConfirmDialog(this,
+                            "File '" + sourceFile.getName() + "' already exists.\nDo you want to replace it?",
+                            "File Exists",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.WARNING_MESSAGE);
+                        
+                        if (option != JOptionPane.YES_OPTION) {
+                            continue;
+                        }
+                    }
+                    
+                    Files.copy(sourceFile.toPath(), destFile.toPath(), 
+                        StandardCopyOption.REPLACE_EXISTING);
+                    imported++;
+                    
+                    System.out.println("[Import] File imported: " + destFile.getAbsolutePath());
+                }
+            } catch (Exception e) {
+                errors.add(sourceFile.getName() + ": " + e.getMessage());
+                System.err.println("[Import] Error importing " + sourceFile.getName() + ": " + e.getMessage());
+            }
+        }
+        
+        // Show errors if any
+        if (!errors.isEmpty()) {
+            StringBuilder errorMsg = new StringBuilder("Some files could not be imported:\n\n");
+            for (String error : errors) {
+                errorMsg.append("• ").append(error).append("\n");
+            }
+            JOptionPane.showMessageDialog(this, errorMsg.toString(), "Import Errors", JOptionPane.WARNING_MESSAGE);
+        }
+        
+        return imported;
+    }
+
+    /**
+     * Recursively copies a directory and its contents.
+     * @param source Source directory
+     * @param dest Destination directory
+     * @return Number of files copied
+     */
+    private int copyDirectory(File source, File dest) throws IOException {
+        int count = 0;
+        
+        if (!dest.exists()) {
+            dest.mkdirs();
+        }
+        
+        File[] files = source.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                File destFile = new File(dest, file.getName());
+                
+                if (file.isDirectory()) {
+                    count += copyDirectory(file, destFile);
+                } else {
+                    Files.copy(file.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    count++;
+                }
+            }
+        }
+        
+        return count;
+    }
+
+    /**
+     * Shows a notification after importing files.
+     * @param count Number of files imported
+     * @param targetFolder The folder where files were imported
+     */
+    private void showImportNotification(int count, File targetFolder) {
+        String folderName = targetFolder.getName();
+        String message = count == 1 
+            ? "1 file imported to '" + folderName + "'"
+            : count + " files imported to '" + folderName + "'";
+        
+        // Create a temporary notification label
+        JLabel notification = new JLabel(message);
+        notification.setOpaque(true);
+        notification.setBackground(new Color(60, 140, 60));
+        notification.setForeground(Color.WHITE);
+        notification.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(80, 180, 80)),
+            BorderFactory.createEmptyBorder(8, 15, 8, 15)
+        ));
+        notification.setFont(notification.getFont().deriveFont(Font.BOLD, 12f));
+        
+        // Create popup
+        JWindow popup = new JWindow(this);
+        popup.getContentPane().add(notification);
+        popup.pack();
+        
+        // Position at bottom-right of the editor
+        Point location = getLocationOnScreen();
+        int x = location.x + getWidth() - popup.getWidth() - 20;
+        int y = location.y + getHeight() - popup.getHeight() - 50;
+        popup.setLocation(x, y);
+        
+        popup.setVisible(true);
+        
+        // Auto-hide after 3 seconds
+        javax.swing.Timer hideTimer = new javax.swing.Timer(3000, e -> popup.dispose());
+        hideTimer.setRepeats(false);
+        hideTimer.start();
+        
+        System.out.println("[Import] " + message);
     }
 
     private void createNewFolder() {
@@ -3013,9 +3365,17 @@ public class Editor extends JFrame {
         JMenuItem createTriangle = new JMenuItem("🔺 Triangle");
         createTriangle.addActionListener(e -> createPrimitiveObject("Triangle"));
         
+        JMenuItem createStar = new JMenuItem("⭐ Star");
+        createStar.addActionListener(e -> createPrimitiveObject("Star"));
+        
+        JMenuItem createPentagon = new JMenuItem("⬠ Pentagon");
+        createPentagon.addActionListener(e -> createPrimitiveObject("Pentagon"));
+        
         createMenu.add(createSquare);
         createMenu.add(createCircle);
         createMenu.add(createTriangle);
+        createMenu.add(createStar);
+        createMenu.add(createPentagon);
 
         JMenuItem renameItem = new JMenuItem("✏ Rename (F2)");
         renameItem.addActionListener(e -> {
@@ -3044,6 +3404,10 @@ public class Editor extends JFrame {
         
         JMenuItem importImageItem = new JMenuItem("🖼 Import Image");
         importImageItem.addActionListener(e -> importImageForSelectedObject());
+        
+        // ========== MERGE OBJECTS ==========
+        JMenuItem mergeObjectsItem = new JMenuItem("🔗 Merge Selected Objects");
+        mergeObjectsItem.addActionListener(e -> mergeSelectedObjects());
         
         // ========== PREFAB OPTIONS ==========
         JMenuItem saveAsPrefabItem = new JMenuItem("📦 Save as Prefab");
@@ -3121,6 +3485,8 @@ public class Editor extends JFrame {
         hierarchyContextMenu.add(copyItem);
         hierarchyContextMenu.add(pasteItem);
         hierarchyContextMenu.addSeparator();
+        hierarchyContextMenu.add(mergeObjectsItem);
+        hierarchyContextMenu.addSeparator();
         hierarchyContextMenu.add(saveAsPrefabItem);
         hierarchyContextMenu.addSeparator();
         hierarchyContextMenu.add(importImageItem);
@@ -3129,6 +3495,59 @@ public class Editor extends JFrame {
         hierarchyContextMenu.add(newScriptItem);
         hierarchyContextMenu.addSeparator();
         hierarchyContextMenu.add(deleteItem);
+    }
+    
+    /**
+     * Merges multiple selected objects into a single MergedShape object
+     */
+    private void mergeSelectedObjects() {
+        java.util.List<GameObject> selectedObjects = hierarchyList.getSelectedValuesList();
+        
+        if (selectedObjects.size() < 2) {
+            JOptionPane.showMessageDialog(this,
+                "Please select at least 2 objects to merge.\n" +
+                "Use Shift+Click or Ctrl+Click to select multiple objects.",
+                "Merge Objects",
+                JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        
+        // Ask for the merged object name
+        String defaultName = "MergedShape";
+        int counter = 1;
+        java.util.Set<String> existingNames = new java.util.HashSet<>();
+        for (GameObject existing : game.getEntities()) {
+            existingNames.add(existing.getName());
+        }
+        while (existingNames.contains(defaultName)) {
+            defaultName = "MergedShape" + counter++;
+        }
+        
+        String name = (String) JOptionPane.showInputDialog(this,
+            "Enter name for the merged object:",
+            "Merge " + selectedObjects.size() + " Objects",
+            JOptionPane.PLAIN_MESSAGE,
+            null, null, defaultName);
+        
+        if (name == null || name.trim().isEmpty()) {
+            return; // User cancelled
+        }
+        
+        // Create the merged shape
+        MergedShape merged = MergedShape.createFromObjects(selectedObjects, game);
+        merged.setName(name.trim());
+        
+        // Remove original objects from the scene
+        for (GameObject obj : selectedObjects) {
+            game.removeEntity(obj);
+        }
+        
+        // Add the merged object
+        game.addEntity(merged);
+        updateHierarchy();
+        hierarchyList.setSelectedValue(merged, true);
+        
+        System.out.println("[Editor] Merged " + selectedObjects.size() + " objects into '" + name + "'");
     }
     
     /**
@@ -3363,7 +3782,19 @@ public class Editor extends JFrame {
         if (e.isPopupTrigger()) {
             int index = hierarchyList.locationToIndex(e.getPoint());
             if (index >= 0) {
-                hierarchyList.setSelectedIndex(index);
+                // Only change selection if clicked item is not already selected
+                // This preserves multi-selection when right-clicking
+                int[] selectedIndices = hierarchyList.getSelectedIndices();
+                boolean isAlreadySelected = false;
+                for (int selectedIndex : selectedIndices) {
+                    if (selectedIndex == index) {
+                        isAlreadySelected = true;
+                        break;
+                    }
+                }
+                if (!isAlreadySelected) {
+                    hierarchyList.setSelectedIndex(index);
+                }
             }
             hierarchyContextMenu.show(e.getComponent(), e.getX(), e.getY());
         }

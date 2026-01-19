@@ -546,6 +546,9 @@ public class Game extends Canvas implements Runnable {
                 scriptManager.compileAllScripts();
                 initializeScripts();
             }
+        } else if (gameState == GameState.PAUSED) {
+            // Resuming from pause - resume audio
+            IgnisSoundEngine.getInstance().resumeMusic();
         }
         gameState = GameState.PLAYING;
     }
@@ -557,6 +560,9 @@ public class Game extends Canvas implements Runnable {
     public void pauseWorld() {
         if (gameState == GameState.PLAYING) {
             gameState = GameState.PAUSED;
+            
+            // Pause audio
+            IgnisSoundEngine.getInstance().pauseMusic();
         }
     }
 
@@ -566,6 +572,9 @@ public class Game extends Canvas implements Runnable {
     public void resumeWorld() {
         if (gameState == GameState.PAUSED) {
             gameState = GameState.PLAYING;
+            
+            // Resume audio
+            IgnisSoundEngine.getInstance().resumeMusic();
         }
     }
 
@@ -574,6 +583,10 @@ public class Game extends Canvas implements Runnable {
      */
     public void stopWorld() {
         gameState = GameState.EDITING;
+        
+        // Stop all audio
+        IgnisSoundEngine.getInstance().stopMusic();
+        IgnisSoundEngine.getInstance().stopAllSounds();
         
         // Remover todos os objetos criados em runtime (projéteis, inimigos spawados, etc.)
         for (GameObject runtimeObj : runtimeObjects) {

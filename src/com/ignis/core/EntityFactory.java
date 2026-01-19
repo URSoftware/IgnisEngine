@@ -21,6 +21,9 @@ public class EntityFactory {
             case "Square" -> new Square();
             case "Circle" -> new Circle();
             case "Triangle" -> new Triangle();
+            case "Star" -> new Star();
+            case "Pentagon" -> new Pentagon();
+            case "MergedShape" -> new MergedShape();
             // Adicione novas entidades aqui:
             // case "Enemy" -> new Enemy();
             // case "NPC" -> new NPC();
@@ -40,6 +43,9 @@ public class EntityFactory {
             case "Square" -> true;
             case "Circle" -> true;
             case "Triangle" -> true;
+            case "Star" -> true;
+            case "Pentagon" -> true;
+            case "MergedShape" -> true;
             // Adicione novas entidades aqui:
             // case "Enemy" -> true;
             // case "NPC" -> true;
@@ -58,7 +64,10 @@ public class EntityFactory {
                 "Player",
                 "Square",
                 "Circle",
-                "Triangle"
+                "Triangle",
+                "Star",
+                "Pentagon",
+                "MergedShape"
                 // Adicione novas entidades aqui:
                 // "Enemy",
                 // "NPC"

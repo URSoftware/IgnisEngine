@@ -11,23 +11,24 @@ import javax.imageio.ImageIO;
 import org.json.JSONObject;
 
 /**
- * Basic scene object - a simple square.
+ * Star shape - a 5-pointed star.
  * Has no own movement logic.
  * Movement will be done by user scripts.
  */
-public class Square extends GameObject {
+public class Star extends GameObject {
 
-    private Color color = new Color(100, 150, 255);
+    private Color color = new Color(255, 215, 0); // Gold color
     private BufferedImage spriteImage = null;
+    private int points = 5; // Number of points
 
-    public Square(String name, Game game, double x, double y, int width, int height) {
+    public Star(String name, Game game, double x, double y, int width, int height) {
         super(name, game, x, y, width, height);
     }
 
     // Empty constructor for EntityFactory
-    public Square() {
+    public Star() {
         super();
-        this.color = new Color(100, 150, 255);
+        this.color = new Color(255, 215, 0);
     }
 
     @Override
@@ -48,24 +49,37 @@ public class Square extends GameObject {
         AffineTransform oldTransform = g2d.getTransform();
         
         // Apply rotation around center
+        double centerX = x + width / 2.0;
+        double centerY = y + height / 2.0;
         if (rotation != 0) {
-            double centerX = x + width / 2.0;
-            double centerY = y + height / 2.0;
             g2d.rotate(Math.toRadians(rotation), centerX, centerY);
         }
         
         // Check if we have a sprite image
         if (spriteImage != null) {
-            // Render the sprite image
             g2d.drawImage(spriteImage, (int) x, (int) y, width, height, null);
         } else {
-            // Fill the square with color
+            // Draw star shape
+            int[] xPoints = new int[points * 2];
+            int[] yPoints = new int[points * 2];
+            
+            double outerRadius = Math.min(width, height) / 2.0;
+            double innerRadius = outerRadius * 0.4;
+            
+            for (int i = 0; i < points * 2; i++) {
+                double angle = Math.PI * i / points - Math.PI / 2;
+                double radius = (i % 2 == 0) ? outerRadius : innerRadius;
+                xPoints[i] = (int) (centerX + radius * Math.cos(angle));
+                yPoints[i] = (int) (centerY + radius * Math.sin(angle));
+            }
+            
+            // Fill the star
             g2d.setColor(color);
-            g2d.fillRect((int) x, (int) y, width, height);
+            g2d.fillPolygon(xPoints, yPoints, points * 2);
             
             // Border
             g2d.setColor(color.darker());
-            g2d.drawRect((int) x, (int) y, width, height);
+            g2d.drawPolygon(xPoints, yPoints, points * 2);
         }
         
         // Restore original transform
@@ -105,6 +119,9 @@ public class Square extends GameObject {
         if (props.has("color")) {
             this.color = new Color(props.getInt("color"));
         }
+        if (props.has("points")) {
+            this.points = props.getInt("points");
+        }
         if (props.has("spritePath")) {
             this.spritePath = props.getString("spritePath");
             loadSprite();
@@ -118,6 +135,7 @@ public class Square extends GameObject {
     public JSONObject saveProperties() {
         JSONObject props = new JSONObject();
         props.put("color", color.getRGB());
+        props.put("points", points);
         props.put("visible", visible);
         if (spritePath != null && !spritePath.isEmpty()) {
             props.put("spritePath", spritePath);
@@ -132,6 +150,14 @@ public class Square extends GameObject {
 
     public void setColor(Color color) {
         this.color = color;
+    }
+    
+    public int getPoints() {
+        return points;
+    }
+    
+    public void setPoints(int points) {
+        this.points = Math.max(3, points); // Minimum 3 points
     }
     
     public BufferedImage getSpriteImage() {

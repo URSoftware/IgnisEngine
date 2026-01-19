@@ -12,12 +12,13 @@ Este documento explica **tudo** sobre o sistema de scripts do motor Ignis Engine
 4. [Variáveis de Contexto](#variáveis-de-contexto)
 5. [Métodos de Movimento](#métodos-de-movimento)
 6. [Sistema de Input](#sistema-de-input-teclado-e-mouse)
-7. [Métodos de Busca e Interação](#métodos-de-busca-e-interação)
-8. [Controle do Script](#controle-do-script)
-9. [Variáveis no Inspector](#variáveis-no-inspector)
-10. [Sistema de Coordenadas](#sistema-de-coordenadas)
-11. [Exemplos Práticos](#exemplos-práticos-completos)
-12. [Boas Práticas](#boas-práticas)
+7. [Sistema de Áudio](#sistema-de-áudio-ignissoundengine)
+8. [Métodos de Busca e Interação](#métodos-de-busca-e-interação)
+9. [Controle do Script](#controle-do-script)
+10. [Variáveis no Inspector](#variáveis-no-inspector)
+11. [Sistema de Coordenadas](#sistema-de-coordenadas)
+12. [Exemplos Práticos](#exemplos-práticos-completos)
+13. [Boas Práticas](#boas-práticas)
 
 ---
 
@@ -747,6 +748,624 @@ KeyEvent.VK_F1, VK_F2, ... VK_F12
 
 ---
 
+## Sistema de Áudio (IgnisSoundEngine)
+
+O **IgnisSoundEngine** é o motor de áudio do Ignis Engine. Ele permite reproduzir efeitos sonoros e músicas de fundo nos seus jogos de forma simples e integrada aos scripts.
+
+### Formatos Suportados
+
+| Formato | Suporte | Observação |
+|---------|---------|------------|
+| WAV | ✅ Nativo | Recomendado para efeitos sonoros |
+| AIFF | ✅ Nativo | Formato Apple |
+| AU | ✅ Nativo | Formato Sun/Unix |
+
+### Métodos de Efeitos Sonoros
+
+#### `playSound(String filePath)`
+
+Reproduz um efeito sonoro uma vez.
+
+```java
+protected void playSound(String filePath)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `filePath` | `String` | Caminho do arquivo de áudio |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    if (Input.isKeyJustPressed(KeyEvent.VK_SPACE)) {
+        playSound("project/assets/sounds/jump.wav");
+    }
+}
+```
+
+---
+
+#### `playSound(String filePath, float volume)`
+
+Reproduz um efeito sonoro com volume personalizado.
+
+```java
+protected void playSound(String filePath, float volume)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `filePath` | `String` | Caminho do arquivo de áudio |
+| `volume` | `float` | Volume de 0.0 (mudo) a 1.0 (máximo) |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Som mais baixo (50% do volume)
+playSound("project/assets/sounds/footstep.wav", 0.5f);
+
+// Som no volume máximo
+playSound("project/assets/sounds/explosion.wav", 1.0f);
+```
+
+---
+
+#### `playSoundWithCallback(String filePath, Runnable onComplete)`
+
+Reproduz um efeito sonoro e executa uma ação quando terminar.
+
+```java
+protected void playSoundWithCallback(String filePath, Runnable onComplete)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `filePath` | `String` | Caminho do arquivo de áudio |
+| `onComplete` | `Runnable` | Ação a executar quando o som terminar |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Tocar som e executar ação ao finalizar
+playSoundWithCallback("project/assets/sounds/powerup.wav", () -> {
+    log("Power-up ativado!");
+    speed *= 2;
+});
+```
+
+---
+
+#### `stopAllSounds()`
+
+Para todos os efeitos sonoros que estão tocando.
+
+```java
+protected void stopAllSounds()
+```
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    // Parar todos os sons com ESC
+    if (Input.isKeyJustPressed(KeyEvent.VK_ESCAPE)) {
+        stopAllSounds();
+        log("Todos os sons parados");
+    }
+}
+```
+
+---
+
+### Métodos de Música de Fundo
+
+#### `playMusic(String filePath)`
+
+Reproduz música de fundo em loop contínuo.
+
+```java
+protected void playMusic(String filePath)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `filePath` | `String` | Caminho do arquivo de música |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void start() {
+    // Iniciar música tema do jogo (em loop)
+    playMusic("project/assets/music/theme.wav");
+}
+```
+
+---
+
+#### `playMusic(String filePath, boolean loop)`
+
+Reproduz música de fundo com controle de loop.
+
+```java
+protected void playMusic(String filePath, boolean loop)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `filePath` | `String` | Caminho do arquivo de música |
+| `loop` | `boolean` | `true` para repetir, `false` para tocar uma vez |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Música que repete
+playMusic("project/assets/music/battle.wav", true);
+
+// Música que toca apenas uma vez
+playMusic("project/assets/music/victory.wav", false);
+```
+
+---
+
+#### `pauseMusic()`
+
+Pausa a música de fundo atual.
+
+```java
+protected void pauseMusic()
+```
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    if (Input.isKeyJustPressed(KeyEvent.VK_P)) {
+        pauseMusic();
+        log("Música pausada");
+    }
+}
+```
+
+---
+
+#### `resumeMusic()`
+
+Retoma a música de fundo que estava pausada.
+
+```java
+protected void resumeMusic()
+```
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    if (Input.isKeyJustPressed(KeyEvent.VK_P)) {
+        if (isMusicPlaying()) {
+            pauseMusic();
+        } else {
+            resumeMusic();
+        }
+    }
+}
+```
+
+---
+
+#### `stopMusic()`
+
+Para completamente a música de fundo.
+
+```java
+protected void stopMusic()
+```
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void onCollision(GameObject other) {
+    if (other.getName().equals("BossDead")) {
+        stopMusic();
+        playMusic("project/assets/music/victory.wav", false);
+    }
+}
+```
+
+---
+
+#### `isMusicPlaying()`
+
+Verifica se há música tocando.
+
+```java
+protected boolean isMusicPlaying()
+```
+
+**Retorno:** `true` se música está tocando, `false` caso contrário
+
+```java
+@Override
+public void tick() {
+    if (!isMusicPlaying()) {
+        log("Nenhuma música tocando");
+        playMusic("project/assets/music/ambient.wav");
+    }
+}
+```
+
+---
+
+### Controle de Volume
+
+#### `setMasterVolume(float volume)`
+
+Define o volume master (afeta tudo: música e efeitos).
+
+```java
+protected void setMasterVolume(float volume)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `volume` | `float` | Volume de 0.0 (mudo) a 1.0 (máximo) |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void start() {
+    setMasterVolume(0.8f);  // 80% do volume total
+}
+```
+
+---
+
+#### `setMusicVolume(float volume)`
+
+Define o volume apenas da música de fundo.
+
+```java
+protected void setMusicVolume(float volume)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `volume` | `float` | Volume de 0.0 (mudo) a 1.0 (máximo) |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Música mais baixa para não atrapalhar diálogos
+setMusicVolume(0.3f);
+```
+
+---
+
+#### `setSfxVolume(float volume)`
+
+Define o volume dos efeitos sonoros.
+
+```java
+protected void setSfxVolume(float volume)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `volume` | `float` | Volume de 0.0 (mudo) a 1.0 (máximo) |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Efeitos sonoros no máximo
+setSfxVolume(1.0f);
+```
+
+---
+
+### Tabela de Volumes
+
+| Método | O que afeta | Padrão |
+|--------|-------------|--------|
+| `setMasterVolume()` | Tudo (música + efeitos) | 1.0 |
+| `setMusicVolume()` | Apenas música de fundo | 0.8 |
+| `setSfxVolume()` | Apenas efeitos sonoros | 1.0 |
+
+**Como os volumes se combinam:**
+```
+Volume Final = Volume do Som × Volume da Categoria × Volume Master
+
+Exemplo:
+- Master: 0.8
+- Music: 0.5
+- Volume final da música: 0.8 × 0.5 = 0.4 (40%)
+```
+
+---
+
+### Exemplos Práticos de Áudio
+
+#### 1. Player com Sons de Movimento e Ação
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.Input;
+import java.awt.event.KeyEvent;
+
+public class PlayerWithSound extends IgnisScript {
+    
+    private double speed = 5.0;
+    private boolean wasMoving = false;
+    
+    @Override
+    public void start() {
+        // Iniciar música de fundo
+        playMusic("project/assets/music/adventure.wav");
+        setMusicVolume(0.6f);
+    }
+    
+    @Override
+    public void tick() {
+        // Movimento
+        double dx = Input.getHorizontalAxis() * speed;
+        double dy = Input.getVerticalAxis() * speed;
+        move(dx, dy);
+        
+        // Som de passos (apenas quando começa a andar)
+        boolean isMoving = (dx != 0 || dy != 0);
+        if (isMoving && !wasMoving) {
+            playSound("project/assets/sounds/footstep.wav", 0.5f);
+        }
+        wasMoving = isMoving;
+        
+        // Som de pulo
+        if (Input.isKeyJustPressed(KeyEvent.VK_SPACE)) {
+            playSound("project/assets/sounds/jump.wav");
+        }
+        
+        // Som de ataque
+        if (Input.isMouseLeftJustPressed()) {
+            playSound("project/assets/sounds/attack.wav");
+        }
+    }
+}
+```
+
+#### 2. Sistema de Menu com Música
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.Input;
+import java.awt.event.KeyEvent;
+
+public class MenuController extends IgnisScript {
+    
+    private boolean isPaused = false;
+    
+    @Override
+    public void start() {
+        playMusic("project/assets/music/menu_theme.wav");
+    }
+    
+    @Override
+    public void tick() {
+        if (Input.isKeyJustPressed(KeyEvent.VK_ESCAPE)) {
+            togglePause();
+        }
+        
+        // Ajustar volume com + e -
+        if (Input.isKeyJustPressed(KeyEvent.VK_EQUALS)) {
+            setMasterVolume(1.0f);
+            log("Volume: Máximo");
+        }
+        if (Input.isKeyJustPressed(KeyEvent.VK_MINUS)) {
+            setMasterVolume(0.5f);
+            log("Volume: Médio");
+        }
+    }
+    
+    private void togglePause() {
+        isPaused = !isPaused;
+        
+        if (isPaused) {
+            pauseMusic();
+            playSound("project/assets/sounds/pause.wav");
+            log("Jogo pausado");
+        } else {
+            resumeMusic();
+            playSound("project/assets/sounds/unpause.wav");
+            log("Jogo retomado");
+        }
+    }
+}
+```
+
+#### 3. Inimigo com Sons de Alerta e Ataque
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.GameObject;
+
+public class EnemyWithSound extends IgnisScript {
+    
+    private double speed = 2.0;
+    private double detectionRange = 150.0;
+    private double attackRange = 30.0;
+    private GameObject player;
+    private boolean hasAlerted = false;
+    
+    @Override
+    public void start() {
+        player = findObject("Player");
+    }
+    
+    @Override
+    public void tick() {
+        if (player == null) return;
+        
+        double distancia = distanceTo(player);
+        
+        if (distancia <= attackRange) {
+            // Atacar
+            playSound("project/assets/sounds/enemy_attack.wav");
+        } else if (distancia <= detectionRange) {
+            // Detectou o player - som de alerta (apenas uma vez)
+            if (!hasAlerted) {
+                playSound("project/assets/sounds/enemy_alert.wav");
+                hasAlerted = true;
+            }
+            moveTowards(player.getX(), player.getY(), speed);
+        } else {
+            hasAlerted = false;  // Reset quando player sai do alcance
+        }
+    }
+    
+    @Override
+    public void onCollision(GameObject other) {
+        if (other.getType().equals("Bullet")) {
+            playSound("project/assets/sounds/enemy_hit.wav");
+            destroy(other);
+        }
+    }
+}
+```
+
+#### 4. Coletor de Itens com Sons Diferentes
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.GameObject;
+
+public class ItemCollectorWithSound extends IgnisScript {
+    
+    private int coins = 0;
+    private int gems = 0;
+    
+    @Override
+    public void start() {
+        log("Colete os itens!");
+    }
+    
+    @Override
+    public void onCollision(GameObject other) {
+        String tipo = other.getType();
+        
+        if (tipo.equals("Coin")) {
+            coins++;
+            playSound("project/assets/sounds/coin_collect.wav", 0.7f);
+            destroy(other);
+            
+            // A cada 10 moedas, toca um som especial
+            if (coins % 10 == 0) {
+                playSound("project/assets/sounds/bonus.wav");
+            }
+        } else if (tipo.equals("Gem")) {
+            gems++;
+            playSound("project/assets/sounds/gem_collect.wav");
+            destroy(other);
+        } else if (tipo.equals("PowerUp")) {
+            // Som com callback - ativa poder após o som
+            playSoundWithCallback("project/assets/sounds/powerup.wav", () -> {
+                log("Poder ativado!");
+            });
+            destroy(other);
+        }
+    }
+}
+```
+
+#### 5. Troca de Música por Zona
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.GameObject;
+
+public class MusicZoneController extends IgnisScript {
+    
+    private String currentZone = "normal";
+    
+    @Override
+    public void start() {
+        playMusic("project/assets/music/overworld.wav");
+    }
+    
+    @Override
+    public void onCollision(GameObject other) {
+        String zoneName = other.getName();
+        
+        // Evita trocar música se já está na mesma zona
+        if (zoneName.equals(currentZone)) return;
+        
+        if (zoneName.equals("DungeonZone")) {
+            stopMusic();
+            playMusic("project/assets/music/dungeon.wav");
+            currentZone = "dungeon";
+            log("Entrando na dungeon...");
+            
+        } else if (zoneName.equals("BossZone")) {
+            stopMusic();
+            playMusic("project/assets/music/boss_battle.wav");
+            currentZone = "boss";
+            log("CHEFE APARECEU!");
+            
+        } else if (zoneName.equals("SafeZone")) {
+            stopMusic();
+            playMusic("project/assets/music/peaceful.wav");
+            setMusicVolume(0.5f);  // Música mais calma
+            currentZone = "safe";
+            log("Zona segura");
+        }
+    }
+}
+```
+
+---
+
+### Resumo de Métodos de Áudio
+
+| O que você quer fazer | Método |
+|-----------------------|--------|
+| Tocar efeito sonoro | `playSound("arquivo.wav")` |
+| Tocar som com volume | `playSound("arquivo.wav", 0.5f)` |
+| Tocar som com callback | `playSoundWithCallback("arquivo.wav", () -> { })` |
+| Parar todos os efeitos | `stopAllSounds()` |
+| Tocar música (loop) | `playMusic("arquivo.wav")` |
+| Tocar música (uma vez) | `playMusic("arquivo.wav", false)` |
+| Pausar música | `pauseMusic()` |
+| Retomar música | `resumeMusic()` |
+| Parar música | `stopMusic()` |
+| Verificar se música toca | `isMusicPlaying()` |
+| Volume geral | `setMasterVolume(0.8f)` |
+| Volume da música | `setMusicVolume(0.5f)` |
+| Volume dos efeitos | `setSfxVolume(1.0f)` |
+
+---
+
+### Localização dos Arquivos de Áudio
+
+```
+projects/
+  └── SeuProjeto/
+      └── project/
+          └── assets/
+              ├── music/
+              │   ├── theme.wav
+              │   ├── battle.wav
+              │   └── victory.wav
+              └── sounds/
+                  ├── jump.wav
+                  ├── coin.wav
+                  └── explosion.wav
+```
+
+---
+
 ## Métodos de Busca e Interação
 
 ### `findObject(String name)`
@@ -1341,6 +1960,15 @@ Os scripts são **recompilados automaticamente** quando você clica em **Play** 
 | Verificar tecla acabou de pressionar | `Input.isKeyJustPressed(KeyEvent.VK_X)` |
 | Posição do mouse | `Input.getMouseX()`, `Input.getMouseY()` |
 | Clique do mouse | `Input.isMouseLeftJustPressed()` |
+| Tocar efeito sonoro | `playSound("arquivo.wav")` |
+| Tocar som com volume | `playSound("arquivo.wav", 0.5f)` |
+| Tocar música (loop) | `playMusic("arquivo.wav")` |
+| Pausar música | `pauseMusic()` |
+| Retomar música | `resumeMusic()` |
+| Parar música | `stopMusic()` |
+| Volume geral | `setMasterVolume(0.8f)` |
+| Volume da música | `setMusicVolume(0.5f)` |
+| Volume dos efeitos | `setSfxVolume(1.0f)` |
 | Encontrar objeto | `findObject("Nome")` |
 | Encontrar objetos por tipo | `findObjectsByType("Tipo")` |
 | Calcular distância | `distanceTo(outroObjeto)` |

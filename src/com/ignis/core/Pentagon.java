@@ -11,23 +11,23 @@ import javax.imageio.ImageIO;
 import org.json.JSONObject;
 
 /**
- * Basic scene object - a simple square.
+ * Pentagon shape - a regular 5-sided polygon.
  * Has no own movement logic.
  * Movement will be done by user scripts.
  */
-public class Square extends GameObject {
+public class Pentagon extends GameObject {
 
-    private Color color = new Color(100, 150, 255);
+    private Color color = new Color(150, 100, 200); // Purple color
     private BufferedImage spriteImage = null;
 
-    public Square(String name, Game game, double x, double y, int width, int height) {
+    public Pentagon(String name, Game game, double x, double y, int width, int height) {
         super(name, game, x, y, width, height);
     }
 
     // Empty constructor for EntityFactory
-    public Square() {
+    public Pentagon() {
         super();
-        this.color = new Color(100, 150, 255);
+        this.color = new Color(150, 100, 200);
     }
 
     @Override
@@ -48,24 +48,36 @@ public class Square extends GameObject {
         AffineTransform oldTransform = g2d.getTransform();
         
         // Apply rotation around center
+        double centerX = x + width / 2.0;
+        double centerY = y + height / 2.0;
         if (rotation != 0) {
-            double centerX = x + width / 2.0;
-            double centerY = y + height / 2.0;
             g2d.rotate(Math.toRadians(rotation), centerX, centerY);
         }
         
         // Check if we have a sprite image
         if (spriteImage != null) {
-            // Render the sprite image
             g2d.drawImage(spriteImage, (int) x, (int) y, width, height, null);
         } else {
-            // Fill the square with color
+            // Draw pentagon shape
+            int sides = 5;
+            int[] xPoints = new int[sides];
+            int[] yPoints = new int[sides];
+            
+            double radius = Math.min(width, height) / 2.0;
+            
+            for (int i = 0; i < sides; i++) {
+                double angle = 2 * Math.PI * i / sides - Math.PI / 2;
+                xPoints[i] = (int) (centerX + radius * Math.cos(angle));
+                yPoints[i] = (int) (centerY + radius * Math.sin(angle));
+            }
+            
+            // Fill the pentagon
             g2d.setColor(color);
-            g2d.fillRect((int) x, (int) y, width, height);
+            g2d.fillPolygon(xPoints, yPoints, sides);
             
             // Border
             g2d.setColor(color.darker());
-            g2d.drawRect((int) x, (int) y, width, height);
+            g2d.drawPolygon(xPoints, yPoints, sides);
         }
         
         // Restore original transform

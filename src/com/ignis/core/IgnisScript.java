@@ -218,4 +218,109 @@ public abstract class IgnisScript {
     protected void log(String message) {
         System.out.println("[" + scriptName + "] " + message);
     }
+
+    // ==================== MÉTODOS DE ÁUDIO ====================
+
+    /**
+     * Reproduz um efeito sonoro.
+     * @param filePath Caminho do arquivo de áudio (WAV, AIFF, AU)
+     */
+    protected void playSound(String filePath) {
+        IgnisSoundEngine.getInstance().playSound(filePath);
+    }
+
+    /**
+     * Reproduz um efeito sonoro com volume personalizado.
+     * @param filePath Caminho do arquivo de áudio
+     * @param volume Volume (0.0 a 1.0)
+     */
+    protected void playSound(String filePath, float volume) {
+        IgnisSoundEngine.getInstance().playSound(filePath, volume);
+    }
+
+    /**
+     * Reproduz um efeito sonoro com callback ao finalizar.
+     * @param filePath Caminho do arquivo de áudio
+     * @param onComplete Ação a executar quando o som terminar
+     */
+    protected void playSoundWithCallback(String filePath, Runnable onComplete) {
+        IgnisSoundEngine.getInstance().playSoundWithCallback(filePath, onComplete);
+    }
+
+    /**
+     * Para todos os efeitos sonoros.
+     */
+    protected void stopAllSounds() {
+        IgnisSoundEngine.getInstance().stopAllSounds();
+    }
+
+    /**
+     * Reproduz música de fundo em loop.
+     * @param filePath Caminho do arquivo de música
+     */
+    protected void playMusic(String filePath) {
+        IgnisSoundEngine.getInstance().playMusic(filePath);
+    }
+
+    /**
+     * Reproduz música de fundo.
+     * @param filePath Caminho do arquivo de música
+     * @param loop Se deve repetir em loop
+     */
+    protected void playMusic(String filePath, boolean loop) {
+        IgnisSoundEngine.getInstance().playMusic(filePath, loop);
+    }
+
+    /**
+     * Pausa a música de fundo.
+     */
+    protected void pauseMusic() {
+        IgnisSoundEngine.getInstance().pauseMusic();
+    }
+
+    /**
+     * Retoma a música de fundo.
+     */
+    protected void resumeMusic() {
+        IgnisSoundEngine.getInstance().resumeMusic();
+    }
+
+    /**
+     * Para a música de fundo.
+     */
+    protected void stopMusic() {
+        IgnisSoundEngine.getInstance().stopMusic();
+    }
+
+    /**
+     * Verifica se há música tocando.
+     * @return true se música está tocando
+     */
+    protected boolean isMusicPlaying() {
+        return IgnisSoundEngine.getInstance().isMusicPlaying();
+    }
+
+    /**
+     * Define o volume master (afeta tudo).
+     * @param volume Volume (0.0 a 1.0)
+     */
+    protected void setMasterVolume(float volume) {
+        IgnisSoundEngine.getInstance().setMasterVolume(volume);
+    }
+
+    /**
+     * Define o volume da música.
+     * @param volume Volume (0.0 a 1.0)
+     */
+    protected void setMusicVolume(float volume) {
+        IgnisSoundEngine.getInstance().setMusicVolume(volume);
+    }
+
+    /**
+     * Define o volume dos efeitos sonoros.
+     * @param volume Volume (0.0 a 1.0)
+     */
+    protected void setSfxVolume(float volume) {
+        IgnisSoundEngine.getInstance().setSfxVolume(volume);
+    }
 }
