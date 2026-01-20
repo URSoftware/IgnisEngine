@@ -13,12 +13,13 @@ Este documento explica **tudo** sobre o sistema de scripts do motor Ignis Engine
 5. [Métodos de Movimento](#métodos-de-movimento)
 6. [Sistema de Input](#sistema-de-input-teclado-e-mouse)
 7. [Sistema de Áudio](#sistema-de-áudio-ignissoundengine)
-8. [Métodos de Busca e Interação](#métodos-de-busca-e-interação)
-9. [Controle do Script](#controle-do-script)
-10. [Variáveis no Inspector](#variáveis-no-inspector)
-11. [Sistema de Coordenadas](#sistema-de-coordenadas)
-12. [Exemplos Práticos](#exemplos-práticos-completos)
-13. [Boas Práticas](#boas-práticas)
+8. [Sistema de Câmera](#sistema-de-câmera)
+9. [Métodos de Busca e Interação](#métodos-de-busca-e-interação)
+10. [Controle do Script](#controle-do-script)
+11. [Variáveis no Inspector](#variáveis-no-inspector)
+12. [Sistema de Coordenadas](#sistema-de-coordenadas)
+13. [Exemplos Práticos](#exemplos-práticos-completos)
+14. [Boas Práticas](#boas-práticas)
 
 ---
 
@@ -1362,6 +1363,437 @@ projects/
                   ├── jump.wav
                   ├── coin.wav
                   └── explosion.wav
+```
+
+---
+
+## Sistema de Câmera
+
+O sistema de câmera permite que você controle a visualização do jogo através de scripts. Você pode mover a câmera, fazer ela seguir objetos, aplicar zoom e criar efeitos como shake.
+
+### Sistema de Coordenadas
+
+> **Importante:** O Ignis Engine usa um sistema de coordenadas onde:
+> - **X positivo** → Direita
+> - **Y positivo** → Cima
+> 
+> Isso significa que mover a câmera para Y positivo mostra objetos mais "acima" no mundo.
+
+### Métodos de Posição
+
+#### `getCamera()`
+
+Obtém a referência da câmera principal.
+
+```java
+protected Camera getCamera()
+```
+
+**Retorno:** O objeto `Camera`, ou `null` se não existir
+
+```java
+Camera cam = getCamera();
+if (cam != null) {
+    log("Câmera encontrada em: " + cam.getX() + ", " + cam.getY());
+}
+```
+
+---
+
+#### `getCameraX()` / `getCameraY()`
+
+Obtém a posição atual da câmera nos eixos X e Y.
+
+```java
+protected double getCameraX()
+protected double getCameraY()
+```
+
+**Retorno:** Posição da câmera no eixo correspondente
+
+```java
+@Override
+public void tick() {
+    double camX = getCameraX();
+    double camY = getCameraY();
+    log("Câmera em: " + camX + ", " + camY);
+}
+```
+
+---
+
+#### `setCameraPosition(double x, double y)`
+
+Define a posição da câmera no mundo.
+
+```java
+protected void setCameraPosition(double x, double y)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `x` | `double` | Posição X no mundo |
+| `y` | `double` | Posição Y no mundo |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void start() {
+    // Centralizar câmera na origem
+    setCameraPosition(0, 0);
+}
+```
+
+---
+
+#### `moveCamera(double dx, double dy)`
+
+Move a câmera por um delta (deslocamento).
+
+```java
+protected void moveCamera(double dx, double dy)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `dx` | `double` | Movimento no eixo X |
+| `dy` | `double` | Movimento no eixo Y |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    // Mover câmera com as setas
+    if (Input.isKeyPressed(KeyEvent.VK_LEFT)) {
+        moveCamera(-5, 0);
+    }
+    if (Input.isKeyPressed(KeyEvent.VK_RIGHT)) {
+        moveCamera(5, 0);
+    }
+    if (Input.isKeyPressed(KeyEvent.VK_UP)) {
+        moveCamera(0, 5);  // Y positivo = para cima
+    }
+    if (Input.isKeyPressed(KeyEvent.VK_DOWN)) {
+        moveCamera(0, -5); // Y negativo = para baixo
+    }
+}
+```
+
+---
+
+### Métodos de Seguimento (Follow)
+
+#### `cameraFollowThis()`
+
+Faz a câmera seguir o objeto que possui este script. Centraliza a câmera no objeto instantaneamente.
+
+```java
+protected void cameraFollowThis()
+```
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    // Lógica de movimento do player
+    double dx = Input.getHorizontalAxis() * speed;
+    double dy = Input.getVerticalAxis() * speed;
+    move(dx, dy);
+    
+    // Câmera segue o player
+    cameraFollowThis();
+}
+```
+
+---
+
+#### `cameraFollowThis(double smoothness)`
+
+Faz a câmera seguir o objeto com suavização (interpolação linear).
+
+```java
+protected void cameraFollowThis(double smoothness)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `smoothness` | `double` | Fator de suavização (0.0 a 1.0). Valores menores = mais suave |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    move(dx, dy);
+    
+    // Câmera segue suavemente (10% da distância por frame)
+    cameraFollowThis(0.1);
+}
+```
+
+| Valor | Comportamento |
+|-------|---------------|
+| `0.01` | Muito suave, câmera demora para alcançar |
+| `0.1` | Suave, bom para a maioria dos jogos |
+| `0.3` | Responsivo, quase instantâneo |
+| `1.0` | Instantâneo (igual a `cameraFollowThis()`) |
+
+---
+
+#### `cameraFollow(GameObject target)`
+
+Faz a câmera seguir um objeto específico.
+
+```java
+protected void cameraFollow(GameObject target)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `target` | `GameObject` | O objeto que a câmera deve seguir |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+private GameObject player;
+
+@Override
+public void start() {
+    player = findObject("Player");
+}
+
+@Override
+public void tick() {
+    // Script de gerenciador de câmera
+    cameraFollow(player);
+}
+```
+
+---
+
+#### `cameraFollow(GameObject target, double smoothness)`
+
+Faz a câmera seguir um objeto específico com suavização.
+
+```java
+protected void cameraFollow(GameObject target, double smoothness)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `target` | `GameObject` | O objeto que a câmera deve seguir |
+| `smoothness` | `double` | Fator de suavização (0.0 a 1.0) |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void tick() {
+    cameraFollow(player, 0.08); // Suave e cinematográfico
+}
+```
+
+---
+
+### Métodos de Zoom
+
+#### `getCameraZoom()`
+
+Obtém o nível de zoom atual da câmera.
+
+```java
+protected double getCameraZoom()
+```
+
+**Retorno:** Nível de zoom (1.0 = normal, >1 = ampliado, <1 = afastado)
+
+```java
+double zoom = getCameraZoom();
+log("Zoom atual: " + zoom);
+```
+
+---
+
+#### `setCameraZoom(double zoom)`
+
+Define o nível de zoom da câmera.
+
+```java
+protected void setCameraZoom(double zoom)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `zoom` | `double` | Nível de zoom (0.1 a 10.0) |
+
+**Retorno:** Nenhum (`void`)
+
+| Valor | Efeito |
+|-------|--------|
+| `0.5` | Afastado 2x (vê mais do mundo) |
+| `1.0` | Normal |
+| `2.0` | Ampliado 2x (mais perto) |
+| `4.0` | Muito ampliado |
+
+```java
+@Override
+public void tick() {
+    // Zoom com scroll ou teclas
+    if (Input.isKeyPressed(KeyEvent.VK_EQUALS)) {
+        setCameraZoom(getCameraZoom() * 1.02); // Zoom in
+    }
+    if (Input.isKeyPressed(KeyEvent.VK_MINUS)) {
+        setCameraZoom(getCameraZoom() * 0.98); // Zoom out
+    }
+}
+```
+
+---
+
+### Métodos de Rotação
+
+#### `getCameraRotation()`
+
+Obtém a rotação atual da câmera em graus.
+
+```java
+protected double getCameraRotation()
+```
+
+**Retorno:** Rotação em graus
+
+---
+
+#### `setCameraRotation(double rotation)`
+
+Define a rotação da câmera.
+
+```java
+protected void setCameraRotation(double rotation)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `rotation` | `double` | Rotação em graus |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+// Rotacionar câmera para efeito de inclinação
+setCameraRotation(15); // 15 graus
+```
+
+---
+
+### Métodos de Efeitos
+
+#### `cameraShake(double intensity)`
+
+Aplica um efeito de tremor (shake) na câmera. Útil para explosões, impactos, etc.
+
+```java
+protected void cameraShake(double intensity)
+```
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `intensity` | `double` | Intensidade do tremor em pixels |
+
+**Retorno:** Nenhum (`void`)
+
+```java
+@Override
+public void onCollision(GameObject other) {
+    if (other.getName().equals("Explosion")) {
+        // Tremor forte
+        cameraShake(10);
+    }
+}
+```
+
+**Dica:** Para um efeito de shake contínuo que diminui, use assim:
+
+```java
+private double shakeIntensity = 0;
+
+@Override
+public void tick() {
+    if (shakeIntensity > 0) {
+        cameraShake(shakeIntensity);
+        shakeIntensity *= 0.9; // Diminui 10% por frame
+        if (shakeIntensity < 0.5) {
+            shakeIntensity = 0;
+        }
+    }
+}
+
+// Chamar quando precisar de shake
+public void triggerShake(double intensity) {
+    shakeIntensity = intensity;
+}
+```
+
+---
+
+### Exemplo Completo: Script de Câmera para Plataforma
+
+```java
+import com.ignis.core.IgnisScript;
+import com.ignis.core.GameObject;
+import java.awt.event.KeyEvent;
+import com.ignis.core.Input;
+
+public class CameraController extends IgnisScript {
+
+    private double smoothness = 0.1;
+    private double targetZoom = 1.0;
+    private double shakeIntensity = 0;
+    private GameObject player;
+
+    @Override
+    public void start() {
+        player = findObject("Player");
+        if (player == null) {
+            log("AVISO: Player não encontrado!");
+        }
+    }
+
+    @Override
+    public void tick() {
+        // Seguir player suavemente
+        if (player != null) {
+            cameraFollow(player, smoothness);
+        }
+        
+        // Controle de zoom
+        double currentZoom = getCameraZoom();
+        if (Input.isKeyPressed(KeyEvent.VK_EQUALS)) {
+            targetZoom = Math.min(targetZoom * 1.02, 3.0);
+        }
+        if (Input.isKeyPressed(KeyEvent.VK_MINUS)) {
+            targetZoom = Math.max(targetZoom * 0.98, 0.5);
+        }
+        // Suavizar transição de zoom
+        double newZoom = currentZoom + (targetZoom - currentZoom) * 0.1;
+        setCameraZoom(newZoom);
+        
+        // Aplicar shake se necessário
+        if (shakeIntensity > 0) {
+            cameraShake(shakeIntensity);
+            shakeIntensity *= 0.9;
+            if (shakeIntensity < 0.5) {
+                shakeIntensity = 0;
+            }
+        }
+    }
+    
+    public void triggerShake(double intensity) {
+        shakeIntensity = intensity;
+    }
+}
 ```
 
 ---

@@ -296,6 +296,14 @@ public class IgnisSoundEngine {
     public boolean isMusicPaused() {
         return musicPaused;
     }
+    
+    /**
+     * Retorna o caminho da música atual.
+     * @return caminho do arquivo de música ou null se não há música
+     */
+    public String getCurrentMusicPath() {
+        return currentMusicPath;
+    }
 
     // ==================== CONTROLE DE VOLUME ====================
     

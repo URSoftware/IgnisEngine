@@ -5,11 +5,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
-import java.awt.geom.Area;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Path2D;
-import java.awt.geom.Rectangle2D;
-import java.awt.Shape;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -191,7 +186,12 @@ public class MergedShape extends GameObject {
         
         // Check if we have a sprite image
         if (spriteImage != null) {
-            g2d.drawImage(spriteImage, (int) x, (int) y, width, height, null);
+            // Flip vertically to compensate for inverted Y-axis in world coordinates
+            AffineTransform flipTransform = g2d.getTransform();
+            g2d.translate(x, y + height);
+            g2d.scale(1, -1);
+            g2d.drawImage(spriteImage, 0, 0, width, height, null);
+            g2d.setTransform(flipTransform);
         } else {
             // Render each sub-shape
             for (ShapeData shape : mergedShapes) {

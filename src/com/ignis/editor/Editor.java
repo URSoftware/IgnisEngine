@@ -3,7 +3,6 @@ package com.ignis.editor;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.*;
-import javax.swing.text.*;
 import javax.swing.event.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -69,12 +68,6 @@ public class Editor extends JFrame {
     
     // ScriptManager to manage scripts
     private ScriptManager scriptManager;
-    
-    // Script editor
-    private JTextArea scriptEditorArea;
-    private JPanel scriptEditorPanel;
-    private String currentEditingScript = null;
-    private JLabel scriptEditorTitle;
     
     // Timer for updating inspector during gameplay
     private javax.swing.Timer inspectorUpdateTimer;
@@ -424,6 +417,23 @@ public class Editor extends JFrame {
                 game.repaint();
             }
         });
+        
+        // ==================== CAMERA CONTROLS ====================
+        // Mouse wheel for zoom
+        game.addMouseWheelListener(e -> {
+            if (game.getGameState() == Game.GameState.EDITING) {
+                Camera cam = game.getMainCamera();
+                if (cam != null) {
+                    double factor = e.getWheelRotation() < 0 ? 1.15 : 0.85;
+                    cam.setZoom(cam.getZoom() * factor);
+                    updateCameraLabels();
+                    game.repaint();
+                }
+            }
+        });
+        
+        // Middle mouse button for panning - use game's built-in panning system
+        game.setupEditorPanning(this::updateCameraLabels);
 
         viewport.add(layeredPane, BorderLayout.CENTER);
 
@@ -554,11 +564,12 @@ public class Editor extends JFrame {
             // Clear game entities
             game.clearEntities();
             
-            // Create a basic scene with a centered square
+            // Create a basic scene with a centered square at world origin
             Scene scene = currentProject.getCurrentScene();
             int squareSize = 100;
-            int centerX = (Game.WIDTH - squareSize) / 2;
-            int centerY = (Game.HEIGHT - squareSize) / 2;
+            // Center the square at world origin (0,0)
+            int centerX = -squareSize / 2;
+            int centerY = -squareSize / 2;
             
             Square basicSquare = new Square("Square", game, centerX, centerY, squareSize, squareSize);
             scene.addEntity(basicSquare);
@@ -982,6 +993,70 @@ public class Editor extends JFrame {
         return button;
     }
 
+    /**
+     * Functional interface for custom icon painting
+     */
+    @FunctionalInterface
+    interface IconPainter {
+        void paint(Graphics2D g, int width, int height);
+    }
+
+    /**
+     * Creates a button with a custom-drawn icon
+     * @param size Button dimensions
+     * @param tooltip Tooltip text
+     * @param bgColor Background color
+     * @param hoverColor Hover color
+     * @param painter The icon painter lambda
+     * @return Styled button with custom icon
+     */
+    private JButton createIconButton(Dimension size, String tooltip, Color bgColor, Color hoverColor, IconPainter painter) {
+        JButton button = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Draw background
+                g2d.setColor(getBackground());
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                
+                // Draw custom icon
+                painter.paint(g2d, getWidth(), getHeight());
+                
+                g2d.dispose();
+            }
+        };
+        
+        button.setPreferredSize(size);
+        button.setMaximumSize(size);
+        button.setMinimumSize(size);
+        button.setBackground(bgColor);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setContentAreaFilled(false);
+        button.setOpaque(false);
+        button.setToolTipText(tooltip);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        // Hover effect
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(hoverColor);
+                button.repaint();
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(bgColor);
+                button.repaint();
+            }
+        });
+        
+        return button;
+    }
+
     // ==================== INSPECTOR PANEL ====================
 
     /**
@@ -1047,6 +1122,42 @@ public class Editor extends JFrame {
         });
         visibilityPanel.add(visibilityCheckbox);
         content.add(visibilityPanel);
+        content.add(Box.createVerticalStrut(15));
+        
+        // ==================== APPEARANCE SECTION ====================
+        content.add(createInspectorSectionHeader("Appearance"));
+        content.add(Box.createVerticalStrut(8));
+        
+        // Shape Color (only for primitives - hidden by default)
+        JPanel shapeColorSection = new JPanel();
+        shapeColorSection.setLayout(new BoxLayout(shapeColorSection, BoxLayout.Y_AXIS));
+        shapeColorSection.setBackground(new Color(45, 45, 45));
+        shapeColorSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+        shapeColorSection.setName("shapeColorSection");
+        shapeColorSection.setVisible(false);
+        
+        content.add(createInspectorLabel("Shape Color"));
+        JPanel shapeColorPanel = createColorPickerPanel("shapeColorButton", color -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected != null) {
+                setShapeColor(selected, color);
+                game.repaint();
+            }
+        });
+        shapeColorSection.add(shapeColorPanel);
+        content.add(shapeColorSection);
+        content.add(Box.createVerticalStrut(8));
+        
+        // Name Color (for hierarchy display)
+        content.add(createInspectorLabel("Name Color"));
+        JPanel nameColorPanel = createColorPickerPanel("nameColorButton", color -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected != null) {
+                selected.setNameColor(color);
+                updateHierarchy();
+            }
+        });
+        content.add(nameColorPanel);
         content.add(Box.createVerticalStrut(15));
 
         // Transform section header
@@ -1115,6 +1226,84 @@ public class Editor extends JFrame {
         });
         inspectorScaleYField.addFocusListener(inspectorFocusAdapter);
         content.add(wrapFieldFullWidth(inspectorScaleYField));
+        
+        // ==================== CAMERA SECTION (shown only for Camera objects) ====================
+        content.add(Box.createVerticalStrut(15));
+        
+        JPanel cameraSection = new JPanel();
+        cameraSection.setLayout(new BoxLayout(cameraSection, BoxLayout.Y_AXIS));
+        cameraSection.setBackground(new Color(45, 45, 45));
+        cameraSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cameraSection.setName("cameraSection");
+        cameraSection.setVisible(false); // Hidden by default
+        
+        cameraSection.add(createInspectorSectionHeader("Camera"));
+        cameraSection.add(Box.createVerticalStrut(8));
+        
+        // Zoom field
+        JLabel zoomLabel = createInspectorLabel("Zoom");
+        cameraSection.add(zoomLabel);
+        JTextField cameraZoomField = createInspectorTextField();
+        cameraZoomField.setName("cameraZoomField");
+        cameraZoomField.addActionListener(e -> {
+            applyCameraInspectorChanges();
+            isUserEditingInspector = false;
+        });
+        cameraZoomField.addFocusListener(inspectorFocusAdapter);
+        cameraSection.add(wrapFieldFullWidth(cameraZoomField));
+        cameraSection.add(Box.createVerticalStrut(5));
+        
+        // Active camera checkbox
+        JPanel activePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        activePanel.setBackground(new Color(45, 45, 45));
+        activePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        activePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        
+        JCheckBox activeCameraCheckbox = new JCheckBox("Active Camera");
+        activeCameraCheckbox.setName("activeCameraCheckbox");
+        activeCameraCheckbox.setBackground(new Color(45, 45, 45));
+        activeCameraCheckbox.setForeground(Color.WHITE);
+        activeCameraCheckbox.addActionListener(e -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected instanceof Camera) {
+                Camera cam = (Camera) selected;
+                cam.setActive(activeCameraCheckbox.isSelected());
+                if (cam.isActiveCamera()) {
+                    game.setMainCamera(cam);
+                }
+                game.repaint();
+            }
+        });
+        activePanel.add(activeCameraCheckbox);
+        cameraSection.add(activePanel);
+        cameraSection.add(Box.createVerticalStrut(5));
+        
+        // Set as Main Camera button
+        JButton setMainCameraBtn = new JButton("Set as Main Camera");
+        setMainCameraBtn.setBackground(new Color(80, 120, 180));
+        setMainCameraBtn.setForeground(Color.WHITE);
+        setMainCameraBtn.setFocusPainted(false);
+        setMainCameraBtn.setBorderPainted(false);
+        setMainCameraBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        setMainCameraBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        setMainCameraBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        setMainCameraBtn.addActionListener(e -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected instanceof Camera) {
+                game.setMainCamera((Camera) selected);
+                updateInspector(selected);
+                game.repaint();
+            }
+        });
+        
+        JPanel setMainCameraWrapper = new JPanel(new BorderLayout());
+        setMainCameraWrapper.setBackground(new Color(45, 45, 45));
+        setMainCameraWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        setMainCameraWrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        setMainCameraWrapper.add(setMainCameraBtn, BorderLayout.CENTER);
+        cameraSection.add(setMainCameraWrapper);
+        
+        content.add(cameraSection);
         
         // Scripts section
         content.add(Box.createVerticalStrut(15));
@@ -1295,11 +1484,17 @@ public class Editor extends JFrame {
                 visibilityCheckbox.setSelected(obj.isVisible());
             }
             
+            // Update appearance (colors)
+            updateInspectorAppearance(obj);
+            
             // Atualizar lista de scripts
             updateInspectorScripts(obj);
             
             // Atualizar seção de sprite
             updateInspectorSprite(obj);
+            
+            // Update camera section visibility and values
+            updateInspectorCameraSection(obj);
         } else {
             setInspectorEnabled(false);
             inspectorNameField.setText("");
@@ -1314,11 +1509,17 @@ public class Editor extends JFrame {
                 visibilityCheckbox.setSelected(true);
             }
             
+            // Reset appearance
+            updateInspectorAppearance(null);
+            
             // Limpar lista de scripts
             updateInspectorScripts(null);
             
             // Limpar seção de sprite
             updateInspectorSprite(null);
+            
+            // Hide camera section
+            updateInspectorCameraSection(null);
         }
 
         isUpdatingInspector = false;
@@ -1391,6 +1592,194 @@ public class Editor extends JFrame {
     }
     
     /**
+     * Creates a color picker panel with a color preview button and preset colors palette
+     */
+    private JPanel createColorPickerPanel(String buttonName, java.util.function.Consumer<Color> onColorChange) {
+        JPanel panel = new JPanel(new BorderLayout(5, 0));
+        panel.setBackground(new Color(45, 45, 45));
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        // Color preview button
+        JButton colorButton = new JButton();
+        colorButton.setName(buttonName);
+        colorButton.setBackground(Color.WHITE);
+        colorButton.setPreferredSize(new Dimension(40, 22));
+        colorButton.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1));
+        colorButton.setFocusPainted(false);
+        colorButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        colorButton.setToolTipText("Click to pick custom color");
+        
+        colorButton.addActionListener(e -> {
+            Color currentColor = colorButton.getBackground();
+            Color newColor = JColorChooser.showDialog(this, "Choose Color", currentColor);
+            if (newColor != null) {
+                colorButton.setBackground(newColor);
+                onColorChange.accept(newColor);
+            }
+        });
+        
+        // Preset colors palette
+        JPanel palettePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        palettePanel.setBackground(new Color(45, 45, 45));
+        
+        Color[] presetColors = {
+            Color.WHITE, Color.BLACK, Color.GRAY, Color.LIGHT_GRAY,
+            new Color(255, 80, 80), new Color(255, 150, 80), new Color(255, 255, 80),
+            new Color(80, 255, 80), new Color(80, 255, 255), new Color(80, 80, 255),
+            new Color(255, 80, 255), new Color(139, 69, 19), new Color(255, 192, 203),
+            new Color(100, 150, 255), new Color(150, 255, 100), new Color(255, 150, 100)
+        };
+        
+        for (Color preset : presetColors) {
+            JButton presetBtn = new JButton();
+            presetBtn.setBackground(preset);
+            presetBtn.setPreferredSize(new Dimension(14, 14));
+            presetBtn.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 1));
+            presetBtn.setFocusPainted(false);
+            presetBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            presetBtn.addActionListener(e -> {
+                colorButton.setBackground(preset);
+                onColorChange.accept(preset);
+            });
+            palettePanel.add(presetBtn);
+        }
+        
+        panel.add(colorButton, BorderLayout.WEST);
+        panel.add(palettePanel, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    /**
+     * Sets the color of a primitive shape object
+     */
+    private void setShapeColor(GameObject obj, Color color) {
+        try {
+            java.lang.reflect.Method setColor = obj.getClass().getMethod("setColor", Color.class);
+            setColor.invoke(obj, color);
+        } catch (Exception e) {
+            // Object doesn't support setColor - ignore
+        }
+    }
+    
+    /**
+     * Gets the color of a primitive shape object
+     */
+    private Color getShapeColor(GameObject obj) {
+        try {
+            java.lang.reflect.Method getColor = obj.getClass().getMethod("getColor");
+            return (Color) getColor.invoke(obj);
+        } catch (Exception e) {
+            return null; // Object doesn't support getColor
+        }
+    }
+    
+    /**
+     * Checks if object is a primitive shape that supports color
+     */
+    private boolean isPrimitiveShape(GameObject obj) {
+        if (obj == null) return false;
+        String type = obj.getType();
+        return type.equals("Square") || type.equals("Circle") || type.equals("Triangle") || 
+               type.equals("Star") || type.equals("Pentagon");
+    }
+    
+    /**
+     * Updates the appearance section (colors) in the inspector
+     */
+    private void updateInspectorAppearance(GameObject obj) {
+        JPanel shapeColorSection = findComponentByName(inspectorPanel, "shapeColorSection");
+        JButton shapeColorButton = findComponentByName(inspectorPanel, "shapeColorButton");
+        JButton nameColorButton = findComponentByName(inspectorPanel, "nameColorButton");
+        
+        if (obj != null) {
+            // Update shape color section visibility and value
+            if (shapeColorSection != null && shapeColorButton != null) {
+                if (isPrimitiveShape(obj)) {
+                    shapeColorSection.setVisible(true);
+                    Color shapeColor = getShapeColor(obj);
+                    if (shapeColor != null) {
+                        shapeColorButton.setBackground(shapeColor);
+                    }
+                } else {
+                    shapeColorSection.setVisible(false);
+                }
+            }
+            
+            // Update name color button
+            if (nameColorButton != null) {
+                nameColorButton.setBackground(obj.getNameColor());
+            }
+        } else {
+            if (shapeColorSection != null) {
+                shapeColorSection.setVisible(false);
+            }
+            if (nameColorButton != null) {
+                nameColorButton.setBackground(Color.WHITE);
+            }
+        }
+    }
+    
+    /**
+     * Updates the camera section in the Inspector.
+     */
+    private void updateInspectorCameraSection(GameObject obj) {
+        JPanel cameraSection = findComponentByName(inspectorPanel, "cameraSection");
+        if (cameraSection == null) return;
+        
+        if (obj instanceof Camera) {
+            Camera cam = (Camera) obj;
+            cameraSection.setVisible(true);
+            
+            // Update zoom field
+            JTextField zoomField = findComponentByName(inspectorPanel, "cameraZoomField");
+            if (zoomField != null) {
+                zoomField.setText(String.format("%.2f", cam.getZoom()));
+            }
+            
+            // Update active checkbox
+            JCheckBox activeCheckbox = findComponentByName(inspectorPanel, "activeCameraCheckbox");
+            if (activeCheckbox != null) {
+                activeCheckbox.setSelected(cam.isActiveCamera());
+            }
+        } else {
+            cameraSection.setVisible(false);
+        }
+        
+        inspectorPanel.revalidate();
+        inspectorPanel.repaint();
+    }
+    
+    /**
+     * Applies camera-specific inspector changes.
+     */
+    private void applyCameraInspectorChanges() {
+        if (isUpdatingInspector) return;
+        
+        GameObject obj = game.getSelectedObject();
+        if (!(obj instanceof Camera)) return;
+        
+        Camera cam = (Camera) obj;
+        
+        try {
+            JTextField zoomField = findComponentByName(inspectorPanel, "cameraZoomField");
+            if (zoomField != null) {
+                String zoomText = zoomField.getText().trim();
+                if (!zoomText.isEmpty()) {
+                    double zoom = Double.parseDouble(zoomText);
+                    cam.setZoom(Math.max(0.1, Math.min(10.0, zoom)));
+                }
+            }
+            
+            updateCameraLabels();
+            game.repaint();
+        } catch (NumberFormatException ex) {
+            updateInspectorCameraSection(obj);
+        }
+    }
+    
+    /**
      * Updates the scripts list in the Inspector for the selected object
      */
     private void updateInspectorScripts(GameObject obj) {
@@ -1425,6 +1814,7 @@ public class Editor extends JFrame {
             BorderFactory.createEmptyBorder(4, 6, 4, 6)
         ));
         container.setAlignmentX(Component.LEFT_ALIGNMENT);
+        container.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         
         // Header panel with script name and remove button
         JPanel headerPanel = new JPanel(new BorderLayout(5, 0));
@@ -1497,7 +1887,8 @@ public class Editor extends JFrame {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(new Color(50, 50, 50));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 0));
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        panel.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 2));
         
         Class<?> clazz = script.getClass();
         Field[] fields = clazz.getDeclaredFields();
@@ -1541,7 +1932,8 @@ public class Editor extends JFrame {
                type == float.class || type == Float.class ||
                type == long.class || type == Long.class ||
                type == boolean.class || type == Boolean.class ||
-               type == String.class;
+               type == String.class ||
+               GameObject.class.isAssignableFrom(type);
     }
     
     /**
@@ -1597,6 +1989,8 @@ public class Editor extends JFrame {
         
         if (type == boolean.class || type == Boolean.class) {
             return createBooleanEditor(script, field);
+        } else if (GameObject.class.isAssignableFrom(type)) {
+            return createGameObjectEditor(script, field);
         } else {
             return createTextEditor(script, field);
         }
@@ -1626,6 +2020,194 @@ public class Editor extends JFrame {
         });
         
         return checkBox;
+    }
+    
+    /**
+     * Creates a dropdown editor for GameObject reference fields.
+     * Allows selecting an object from the scene to reference in the script.
+     */
+    private JPanel createGameObjectEditor(IgnisScript script, Field field) {
+        JPanel panel = new JPanel(new BorderLayout(2, 0));
+        panel.setBackground(new Color(50, 50, 50));
+        panel.setOpaque(true);
+        
+        // Create the combo box with scene objects
+        JComboBox<String> comboBox = new JComboBox<>();
+        comboBox.setBackground(new Color(60, 60, 60));
+        comboBox.setForeground(Color.WHITE);
+        comboBox.setBorder(BorderFactory.createLineBorder(new Color(80, 80, 80)));
+        ((JComponent) comboBox.getRenderer()).setOpaque(true);
+        
+        // Custom renderer for dark theme
+        comboBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value,
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (isSelected) {
+                    setBackground(new Color(70, 130, 180));
+                    setForeground(Color.WHITE);
+                } else {
+                    setBackground(new Color(60, 60, 60));
+                    setForeground(Color.WHITE);
+                }
+                
+                // Highlight "None" option
+                if ("None".equals(value)) {
+                    setForeground(new Color(150, 150, 150));
+                    setFont(getFont().deriveFont(Font.ITALIC));
+                }
+                
+                return this;
+            }
+        });
+        
+        // Populate the combo box with scene objects
+        comboBox.addItem("None");
+        for (GameObject entity : game.getEntities()) {
+            // Don't allow self-reference (skip the object that owns this script)
+            if (entity != script.getGameObject()) {
+                comboBox.addItem(entity.getName());
+            }
+        }
+        
+        // Set current value if field has a reference
+        try {
+            Object currentValue = field.get(script);
+            if (currentValue != null && currentValue instanceof GameObject) {
+                GameObject currentRef = (GameObject) currentValue;
+                comboBox.setSelectedItem(currentRef.getName());
+            } else {
+                comboBox.setSelectedItem("None");
+            }
+        } catch (Exception e) {
+            comboBox.setSelectedItem("None");
+        }
+        
+        // Handle selection changes
+        comboBox.addActionListener(e -> {
+            String selectedName = (String) comboBox.getSelectedItem();
+            try {
+                if ("None".equals(selectedName) || selectedName == null) {
+                    field.set(script, null);
+                } else {
+                    // Find the object by name
+                    for (GameObject entity : game.getEntities()) {
+                        if (entity.getName().equals(selectedName)) {
+                            field.set(script, entity);
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                System.err.println("Error setting GameObject reference " + field.getName() + ": " + ex.getMessage());
+            }
+        });
+        
+        // Button to pick from hierarchy or scene
+        JButton pickButton = new JButton("◎");
+        pickButton.setToolTipText("Pick from scene (click an object in the viewport)");
+        pickButton.setPreferredSize(new Dimension(24, 20));
+        pickButton.setMargin(new Insets(0, 0, 0, 0));
+        pickButton.setFocusPainted(false);
+        pickButton.setBackground(new Color(70, 70, 70));
+        pickButton.setForeground(Color.WHITE);
+        pickButton.setBorder(BorderFactory.createLineBorder(new Color(100, 100, 100)));
+        
+        pickButton.addActionListener(e -> {
+            // Enable pick mode in the game canvas
+            enableGameObjectPickMode(script, field, comboBox);
+        });
+        
+        panel.add(comboBox, BorderLayout.CENTER);
+        panel.add(pickButton, BorderLayout.EAST);
+        
+        return panel;
+    }
+    
+    /**
+     * Enables pick mode where clicking on an object in the scene will assign it to the field
+     */
+    private void enableGameObjectPickMode(IgnisScript script, Field field, JComboBox<String> comboBox) {
+        // Show instruction to user
+        JOptionPane.showMessageDialog(this,
+            "Click on an object in the scene or hierarchy to select it.\n" +
+            "Press ESC to cancel.",
+            "Pick GameObject",
+            JOptionPane.INFORMATION_MESSAGE);
+        
+        // Set a flag to indicate we're in pick mode
+        final boolean[] picking = {true};
+        
+        // Add temporary mouse listener to the game canvas
+        java.awt.event.MouseAdapter pickListener = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                if (!picking[0]) return;
+                
+                // Get the object at the click position
+                GameObject clicked = game.getObjectAt(e.getX(), e.getY());
+                if (clicked != null && clicked != script.getGameObject()) {
+                    try {
+                        field.set(script, clicked);
+                        comboBox.setSelectedItem(clicked.getName());
+                    } catch (Exception ex) {
+                        System.err.println("Error setting reference: " + ex.getMessage());
+                    }
+                }
+                
+                // Exit pick mode
+                picking[0] = false;
+                game.removeMouseListener(this);
+                game.setCursor(Cursor.getDefaultCursor());
+            }
+        };
+        
+        game.addMouseListener(pickListener);
+        game.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        
+        // Also allow picking from hierarchy list
+        ListSelectionListener hierarchyPickListener = new ListSelectionListener() {
+            @Override
+            public void valueChanged(ListSelectionEvent e) {
+                if (!picking[0] || e.getValueIsAdjusting()) return;
+                
+                GameObject selected = hierarchyList.getSelectedValue();
+                if (selected != null && selected != script.getGameObject()) {
+                    try {
+                        field.set(script, selected);
+                        comboBox.setSelectedItem(selected.getName());
+                    } catch (Exception ex) {
+                        System.err.println("Error setting reference: " + ex.getMessage());
+                    }
+                    
+                    // Exit pick mode
+                    picking[0] = false;
+                    game.removeMouseListener(pickListener);
+                    game.setCursor(Cursor.getDefaultCursor());
+                    hierarchyList.removeListSelectionListener(this);
+                }
+            }
+        };
+        
+        hierarchyList.addListSelectionListener(hierarchyPickListener);
+        
+        // Add key listener for ESC to cancel
+        KeyAdapter escListener = new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    picking[0] = false;
+                    game.removeMouseListener(pickListener);
+                    game.setCursor(Cursor.getDefaultCursor());
+                    hierarchyList.removeListSelectionListener(hierarchyPickListener);
+                    Editor.this.removeKeyListener(this);
+                }
+            }
+        };
+        
+        this.addKeyListener(escListener);
+        this.requestFocus();
     }
     
     /**
@@ -3253,12 +3835,18 @@ public class Editor extends JFrame {
                 label.setText(icon + " " + obj.getName());
                 label.setToolTipText("Type: " + obj.getType() + " | Pos: (" +
                         (int) obj.getX() + ", " + (int) obj.getY() + ")");
+                
+                // Apply custom name color when not selected
+                if (!isSelected) {
+                    label.setForeground(obj.getNameColor());
+                }
             }
 
             label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 
             if (isSelected) {
                 label.setBackground(new Color(0, 120, 215));
+                label.setForeground(Color.WHITE); // White text when selected for visibility
             } else {
                 label.setBackground(new Color(60, 60, 60));
             }
@@ -3585,11 +4173,12 @@ public class Editor extends JFrame {
         obj.setName(name);
         obj.setGame(game);
         
-        // Position in center of viewport (approximately)
-        obj.setX(400);
-        obj.setY(300);
-        obj.setWidth(50);
-        obj.setHeight(50);
+        // Position at world origin (0,0), centered on the origin
+        int objSize = 50;
+        obj.setX(-objSize / 2);  // Center on origin
+        obj.setY(-objSize / 2);  // Center on origin
+        obj.setWidth(objSize);
+        obj.setHeight(objSize);
         
         // Add to game
         game.addEntity(obj);
@@ -4028,8 +4617,142 @@ public class Editor extends JFrame {
         toolbar.add(playButton);
         toolbar.add(pauseButton);
         toolbar.add(stopButton);
+        
+        // ==================== CAMERA CONTROLS ====================
+        toolbar.add(Box.createHorizontalStrut(30));
+        
+        JLabel cameraLabel = new JLabel("Camera:");
+        cameraLabel.setForeground(Color.WHITE);
+        toolbar.add(cameraLabel);
+        
+        // Zoom out button with custom icon
+        JButton zoomOutBtn = createIconButton(new Dimension(30, 30), "Zoom Out (Ctrl+-)", 
+            new Color(80, 80, 80), new Color(100, 100, 100), (g, w, h) -> {
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(2));
+                // Draw minus sign
+                g.drawLine(w/2 - 6, h/2, w/2 + 6, h/2);
+            });
+        zoomOutBtn.addActionListener(e -> zoomCamera(0.8));
+        toolbar.add(zoomOutBtn);
+        
+        // Zoom level label
+        JLabel zoomLabel = new JLabel("100%");
+        zoomLabel.setForeground(Color.WHITE);
+        zoomLabel.setPreferredSize(new Dimension(50, 30));
+        zoomLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        zoomLabel.setName("zoomLabel");
+        toolbar.add(zoomLabel);
+        
+        // Zoom in button with custom icon
+        JButton zoomInBtn = createIconButton(new Dimension(30, 30), "Zoom In (Ctrl++)", 
+            new Color(80, 80, 80), new Color(100, 100, 100), (g, w, h) -> {
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(2));
+                // Draw plus sign
+                g.drawLine(w/2 - 6, h/2, w/2 + 6, h/2);
+                g.drawLine(w/2, h/2 - 6, w/2, h/2 + 6);
+            });
+        zoomInBtn.addActionListener(e -> zoomCamera(1.25));
+        toolbar.add(zoomInBtn);
+        
+        // Reset camera button with custom icon (camera icon)
+        JButton resetCamBtn = createIconButton(new Dimension(30, 30), "Reset Camera to Origin (Home)", 
+            new Color(80, 80, 80), new Color(100, 100, 100), (g, w, h) -> {
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(1.5f));
+                // Draw camera body
+                g.drawRoundRect(w/2 - 8, h/2 - 4, 12, 8, 2, 2);
+                // Draw lens
+                g.fillOval(w/2 + 4, h/2 - 2, 5, 5);
+                // Draw viewfinder
+                g.drawRect(w/2 - 5, h/2 - 6, 4, 3);
+            });
+        resetCamBtn.addActionListener(e -> resetCamera());
+        toolbar.add(resetCamBtn);
+        
+        // Focus on selected button with custom icon
+        JButton focusBtn = createIconButton(new Dimension(30, 30), "Focus on Selected (F)", 
+            new Color(80, 80, 80), new Color(100, 100, 100), (g, w, h) -> {
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(1.5f));
+                // Draw crosshair/focus icon
+                int cx = w/2, cy = h/2;
+                g.drawOval(cx - 6, cy - 6, 12, 12);
+                g.drawLine(cx, cy - 9, cx, cy - 3);
+                g.drawLine(cx, cy + 3, cx, cy + 9);
+                g.drawLine(cx - 9, cy, cx - 3, cy);
+                g.drawLine(cx + 3, cy, cx + 9, cy);
+            });
+        focusBtn.addActionListener(e -> focusCameraOnSelected());
+        toolbar.add(focusBtn);
+        
+        // Camera position display
+        JLabel camPosLabel = new JLabel("(0, 0)");
+        camPosLabel.setForeground(new Color(150, 200, 255));
+        camPosLabel.setPreferredSize(new Dimension(100, 30));
+        camPosLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        camPosLabel.setName("camPosLabel");
+        toolbar.add(camPosLabel);
 
         return toolbar;
+    }
+    
+    /**
+     * Zooms the camera by the given factor.
+     */
+    private void zoomCamera(double factor) {
+        Camera cam = game.getMainCamera();
+        if (cam != null) {
+            cam.setZoom(cam.getZoom() * factor);
+            updateCameraLabels();
+            game.repaint();
+        }
+    }
+    
+    /**
+     * Resets the camera to origin with default zoom.
+     */
+    private void resetCamera() {
+        Camera cam = game.getMainCamera();
+        if (cam != null) {
+            cam.setPosition(0, 0);
+            cam.setZoom(1.0);
+            cam.setRotation(0);
+            updateCameraLabels();
+            game.repaint();
+        }
+    }
+    
+    /**
+     * Updates the camera zoom and position labels in the toolbar.
+     */
+    private void updateCameraLabels() {
+        Camera cam = game.getMainCamera();
+        if (cam == null) return;
+        
+        // Find labels by name
+        Component[] components = ((JPanel) getContentPane().getComponent(0)).getComponents();
+        for (Component comp : components) {
+            if (comp instanceof JPanel) {
+                updateCameraLabelsInPanel((JPanel) comp, cam);
+            }
+        }
+    }
+    
+    private void updateCameraLabelsInPanel(JPanel panel, Camera cam) {
+        for (Component comp : panel.getComponents()) {
+            if (comp instanceof JLabel) {
+                JLabel label = (JLabel) comp;
+                if ("zoomLabel".equals(label.getName())) {
+                    label.setText(String.format("%.0f%%", cam.getZoom() * 100));
+                } else if ("camPosLabel".equals(label.getName())) {
+                    label.setText(String.format("(%.0f, %.0f)", cam.getX(), cam.getY()));
+                }
+            } else if (comp instanceof JPanel) {
+                updateCameraLabelsInPanel((JPanel) comp, cam);
+            }
+        }
     }
 
     /**
@@ -4068,6 +4791,8 @@ public class Editor extends JFrame {
     private void reloadAllScriptInstances() {
         if (scriptManager == null) return;
         
+        Scene currentScene = (currentProject != null) ? currentProject.getCurrentScene() : null;
+        
         for (GameObject obj : game.getEntities()) {
             List<String> scriptNames = new ArrayList<>(obj.getScriptNames());
             
@@ -4079,6 +4804,11 @@ public class Editor extends JFrame {
                 IgnisScript newInstance = scriptManager.createScriptInstance(scriptName, obj, game);
                 if (newInstance != null) {
                     obj.getScripts().add(newInstance);
+                    
+                    // Apply any pending script variables from scene load
+                    if (currentScene != null) {
+                        currentScene.applyPendingScriptVariables(obj, newInstance);
+                    }
                 }
             }
         }
@@ -4198,11 +4928,13 @@ public class Editor extends JFrame {
 
         // Save Project
         JMenuItem saveProjectItem = new JMenuItem("Save Project");
+        saveProjectItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         saveProjectItem.addActionListener(e -> saveProject());
         fileMenu.add(saveProjectItem);
 
         // Save Project As
         JMenuItem saveAsItem = new JMenuItem("Save Project As...");
+        saveAsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         saveAsItem.addActionListener(e -> saveProjectAs());
         fileMenu.add(saveAsItem);
 
@@ -4216,7 +4948,87 @@ public class Editor extends JFrame {
         fileMenu.add(exitItem);
 
         menuBar.add(fileMenu);
+        
+        // ==================== VIEW MENU (CAMERA CONTROLS) ====================
+        JMenu viewMenu = new JMenu("View");
+        
+        // Zoom In
+        JMenuItem zoomInItem = new JMenuItem("Zoom In");
+        zoomInItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+        zoomInItem.addActionListener(e -> zoomCamera(1.25));
+        viewMenu.add(zoomInItem);
+        
+        // Zoom Out
+        JMenuItem zoomOutItem = new JMenuItem("Zoom Out");
+        zoomOutItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+        zoomOutItem.addActionListener(e -> zoomCamera(0.8));
+        viewMenu.add(zoomOutItem);
+        
+        // Zoom to 100%
+        JMenuItem zoom100Item = new JMenuItem("Zoom to 100%");
+        zoom100Item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+        zoom100Item.addActionListener(e -> {
+            Camera cam = game.getMainCamera();
+            if (cam != null) {
+                cam.setZoom(1.0);
+                updateCameraLabels();
+                game.repaint();
+            }
+        });
+        viewMenu.add(zoom100Item);
+        
+        viewMenu.addSeparator();
+        
+        // Reset Camera
+        JMenuItem resetCamItem = new JMenuItem("Reset Camera");
+        resetCamItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, 0));
+        resetCamItem.addActionListener(e -> resetCamera());
+        viewMenu.add(resetCamItem);
+        
+        // Focus on Selected Object
+        JMenuItem focusSelectedItem = new JMenuItem("Focus on Selected");
+        focusSelectedItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, 0));
+        focusSelectedItem.addActionListener(e -> focusCameraOnSelected());
+        viewMenu.add(focusSelectedItem);
+        
+        viewMenu.addSeparator();
+        
+        // Toggle Grid (placeholder)
+        JCheckBoxMenuItem showGridItem = new JCheckBoxMenuItem("Show Grid");
+        showGridItem.setSelected(false);
+        showGridItem.addActionListener(e -> {
+            // TODO: Implement grid toggle
+            game.repaint();
+        });
+        viewMenu.add(showGridItem);
+        
+        // Show World Origin
+        JCheckBoxMenuItem showOriginItem = new JCheckBoxMenuItem("Show Origin");
+        showOriginItem.setSelected(true);
+        showOriginItem.addActionListener(e -> {
+            // Origin is always shown in editor mode currently
+            game.repaint();
+        });
+        viewMenu.add(showOriginItem);
+        
+        menuBar.add(viewMenu);
+        
         setJMenuBar(menuBar);
+    }
+    
+    /**
+     * Focuses the camera on the currently selected object.
+     */
+    private void focusCameraOnSelected() {
+        GameObject selected = game.getSelectedObject();
+        Camera cam = game.getMainCamera();
+        if (selected != null && cam != null) {
+            double centerX = selected.getX() + selected.getWidth() / 2.0;
+            double centerY = selected.getY() + selected.getHeight() / 2.0;
+            cam.setPosition(centerX, centerY);
+            updateCameraLabels();
+            game.repaint();
+        }
     }
 
     // ==================== PROJECT MANAGEMENT ====================
@@ -4309,11 +5121,22 @@ public class Editor extends JFrame {
      * Updates the Hierarchy panel with current entities
      */
     private void updateHierarchy() {
+        // Preserve current selection
+        GameObject currentSelection = hierarchyList.getSelectedValue();
+        
         hierarchyModel.clear();
         for (GameObject entity : game.getEntities()) {
             hierarchyModel.addElement(entity);
         }
         hierarchyList.setModel(hierarchyModel);
+        
+        // Restore selection if object still exists
+        if (currentSelection != null && hierarchyModel.contains(currentSelection)) {
+            hierarchyList.setSelectedValue(currentSelection, true);
+        }
+        
+        // Force repaint to update display (e.g., name colors)
+        hierarchyList.repaint();
     }
 
     private void loadLayout() {

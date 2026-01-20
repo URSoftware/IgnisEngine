@@ -24,12 +24,6 @@ public class ScriptManager {
     
     // Cache of loaded script classes
     private Map<String, Class<? extends IgnisScript>> scriptClasses = new HashMap<>();
-    
-    // List of active scripts
-    private List<IgnisScript> activeScripts = new ArrayList<>();
-    
-    // Flag indicating if in play mode
-    private boolean isPlaying = false;
 
     /**
      * Creates a new ScriptManager for a project

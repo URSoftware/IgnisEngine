@@ -9,10 +9,18 @@ import java.awt.Graphics2D;
 import java.awt.BasicStroke;
 import java.awt.Polygon;
 import java.awt.Cursor;
+import java.awt.Robot;
+import java.awt.AWTException;
+import java.awt.MouseInfo;
+import java.awt.Point;
 import java.awt.image.BufferStrategy;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Point2D;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
@@ -22,6 +30,19 @@ public class Game extends Canvas implements Runnable {
 
     public static final int WIDTH = 800;
     public static final int HEIGHT = 600;
+    
+    // ==================== CAMERA SYSTEM ====================
+    // Main camera for rendering
+    private Camera mainCamera;
+    
+    // Viewport for the game view
+    private Viewport viewport;
+    
+    // List of all cameras (for multi-camera support)
+    private List<Camera> cameras = new ArrayList<>();
+    
+    // Flag to indicate if we're in editor camera mode (free camera)
+    private boolean editorCameraMode = true;
 
     private Thread thread;
     private boolean isRunning = false;
@@ -31,9 +52,6 @@ public class Game extends Canvas implements Runnable {
     
     // PrefabManager para instanciar prefabs
     private PrefabManager prefabManager;
-    
-    // Flag para indicar se o Input foi inicializado
-    private boolean inputInitialized = false;
 
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
@@ -64,11 +82,39 @@ public class Game extends Canvas implements Runnable {
 
     private ToolType currentTool = ToolType.MOVE;
 
-    // Gizmo settings
-    private static final int GIZMO_SIZE = 60;
-    private static final int GIZMO_ARROW_SIZE = 12;
-    private static final int GIZMO_HIT_AREA = 15;
-    private static final int ROTATE_GIZMO_RADIUS = 50;
+    // Base gizmo settings (will be scaled based on zoom)
+    private static final int BASE_GIZMO_SIZE = 60;
+    private static final int BASE_GIZMO_ARROW_SIZE = 12;
+    private static final int BASE_GIZMO_HIT_AREA = 15;
+    private static final int BASE_ROTATE_GIZMO_RADIUS = 50;
+    
+    /**
+     * Gets the current gizmo size scaled by camera zoom.
+     * At lower zoom levels, gizmos appear larger in world space to remain usable.
+     */
+    private int getScaledGizmoSize() {
+        Camera cam = getActiveCamera();
+        double zoom = (cam != null) ? cam.getZoom() : 1.0;
+        return (int)(BASE_GIZMO_SIZE / zoom);
+    }
+    
+    private int getScaledGizmoArrowSize() {
+        Camera cam = getActiveCamera();
+        double zoom = (cam != null) ? cam.getZoom() : 1.0;
+        return (int)(BASE_GIZMO_ARROW_SIZE / zoom);
+    }
+    
+    private int getScaledGizmoHitArea() {
+        Camera cam = getActiveCamera();
+        double zoom = (cam != null) ? cam.getZoom() : 1.0;
+        return (int)(BASE_GIZMO_HIT_AREA / zoom);
+    }
+    
+    private int getScaledRotateGizmoRadius() {
+        Camera cam = getActiveCamera();
+        double zoom = (cam != null) ? cam.getZoom() : 1.0;
+        return (int)(BASE_ROTATE_GIZMO_RADIUS / zoom);
+    }
 
     // Gizmo drag states
     private enum GizmoDragMode {
@@ -80,6 +126,13 @@ public class Game extends Canvas implements Runnable {
     private double objectStartX, objectStartY;
     private double objectStartRotation;
     private int objectStartWidth, objectStartHeight;
+    
+    // Robot for infinite drag (mouse warping)
+    private Robot robot;
+    private int accumulatedDragX, accumulatedDragY; // Accumulated drag distance
+    private int lastMouseX, lastMouseY; // Last mouse position for delta calculation
+    private boolean isWarping = false; // Flag to ignore warp events
+    private static final int WARP_MARGIN = 10; // Pixels from edge to trigger warp
 
     // Interface to notify selection changes
     public interface SelectionListener {
@@ -118,7 +171,46 @@ public class Game extends Canvas implements Runnable {
         
         // Initialize Input system
         Input.init(this);
-        inputInitialized = true;
+        
+        // Initialize camera and viewport system
+        initializeCameraSystem();
+        
+        // Initialize Robot for infinite drag
+        try {
+            robot = new Robot();
+        } catch (AWTException e) {
+            System.err.println("Could not create Robot for infinite drag: " + e.getMessage());
+            robot = null;
+        }
+        
+        // Add resize listener to update viewport
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (viewport != null) {
+                    viewport.resize(getWidth(), getHeight());
+                    if (mainCamera != null) {
+                        mainCamera.setViewport(viewport);
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * Initializes the camera and viewport system.
+     */
+    private void initializeCameraSystem() {
+        // Create default viewport
+        viewport = new Viewport(WIDTH, HEIGHT);
+        
+        // Create default main camera
+        mainCamera = new Camera("MainCamera", this, 0, 0);
+        mainCamera.setViewport(viewport);
+        mainCamera.setGame(this);
+        
+        // Add to cameras list
+        cameras.add(mainCamera);
     }
     
     /**
@@ -223,23 +315,50 @@ public class Game extends Canvas implements Runnable {
     }
 
     // ==================== MOUSE LISTENERS ====================
+    
+    // Panning state
+    private boolean isPanning = false;
+    private int panStartX, panStartY;
+    private double camStartX, camStartY;
+    private Runnable onPanUpdate;
 
     private void setupMouseListeners() {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                handleMousePress(e.getX(), e.getY());
+                // Middle mouse button for panning - handle first to avoid selection
+                if (e.getButton() == MouseEvent.BUTTON2) {
+                    startPanning(e.getX(), e.getY());
+                    e.consume();
+                    return;
+                }
+                // Left click for selection/manipulation
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    handleMousePress(e.getX(), e.getY());
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                handleMouseRelease();
+                if (e.getButton() == MouseEvent.BUTTON2) {
+                    stopPanning();
+                    e.consume();
+                    return;
+                }
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    handleMouseRelease();
+                }
             }
         });
 
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
+                // Handle panning first
+                if (isPanning) {
+                    handlePanning(e.getX(), e.getY());
+                    return;
+                }
                 handleMouseDrag(e.getX(), e.getY());
             }
 
@@ -248,6 +367,49 @@ public class Game extends Canvas implements Runnable {
                 updateCursor(e.getX(), e.getY());
             }
         });
+    }
+    
+    /**
+     * Sets up editor panning with a callback for UI updates.
+     */
+    public void setupEditorPanning(Runnable onUpdate) {
+        this.onPanUpdate = onUpdate;
+    }
+    
+    private void startPanning(int x, int y) {
+        if (gameState != GameState.EDITING) return;
+        
+        isPanning = true;
+        panStartX = x;
+        panStartY = y;
+        Camera cam = getMainCamera();
+        if (cam != null) {
+            camStartX = cam.getX();
+            camStartY = cam.getY();
+        }
+        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+    }
+    
+    private void handlePanning(int x, int y) {
+        if (!isPanning || gameState != GameState.EDITING) return;
+        
+        Camera cam = getMainCamera();
+        if (cam != null) {
+            double zoom = cam.getZoom();
+            double dx = (x - panStartX) / zoom;
+            // Invert dy because Y-axis is flipped (positive Y goes up)
+            double dy = -(y - panStartY) / zoom;
+            cam.setPosition(camStartX - dx, camStartY - dy);
+            repaint();
+        }
+    }
+    
+    private void stopPanning() {
+        isPanning = false;
+        setCursor(Cursor.getDefaultCursor());
+        if (onPanUpdate != null) {
+            onPanUpdate.run();
+        }
     }
 
     private void handleMousePress(int mouseX, int mouseY) {
@@ -267,6 +429,12 @@ public class Game extends Canvas implements Runnable {
                 objectStartRotation = selectedObject.getRotation();
                 objectStartWidth = selectedObject.getWidth();
                 objectStartHeight = selectedObject.getHeight();
+                
+                // Initialize infinite drag tracking
+                accumulatedDragX = 0;
+                accumulatedDragY = 0;
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
                 
                 // Notificar início de transformação (para undo)
                 if (transformListener != null) {
@@ -289,6 +457,12 @@ public class Game extends Canvas implements Runnable {
                 dragStartY = mouseY;
                 objectStartX = clicked.getX();
                 objectStartY = clicked.getY();
+                
+                // Initialize infinite drag tracking
+                accumulatedDragX = 0;
+                accumulatedDragY = 0;
+                lastMouseX = mouseX;
+                lastMouseY = mouseY;
                 
                 // Notificar início de transformação (para undo)
                 if (transformListener != null) {
@@ -325,9 +499,67 @@ public class Game extends Canvas implements Runnable {
             return;
         if (gameState != GameState.EDITING)
             return;
+        
+        // Skip if this is a warp event (mouse was just teleported)
+        if (isWarping) {
+            isWarping = false;
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
+            return;
+        }
+        
+        // Calculate mouse delta since last position
+        int mouseDeltaX = mouseX - lastMouseX;
+        int mouseDeltaY = mouseY - lastMouseY;
+        
+        // Accumulate the drag
+        accumulatedDragX += mouseDeltaX;
+        accumulatedDragY += mouseDeltaY;
+        
+        // Update last position
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+        
+        // Check for edge wrapping (infinite drag)
+        if (robot != null) {
+            int w = getWidth();
+            int h = getHeight();
+            boolean needsWarp = false;
+            int newX = mouseX;
+            int newY = mouseY;
+            
+            if (mouseX <= WARP_MARGIN) {
+                newX = w - WARP_MARGIN - 1;
+                needsWarp = true;
+            } else if (mouseX >= w - WARP_MARGIN) {
+                newX = WARP_MARGIN + 1;
+                needsWarp = true;
+            }
+            
+            if (mouseY <= WARP_MARGIN) {
+                newY = h - WARP_MARGIN - 1;
+                needsWarp = true;
+            } else if (mouseY >= h - WARP_MARGIN) {
+                newY = WARP_MARGIN + 1;
+                needsWarp = true;
+            }
+            
+            if (needsWarp) {
+                isWarping = true;
+                lastMouseX = newX;
+                lastMouseY = newY;
+                // Convert component coordinates to screen coordinates
+                Point screenLoc = getLocationOnScreen();
+                robot.mouseMove(screenLoc.x + newX, screenLoc.y + newY);
+            }
+        }
 
-        int deltaX = mouseX - dragStartX;
-        int deltaY = mouseY - dragStartY;
+        // Use accumulated drag for calculations
+        Point2D.Double startWorld = screenToWorld(dragStartX, dragStartY);
+        Point2D.Double accumulatedWorld = screenToWorld(dragStartX + accumulatedDragX, dragStartY + accumulatedDragY);
+        
+        double deltaX = accumulatedWorld.x - startWorld.x;
+        double deltaY = accumulatedWorld.y - startWorld.y;
 
         switch (currentDragMode) {
             case AXIS_X:
@@ -341,33 +573,35 @@ public class Game extends Canvas implements Runnable {
                 selectedObject.setY(objectStartY + deltaY);
                 break;
             case ROTATE:
-                // Calculate rotation based on angle from center
-                int centerX = (int) selectedObject.getX() + selectedObject.getWidth() / 2;
-                int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
-                double startAngle = Math.atan2(dragStartY - centerY, dragStartX - centerX);
-                double currentAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+                // Calculate rotation based on accumulated angle change
+                double centerX = objectStartX + objectStartWidth / 2.0;
+                double centerY = objectStartY + objectStartHeight / 2.0;
+                double startAngle = Math.atan2(startWorld.y - centerY, startWorld.x - centerX);
+                double currentAngle = Math.atan2(accumulatedWorld.y - centerY, accumulatedWorld.x - centerX);
                 double deltaAngle = Math.toDegrees(currentAngle - startAngle);
                 selectedObject.setRotation(objectStartRotation + deltaAngle);
                 break;
             case SCALE_X:
                 // Scale from center: adjust position to keep center fixed
-                int newWidth = Math.max(10, objectStartWidth + deltaX * 2);
+                int newWidth = Math.max(1, objectStartWidth + (int)(deltaX * 2));
                 double oldCenterX = objectStartX + objectStartWidth / 2.0;
                 selectedObject.setWidth(newWidth);
                 selectedObject.setX(oldCenterX - newWidth / 2.0);
                 break;
             case SCALE_Y:
                 // Scale from center: adjust position to keep center fixed
-                int newHeight = Math.max(10, objectStartHeight - deltaY * 2);
+                // Dragging up (positive Y) increases height
+                int newHeight = Math.max(1, objectStartHeight + (int)(deltaY * 2));
                 double oldCenterY = objectStartY + objectStartHeight / 2.0;
                 selectedObject.setHeight(newHeight);
                 selectedObject.setY(oldCenterY - newHeight / 2.0);
                 break;
             case SCALE_UNIFORM:
-                // Uniform scale from center
-                int scaleAmount = (deltaX - deltaY);
-                int newUniformWidth = Math.max(10, objectStartWidth + scaleAmount);
-                int newUniformHeight = Math.max(10, objectStartHeight + scaleAmount);
+                // Uniform scale from center (use world delta)
+                // Dragging right/up increases size
+                double scaleAmount = deltaX + deltaY;
+                int newUniformWidth = Math.max(1, objectStartWidth + (int)scaleAmount);
+                int newUniformHeight = Math.max(1, objectStartHeight + (int)scaleAmount);
                 double origCenterX = objectStartX + objectStartWidth / 2.0;
                 double origCenterY = objectStartY + objectStartHeight / 2.0;
                 selectedObject.setWidth(newUniformWidth);
@@ -416,28 +650,39 @@ public class Game extends Canvas implements Runnable {
         }
     }
 
-    private GizmoDragMode getGizmoHitArea(int mouseX, int mouseY) {
+    private GizmoDragMode getGizmoHitArea(int screenX, int screenY) {
         if (selectedObject == null)
             return GizmoDragMode.NONE;
 
+        // Convert screen mouse position to world coordinates
+        Point2D.Double worldPos = screenToWorld(screenX, screenY);
+        double mouseX = worldPos.x;
+        double mouseY = worldPos.y;
+
         int centerX = (int) selectedObject.getX() + selectedObject.getWidth() / 2;
         int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
+        
+        // Get scaled gizmo dimensions
+        int gizmoSize = getScaledGizmoSize();
+        int hitArea = getScaledGizmoHitArea();
+        int rotateRadius = getScaledRotateGizmoRadius();
+        int scaledHitTolerance = (int)(10 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
 
         switch (currentTool) {
             case MOVE:
                 // Check X axis (arrow to right)
-                if (mouseX >= centerX && mouseX <= centerX + GIZMO_SIZE &&
-                        mouseY >= centerY - GIZMO_HIT_AREA && mouseY <= centerY + GIZMO_HIT_AREA) {
+                if (mouseX >= centerX && mouseX <= centerX + gizmoSize &&
+                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
                     return GizmoDragMode.AXIS_X;
                 }
-                // Check Y axis (arrow up)
-                if (mouseX >= centerX - GIZMO_HIT_AREA && mouseX <= centerX + GIZMO_HIT_AREA &&
-                        mouseY >= centerY - GIZMO_SIZE && mouseY <= centerY) {
+                // Check Y axis (arrow up = positive Y direction)
+                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
+                        mouseY >= centerY && mouseY <= centerY + gizmoSize) {
                     return GizmoDragMode.AXIS_Y;
                 }
                 // Check center
-                if (mouseX >= centerX - GIZMO_HIT_AREA && mouseX <= centerX + GIZMO_HIT_AREA &&
-                        mouseY >= centerY - GIZMO_HIT_AREA && mouseY <= centerY + GIZMO_HIT_AREA) {
+                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
+                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
                     return GizmoDragMode.CENTER;
                 }
                 break;
@@ -445,26 +690,26 @@ public class Game extends Canvas implements Runnable {
             case ROTATE:
                 // Check if on rotation circle
                 double dist = Math.sqrt(Math.pow(mouseX - centerX, 2) + Math.pow(mouseY - centerY, 2));
-                if (dist >= ROTATE_GIZMO_RADIUS - 10 && dist <= ROTATE_GIZMO_RADIUS + 10) {
+                if (dist >= rotateRadius - scaledHitTolerance && dist <= rotateRadius + scaledHitTolerance) {
                     return GizmoDragMode.ROTATE;
                 }
                 break;
 
             case SCALE:
-                int squareSize = 8;
+                int squareSize = (int)(8 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
                 // Check X axis square end (scale X)
-                if (mouseX >= centerX + GIZMO_SIZE - squareSize && mouseX <= centerX + GIZMO_SIZE + squareSize &&
+                if (mouseX >= centerX + gizmoSize - squareSize && mouseX <= centerX + gizmoSize + squareSize &&
                         mouseY >= centerY - squareSize && mouseY <= centerY + squareSize) {
                     return GizmoDragMode.SCALE_X;
                 }
-                // Check Y axis square end (scale Y)
+                // Check Y axis square end (scale Y - positive Y direction)
                 if (mouseX >= centerX - squareSize && mouseX <= centerX + squareSize &&
-                        mouseY >= centerY - GIZMO_SIZE - squareSize && mouseY <= centerY - GIZMO_SIZE + squareSize) {
+                        mouseY >= centerY + gizmoSize - squareSize && mouseY <= centerY + gizmoSize + squareSize) {
                     return GizmoDragMode.SCALE_Y;
                 }
                 // Check center square (uniform scale)
-                if (mouseX >= centerX - GIZMO_HIT_AREA && mouseX <= centerX + GIZMO_HIT_AREA &&
-                        mouseY >= centerY - GIZMO_HIT_AREA && mouseY <= centerY + GIZMO_HIT_AREA) {
+                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
+                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
                     return GizmoDragMode.SCALE_UNIFORM;
                 }
                 break;
@@ -474,16 +719,23 @@ public class Game extends Canvas implements Runnable {
     }
 
     /**
-     * Returns the object at the specified position (top to bottom in render
-     * order)
+     * Returns the object at the specified screen position (top to bottom in render order).
+     * Converts screen coordinates to world coordinates for proper picking.
      */
-    public GameObject getObjectAt(int x, int y) {
-        // Iterate from back to front (objects rendered last are "on
-        // top")
+    public GameObject getObjectAt(int screenX, int screenY) {
+        // Convert screen coordinates to world coordinates
+        Point2D.Double worldPos = screenToWorld(screenX, screenY);
+        double wx = worldPos.x;
+        double wy = worldPos.y;
+        
+        // Iterate from back to front (objects rendered last are "on top")
         for (int i = entities.size() - 1; i >= 0; i--) {
             GameObject obj = entities.get(i);
-            if (x >= obj.getX() && x <= obj.getX() + obj.getWidth() &&
-                    y >= obj.getY() && y <= obj.getY() + obj.getHeight()) {
+            // Skip camera objects from selection
+            if (obj instanceof Camera) continue;
+            
+            if (wx >= obj.getX() && wx <= obj.getX() + obj.getWidth() &&
+                    wy >= obj.getY() && wy <= obj.getY() + obj.getHeight()) {
                 return obj;
             }
         }
@@ -701,6 +953,7 @@ public class Game extends Canvas implements Runnable {
         Graphics g = bs.getDrawGraphics();
         Graphics2D g2d = (Graphics2D) g;
 
+        // Clear background
         g.setColor(Color.GRAY);
         g.fillRect(0, 0, this.getWidth(), this.getHeight());
 
@@ -708,40 +961,145 @@ public class Game extends Canvas implements Runnable {
         g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
                 java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
 
+        // Update viewport size if changed
+        if (viewport != null && (viewport.getWidth() != getWidth() || viewport.getHeight() != getHeight())) {
+            viewport.resize(getWidth(), getHeight());
+        }
+
+        // ==================== CAMERA-DEPENDENT RENDERING ====================
+        // 1. Select the active camera
+        Camera activeCamera = getActiveCamera();
+        
+        // 2. Save the original transform
+        AffineTransform originalTransform = g2d.getTransform();
+        
+        // 3. Apply camera transform when in editor camera mode OR when playing
+        boolean shouldApplyCameraTransform = activeCamera != null && 
+            (editorCameraMode || gameState == GameState.PLAYING);
+        
+        if (shouldApplyCameraTransform) {
+            activeCamera.applyTransform(g2d);
+        }
+
+        // 4. Render all entities (respecting Z-Index by list order)
         for (int i = 0; i < entities.size(); i++) {
             GameObject entity = entities.get(i);
+            
+            // Skip invisible entities
+            if (!entity.isVisible()) continue;
+            
+            // Skip camera entities from regular rendering (cameras are special)
+            if (entity instanceof Camera) continue;
 
-            // Apply rotation transform if entity has rotation
+            // Save entity transform
+            AffineTransform entityTransform = g2d.getTransform();
+
+            // Apply entity rotation around its center
             if (entity.getRotation() != 0) {
-                // Save original transform
-                java.awt.geom.AffineTransform originalTransform = g2d.getTransform();
-
-                // Calculate center of entity
                 double centerX = entity.getX() + entity.getWidth() / 2.0;
                 double centerY = entity.getY() + entity.getHeight() / 2.0;
-
-                // Rotate around center
                 g2d.rotate(Math.toRadians(entity.getRotation()), centerX, centerY);
+            }
 
-                // Render entity
-                entity.render(g);
+            // Render entity
+            entity.render(g);
 
-                // Restore original transform
-                g2d.setTransform(originalTransform);
-            } else {
-                entity.render(g);
+            // Restore entity transform
+            g2d.setTransform(entityTransform);
+        }
+
+        // 5. Restore original transform for UI and editor overlays
+        g2d.setTransform(originalTransform);
+
+        // Draw camera gizmos in editor mode (without camera transform applied)
+        if (gameState == GameState.EDITING) {
+            // If editor camera mode, apply it for gizmos
+            if (editorCameraMode && activeCamera != null) {
+                AffineTransform editorTransform = g2d.getTransform();
+                activeCamera.applyTransform(g2d);
+                
+                // Render camera indicators
+                for (Camera cam : cameras) {
+                    if (cam.isVisible()) {
+                        cam.render(g);
+                    }
+                }
+                
+                g2d.setTransform(editorTransform);
             }
         }
 
         // Draw selection and gizmo only in EDITING mode
         if (gameState == GameState.EDITING && selectedObject != null) {
+            // Apply camera transform for selection/gizmo if in editor camera mode
+            if (shouldApplyCameraTransform) {
+                activeCamera.applyTransform(g2d);
+            }
+            
             renderSelection(g2d);
             renderGizmo(g2d);
+            
+            // Restore transform
+            g2d.setTransform(originalTransform);
+        }
+
+        // Draw world origin indicator in editing mode
+        if (gameState == GameState.EDITING && shouldApplyCameraTransform) {
+            AffineTransform temp = g2d.getTransform();
+            activeCamera.applyTransform(g2d);
+            drawWorldOrigin(g2d);
+            g2d.setTransform(temp);
         }
 
         g.dispose();
-
         bs.show();
+    }
+
+    /**
+     * Draws text that appears correctly despite the inverted Y-axis.
+     * Flips the text vertically before drawing so it appears right-side up.
+     */
+    private void drawWorldText(Graphics2D g2d, String text, double worldX, double worldY) {
+        AffineTransform oldTransform = g2d.getTransform();
+        // Move to text position, flip Y to make text appear correctly
+        g2d.translate(worldX, worldY);
+        g2d.scale(1, -1);
+        g2d.drawString(text, 0, 0);
+        g2d.setTransform(oldTransform);
+    }
+
+    /**
+     * Draws the world origin (0,0) indicator
+     */
+    private void drawWorldOrigin(Graphics2D g2d) {
+        int crossSize = 20;
+        int axisLength = 35;
+        
+        // Draw main crosshair at world origin (white, semi-transparent)
+        g2d.setColor(new Color(255, 255, 255, 120));
+        g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(-crossSize, 0, crossSize, 0);
+        g2d.drawLine(0, -crossSize, 0, crossSize);
+        
+        // Draw X axis (red, pointing right)
+        g2d.setColor(new Color(255, 80, 80, 180));
+        g2d.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(0, 0, axisLength, 0);
+        // X axis arrow
+        g2d.drawLine(axisLength, 0, axisLength - 6, -4);
+        g2d.drawLine(axisLength, 0, axisLength - 6, 4);
+        
+        // Draw Y axis (green, pointing up - positive Y is up in world coordinates)
+        g2d.setColor(new Color(80, 255, 80, 180));
+        g2d.drawLine(0, 0, 0, axisLength);
+        // Y axis arrow (pointing up in world space = positive Y)
+        g2d.drawLine(0, axisLength, -4, axisLength - 6);
+        g2d.drawLine(0, axisLength, 4, axisLength - 6);
+        
+        // Origin label
+        g2d.setColor(new Color(255, 255, 255, 200));
+        g2d.setFont(new Font("Arial", Font.BOLD, 11));
+        drawWorldText(g2d, "(0,0)", 6, 6);
     }
 
     /**
@@ -818,12 +1176,17 @@ public class Game extends Canvas implements Runnable {
     private void renderMoveGizmo(Graphics2D g2d) {
         int centerX = (int) selectedObject.getX() + selectedObject.getWidth() / 2;
         int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
+        
+        // Get scaled gizmo dimensions
+        int gizmoSize = getScaledGizmoSize();
+        int arrowSize = getScaledGizmoArrowSize();
 
         g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
         // Center square
         g2d.setColor(new Color(255, 255, 100));
-        int centerSize = 10;
+        int centerSize = (int)(10 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        centerSize = Math.max(4, centerSize); // Minimum visible size
         g2d.fillRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
         g2d.setColor(Color.BLACK);
         g2d.drawRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
@@ -831,29 +1194,29 @@ public class Game extends Canvas implements Runnable {
         // X axis (red) - arrow to right
         Color xColor = (currentDragMode == GizmoDragMode.AXIS_X) ? new Color(255, 100, 100) : new Color(220, 50, 50);
         g2d.setColor(xColor);
-        g2d.drawLine(centerX, centerY, centerX + GIZMO_SIZE, centerY);
+        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
         // X arrow head
         Polygon arrowX = new Polygon();
-        arrowX.addPoint(centerX + GIZMO_SIZE + GIZMO_ARROW_SIZE, centerY);
-        arrowX.addPoint(centerX + GIZMO_SIZE - 2, centerY - GIZMO_ARROW_SIZE / 2);
-        arrowX.addPoint(centerX + GIZMO_SIZE - 2, centerY + GIZMO_ARROW_SIZE / 2);
+        arrowX.addPoint(centerX + gizmoSize + arrowSize, centerY);
+        arrowX.addPoint(centerX + gizmoSize - 2, centerY - arrowSize / 2);
+        arrowX.addPoint(centerX + gizmoSize - 2, centerY + arrowSize / 2);
         g2d.fillPolygon(arrowX);
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        g2d.drawString("X", centerX + GIZMO_SIZE + GIZMO_ARROW_SIZE + 2, centerY + 4);
+        drawWorldText(g2d, "X", centerX + gizmoSize + arrowSize + 2, centerY - 4);
 
-        // Y axis (green) - arrow up
+        // Y axis (green) - arrow pointing up (positive Y direction in world space)
         Color yColor = (currentDragMode == GizmoDragMode.AXIS_Y) ? new Color(100, 255, 100) : new Color(50, 200, 50);
         g2d.setColor(yColor);
-        g2d.drawLine(centerX, centerY, centerX, centerY - GIZMO_SIZE);
-        // Y arrow head
+        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
+        // Y arrow head (pointing up = positive Y)
         Polygon arrowY = new Polygon();
-        arrowY.addPoint(centerX, centerY - GIZMO_SIZE - GIZMO_ARROW_SIZE);
-        arrowY.addPoint(centerX - GIZMO_ARROW_SIZE / 2, centerY - GIZMO_SIZE + 2);
-        arrowY.addPoint(centerX + GIZMO_ARROW_SIZE / 2, centerY - GIZMO_SIZE + 2);
+        arrowY.addPoint(centerX, centerY + gizmoSize + arrowSize);
+        arrowY.addPoint(centerX - arrowSize / 2, centerY + gizmoSize - 2);
+        arrowY.addPoint(centerX + arrowSize / 2, centerY + gizmoSize - 2);
         g2d.fillPolygon(arrowY);
         g2d.setColor(Color.WHITE);
-        g2d.drawString("Y", centerX - 4, centerY - GIZMO_SIZE - GIZMO_ARROW_SIZE - 2);
+        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + arrowSize + 2);
     }
 
     /**
@@ -862,32 +1225,37 @@ public class Game extends Canvas implements Runnable {
     private void renderRotateGizmo(Graphics2D g2d) {
         int centerX = (int) selectedObject.getX() + selectedObject.getWidth() / 2;
         int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
+        
+        // Get scaled radius
+        int rotateRadius = getScaledRotateGizmoRadius();
 
         // Rotation circle
         Color circleColor = (currentDragMode == GizmoDragMode.ROTATE) ? new Color(100, 200, 255)
                 : new Color(50, 150, 220);
         g2d.setColor(circleColor);
         g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2d.drawOval(centerX - ROTATE_GIZMO_RADIUS, centerY - ROTATE_GIZMO_RADIUS,
-                ROTATE_GIZMO_RADIUS * 2, ROTATE_GIZMO_RADIUS * 2);
+        g2d.drawOval(centerX - rotateRadius, centerY - rotateRadius,
+                rotateRadius * 2, rotateRadius * 2);
 
         // Rotation indicator line (shows current rotation)
         double radians = Math.toRadians(selectedObject.getRotation());
-        int indicatorX = centerX + (int) (Math.cos(radians) * ROTATE_GIZMO_RADIUS);
-        int indicatorY = centerY + (int) (Math.sin(radians) * ROTATE_GIZMO_RADIUS);
+        int indicatorX = centerX + (int) (Math.cos(radians) * rotateRadius);
+        int indicatorY = centerY + (int) (Math.sin(radians) * rotateRadius);
         g2d.setColor(new Color(255, 150, 50));
         g2d.setStroke(new BasicStroke(2));
         g2d.drawLine(centerX, centerY, indicatorX, indicatorY);
 
         // Center point
+        int centerPointSize = (int)(5 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        centerPointSize = Math.max(3, centerPointSize);
         g2d.setColor(new Color(50, 150, 220));
-        g2d.fillOval(centerX - 5, centerY - 5, 10, 10);
+        g2d.fillOval(centerX - centerPointSize, centerY - centerPointSize, centerPointSize * 2, centerPointSize * 2);
 
         // Rotation value label
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        g2d.drawString(String.format("%.1f\u00B0", selectedObject.getRotation()),
-                centerX + ROTATE_GIZMO_RADIUS + 5, centerY - 5);
+        drawWorldText(g2d, String.format("%.1f\u00B0", selectedObject.getRotation()),
+                centerX + rotateRadius + 5, centerY + 5);
     }
 
     /**
@@ -898,7 +1266,12 @@ public class Game extends Canvas implements Runnable {
         int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
         int objW = selectedObject.getWidth();
         int objH = selectedObject.getHeight();
-        int squareSize = 8;
+        
+        // Get scaled gizmo dimensions
+        int gizmoSize = getScaledGizmoSize();
+        double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
+        int squareSize = (int)(8 / zoom);
+        squareSize = Math.max(4, squareSize);
 
         g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
@@ -906,7 +1279,8 @@ public class Game extends Canvas implements Runnable {
         Color uColor = (currentDragMode == GizmoDragMode.SCALE_UNIFORM) ? new Color(255, 255, 150)
                 : new Color(255, 220, 50);
         g2d.setColor(uColor);
-        int centerSize = 12;
+        int centerSize = (int)(12 / zoom);
+        centerSize = Math.max(6, centerSize);
         g2d.fillRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
         g2d.setColor(Color.BLACK);
         g2d.drawRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
@@ -914,29 +1288,29 @@ public class Game extends Canvas implements Runnable {
         // X axis (red) - arrow to right with square end
         Color xColor = (currentDragMode == GizmoDragMode.SCALE_X) ? new Color(255, 100, 100) : new Color(220, 50, 50);
         g2d.setColor(xColor);
-        g2d.drawLine(centerX, centerY, centerX + GIZMO_SIZE, centerY);
+        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
         // X square end
-        g2d.fillRect(centerX + GIZMO_SIZE - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        g2d.fillRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
         g2d.setColor(Color.WHITE);
-        g2d.drawRect(centerX + GIZMO_SIZE - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        g2d.drawRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
         g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        g2d.drawString("X", centerX + GIZMO_SIZE + squareSize, centerY + 4);
+        drawWorldText(g2d, "X", centerX + gizmoSize + squareSize, centerY - 4);
 
-        // Y axis (green) - arrow up with square end
+        // Y axis (green) - arrow pointing up (positive Y direction in world space)
         Color yColor = (currentDragMode == GizmoDragMode.SCALE_Y) ? new Color(100, 255, 100) : new Color(50, 200, 50);
         g2d.setColor(yColor);
-        g2d.drawLine(centerX, centerY, centerX, centerY - GIZMO_SIZE);
-        // Y square end
-        g2d.fillRect(centerX - squareSize / 2, centerY - GIZMO_SIZE - squareSize / 2, squareSize, squareSize);
+        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
+        // Y square end (pointing up = positive Y)
+        g2d.fillRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
         g2d.setColor(Color.WHITE);
-        g2d.drawRect(centerX - squareSize / 2, centerY - GIZMO_SIZE - squareSize / 2, squareSize, squareSize);
+        g2d.drawRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
         g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        g2d.drawString("Y", centerX - 4, centerY - GIZMO_SIZE - squareSize - 2);
+        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + squareSize + 2);
 
         // Size label
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Dialog", Font.PLAIN, 11));
-        g2d.drawString(objW + " x " + objH, centerX + GIZMO_SIZE + squareSize, centerY + 20);
+        drawWorldText(g2d, objW + " x " + objH, centerX + gizmoSize + squareSize, centerY - 20);
     }
 
     // ==================== TOOL MANAGEMENT ====================
@@ -1012,6 +1386,136 @@ public class Game extends Canvas implements Runnable {
         if (index > 0) {
             moveEntityToIndex(entity, index - 1);
         }
+    }
+
+    // ==================== CAMERA SYSTEM METHODS ====================
+
+    /**
+     * Gets the main/active camera.
+     * Returns the first active camera found, or mainCamera as fallback.
+     */
+    public Camera getActiveCamera() {
+        for (Camera cam : cameras) {
+            if (cam.isActiveCamera()) {
+                return cam;
+            }
+        }
+        return mainCamera;
+    }
+
+    /**
+     * Gets the main camera (the default camera).
+     */
+    public Camera getMainCamera() {
+        return mainCamera;
+    }
+
+    /**
+     * Sets the main camera.
+     */
+    public void setMainCamera(Camera camera) {
+        if (camera != null) {
+            // Deactivate old main camera
+            if (mainCamera != null) {
+                mainCamera.setActive(false);
+            }
+            // Set and activate new camera
+            mainCamera = camera;
+            mainCamera.setActive(true);
+            mainCamera.setViewport(viewport);
+            mainCamera.setGame(this);
+            
+            // Add to list if not present
+            if (!cameras.contains(camera)) {
+                cameras.add(camera);
+            }
+        }
+    }
+
+    /**
+     * Adds a camera to the camera list.
+     */
+    public void addCamera(Camera camera) {
+        if (camera != null && !cameras.contains(camera)) {
+            camera.setViewport(viewport);
+            camera.setGame(this);
+            cameras.add(camera);
+        }
+    }
+
+    /**
+     * Removes a camera from the camera list.
+     */
+    public void removeCamera(Camera camera) {
+        cameras.remove(camera);
+        // Don't allow removing the main camera
+        if (camera == mainCamera && !cameras.isEmpty()) {
+            mainCamera = cameras.get(0);
+            mainCamera.setActive(true);
+        }
+    }
+
+    /**
+     * Gets all cameras in the scene.
+     */
+    public List<Camera> getCameras() {
+        return cameras;
+    }
+
+    /**
+     * Gets the viewport.
+     */
+    public Viewport getViewport() {
+        return viewport;
+    }
+
+    /**
+     * Sets editor camera mode (free camera for editing).
+     * When true, the camera transform is applied in the editor.
+     */
+    public void setEditorCameraMode(boolean enabled) {
+        this.editorCameraMode = enabled;
+    }
+
+    /**
+     * Returns whether editor camera mode is active.
+     */
+    public boolean isEditorCameraMode() {
+        return editorCameraMode;
+    }
+
+    // ==================== COORDINATE CONVERSION ====================
+
+    /**
+     * Converts world coordinates to screen coordinates using the active camera.
+     * 
+     * @param worldX X position in world space
+     * @param worldY Y position in world space
+     * @return Screen position as Point2D.Double
+     */
+    public Point2D.Double worldToScreen(double worldX, double worldY) {
+        Camera cam = getActiveCamera();
+        if (cam != null && editorCameraMode) {
+            return cam.worldToScreen(worldX, worldY);
+        }
+        // No camera transform - return as-is
+        return new Point2D.Double(worldX, worldY);
+    }
+
+    /**
+     * Converts screen coordinates to world coordinates using the active camera.
+     * 
+     * @param screenX X position in screen pixels
+     * @param screenY Y position in screen pixels
+     * @return World position as Point2D.Double
+     */
+    public Point2D.Double screenToWorld(double screenX, double screenY) {
+        Camera cam = getActiveCamera();
+        if (cam != null && editorCameraMode) {
+            return cam.screenToWorld(screenX, screenY);
+        }
+        // No camera transform - return as-is
+        return new Point2D.Double(screenX, screenY);
     }
 
     @Override

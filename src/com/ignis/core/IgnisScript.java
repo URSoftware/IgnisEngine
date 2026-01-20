@@ -323,4 +323,173 @@ public abstract class IgnisScript {
     protected void setSfxVolume(float volume) {
         IgnisSoundEngine.getInstance().setSfxVolume(volume);
     }
+
+    // ==================== MÉTODOS DE CÂMERA ====================
+
+    /**
+     * Obtém a câmera principal do jogo.
+     * @return A câmera principal, ou null se não existir
+     */
+    protected Camera getCamera() {
+        if (game == null) return null;
+        return game.getMainCamera();
+    }
+
+    /**
+     * Obtém a posição X da câmera.
+     * @return Posição X da câmera no mundo
+     */
+    protected double getCameraX() {
+        Camera cam = getCamera();
+        return cam != null ? cam.getX() : 0;
+    }
+
+    /**
+     * Obtém a posição Y da câmera.
+     * @return Posição Y da câmera no mundo
+     */
+    protected double getCameraY() {
+        Camera cam = getCamera();
+        return cam != null ? cam.getY() : 0;
+    }
+
+    /**
+     * Define a posição da câmera.
+     * @param x Posição X no mundo
+     * @param y Posição Y no mundo
+     */
+    protected void setCameraPosition(double x, double y) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            cam.setPosition(x, y);
+        }
+    }
+
+    /**
+     * Move a câmera por um delta.
+     * @param dx Movimento no eixo X
+     * @param dy Movimento no eixo Y
+     */
+    protected void moveCamera(double dx, double dy) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            cam.translate(dx, dy);
+        }
+    }
+
+    /**
+     * Faz a câmera seguir este objeto.
+     * Chame este método no tick() para a câmera seguir o objeto suavemente.
+     */
+    protected void cameraFollowThis() {
+        Camera cam = getCamera();
+        if (cam != null) {
+            double centerX = transform.x + transform.width / 2.0;
+            double centerY = transform.y + transform.height / 2.0;
+            cam.setPosition(centerX, centerY);
+        }
+    }
+
+    /**
+     * Faz a câmera seguir este objeto com suavização (lerp).
+     * @param smoothness Valor de suavização (0.0 a 1.0). Valores menores = mais suave
+     */
+    protected void cameraFollowThis(double smoothness) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            double centerX = transform.x + transform.width / 2.0;
+            double centerY = transform.y + transform.height / 2.0;
+            double currentX = cam.getX();
+            double currentY = cam.getY();
+            double newX = currentX + (centerX - currentX) * smoothness;
+            double newY = currentY + (centerY - currentY) * smoothness;
+            cam.setPosition(newX, newY);
+        }
+    }
+
+    /**
+     * Faz a câmera seguir um objeto específico.
+     * @param target O objeto a ser seguido
+     */
+    protected void cameraFollow(GameObject target) {
+        if (target == null) return;
+        Camera cam = getCamera();
+        if (cam != null) {
+            double centerX = target.getX() + target.getWidth() / 2.0;
+            double centerY = target.getY() + target.getHeight() / 2.0;
+            cam.setPosition(centerX, centerY);
+        }
+    }
+
+    /**
+     * Faz a câmera seguir um objeto específico com suavização.
+     * @param target O objeto a ser seguido
+     * @param smoothness Valor de suavização (0.0 a 1.0)
+     */
+    protected void cameraFollow(GameObject target, double smoothness) {
+        if (target == null) return;
+        Camera cam = getCamera();
+        if (cam != null) {
+            double centerX = target.getX() + target.getWidth() / 2.0;
+            double centerY = target.getY() + target.getHeight() / 2.0;
+            double currentX = cam.getX();
+            double currentY = cam.getY();
+            double newX = currentX + (centerX - currentX) * smoothness;
+            double newY = currentY + (centerY - currentY) * smoothness;
+            cam.setPosition(newX, newY);
+        }
+    }
+
+    /**
+     * Obtém o nível de zoom atual da câmera.
+     * @return Nível de zoom (1.0 = normal, >1 = ampliado, <1 = afastado)
+     */
+    protected double getCameraZoom() {
+        Camera cam = getCamera();
+        return cam != null ? cam.getZoom() : 1.0;
+    }
+
+    /**
+     * Define o nível de zoom da câmera.
+     * @param zoom Nível de zoom (0.1 a 10.0)
+     */
+    protected void setCameraZoom(double zoom) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            cam.setZoom(zoom);
+        }
+    }
+
+    /**
+     * Obtém a rotação da câmera em graus.
+     * @return Rotação da câmera
+     */
+    protected double getCameraRotation() {
+        Camera cam = getCamera();
+        return cam != null ? cam.getRotation() : 0;
+    }
+
+    /**
+     * Define a rotação da câmera.
+     * @param rotation Rotação em graus
+     */
+    protected void setCameraRotation(double rotation) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            cam.setRotation(rotation);
+        }
+    }
+
+    /**
+     * Aplica um efeito de shake (tremor) na câmera.
+     * @param intensity Intensidade do tremor em pixels
+     */
+    protected void cameraShake(double intensity) {
+        Camera cam = getCamera();
+        if (cam != null) {
+            double shakeX = (Math.random() - 0.5) * 2 * intensity;
+            double shakeY = (Math.random() - 0.5) * 2 * intensity;
+            cam.translate(shakeX, shakeY);
+        }
+    }
 }

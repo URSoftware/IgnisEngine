@@ -1,10 +1,10 @@
 package com.ignis.core;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
-import org.json.JSONArray;
 
 public abstract class GameObject {
 
@@ -16,6 +16,9 @@ public abstract class GameObject {
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
+    
+    // Color for the object name in hierarchy (default white)
+    protected Color nameColor = Color.WHITE;
     
     // Lista de scripts/componentes anexados a este objeto
     protected List<IgnisScript> scripts = new ArrayList<>();
@@ -33,12 +36,14 @@ public abstract class GameObject {
         this.height = height;
         this.spritePath = null;
         this.visible = true;
+        this.nameColor = Color.WHITE;
     }
 
     // Construtor vazio para EntityFactory
     public GameObject() {
         this.id = java.util.UUID.randomUUID().toString();
         this.visible = true;
+        this.nameColor = Color.WHITE;
     }
 
     public abstract void tick();
@@ -137,6 +142,14 @@ public abstract class GameObject {
     
     public void setVisible(boolean visible) {
         this.visible = visible;
+    }
+    
+    public Color getNameColor() {
+        return nameColor;
+    }
+    
+    public void setNameColor(Color nameColor) {
+        this.nameColor = nameColor != null ? nameColor : Color.WHITE;
     }
 
     // Metodo para obter o tipo da entidade (nome da classe)
