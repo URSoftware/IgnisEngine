@@ -5,7 +5,6 @@ import java.awt.Graphics;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
-import org.json.JSONArray;
 
 public abstract class GameObject {
 
@@ -31,6 +30,9 @@ public abstract class GameObject {
     protected IgnisSampleCollisions.Collider collider = null;
     protected IgnisSampleCollisions.ColliderType colliderType = IgnisSampleCollisions.ColliderType.NONE;
     protected IgnisSampleCollisions.CollisionMode collisionMode = IgnisSampleCollisions.CollisionMode.COLLISION;
+    
+    // Audio component
+    protected MusicPath musicPath = null;
 
     public GameObject(String name, Game game, double x, double y, int width, int height) {
         this.id = java.util.UUID.randomUUID().toString();
@@ -156,6 +158,24 @@ public abstract class GameObject {
     
     public void setNameColor(Color nameColor) {
         this.nameColor = nameColor != null ? nameColor : Color.WHITE;
+    }
+    
+    // ==================== SISTEMA DE ÁUDIO ====================
+    
+    /**
+     * Obtém o componente MusicPath deste objeto.
+     * @return O MusicPath ou null se não existir
+     */
+    public MusicPath getMusicPath() {
+        return musicPath;
+    }
+    
+    /**
+     * Define o componente MusicPath deste objeto.
+     * @param musicPath O MusicPath a ser definido
+     */
+    public void setMusicPath(MusicPath musicPath) {
+        this.musicPath = musicPath;
     }
 
     // Metodo para obter o tipo da entidade (nome da classe)

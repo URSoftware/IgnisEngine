@@ -119,6 +119,11 @@ public class Scene {
                 entityJson.put("sprite", entity.getSpritePath());
             }
             
+            // Save attached audio component
+            if (entity.getMusicPath() != null) {
+                entityJson.put("musicPath", entity.getMusicPath().toJSON());
+            }
+            
             // Save attached scripts with their variable values
             if (!entity.getScriptNames().isEmpty()) {
                 JSONArray scriptsArray = new JSONArray();
@@ -224,6 +229,12 @@ public class Scene {
 
             if (entityJson.has("sprite")) {
                 entity.setSpritePath(entityJson.getString("sprite"));
+            }
+            
+            // Load attached audio component
+            if (entityJson.has("musicPath")) {
+                MusicPath musicPath = MusicPath.fromJSON(entityJson.getJSONObject("musicPath"));
+                entity.setMusicPath(musicPath);
             }
             
             // Load attached scripts (supports both old string format and new object format)

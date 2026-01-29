@@ -103,11 +103,98 @@ public class Transform {
     }
 
     /**
-     * Translates the position by the given amounts.
+     * Translates the position by the given amounts in WORLD space.
      */
     public void translate(double dx, double dy) {
         this.x += dx;
         this.y += dy;
+    }
+    
+    /**
+     * Translates the position by the given amounts in the specified space.
+     * 
+     * @param dx Movement along X axis
+     * @param dy Movement along Y axis
+     * @param space The coordinate space (WORLD or LOCAL)
+     * 
+     * In WORLD space: dx moves right, dy moves down
+     * In LOCAL space: dx moves forward (based on rotation), dy moves left
+     */
+    public void translate(double dx, double dy, TransformSpace space) {
+        if (space == null || space == TransformSpace.WORLD) {
+            // World space - direct translation
+            this.x += dx;
+            this.y += dy;
+        } else {
+            // Local space - rotate the translation vector by object's rotation
+            double rad = Math.toRadians(this.rotation);
+            double cos = Math.cos(rad);
+            double sin = Math.sin(rad);
+            
+            // Rotate the direction vector
+            double worldDx = dx * cos - dy * sin;
+            double worldDy = dx * sin + dy * cos;
+            
+            this.x += worldDx;
+            this.y += worldDy;
+        }
+    }
+    
+    /**
+     * Moves forward (in the direction the object is facing) by the specified amount.
+     * Equivalent to translate(amount, 0, TransformSpace.LOCAL)
+     * 
+     * @param amount Distance to move forward
+     */
+    public void moveForward(double amount) {
+        translate(amount, 0, TransformSpace.LOCAL);
+    }
+    
+    /**
+     * Moves backward by the specified amount.
+     * 
+     * @param amount Distance to move backward
+     */
+    public void moveBackward(double amount) {
+        translate(-amount, 0, TransformSpace.LOCAL);
+    }
+    
+    /**
+     * Moves right (perpendicular to facing direction) by the specified amount.
+     * 
+     * @param amount Distance to strafe right
+     */
+    public void strafeRight(double amount) {
+        translate(0, amount, TransformSpace.LOCAL);
+    }
+    
+    /**
+     * Moves left (perpendicular to facing direction) by the specified amount.
+     * 
+     * @param amount Distance to strafe left
+     */
+    public void strafeLeft(double amount) {
+        translate(0, -amount, TransformSpace.LOCAL);
+    }
+    
+    /**
+     * Gets the forward direction vector based on current rotation.
+     * 
+     * @return Array with [dirX, dirY] normalized direction
+     */
+    public double[] getForwardDirection() {
+        double rad = Math.toRadians(this.rotation);
+        return new double[] { Math.cos(rad), Math.sin(rad) };
+    }
+    
+    /**
+     * Gets the right direction vector (perpendicular to forward).
+     * 
+     * @return Array with [dirX, dirY] normalized direction
+     */
+    public double[] getRightDirection() {
+        double rad = Math.toRadians(this.rotation + 90);
+        return new double[] { Math.cos(rad), Math.sin(rad) };
     }
 
     // ==================== ROTATION ====================

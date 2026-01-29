@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
+import com.ignis.core.ui.UICanvas;
 
 public class Game extends Canvas implements Runnable {
 
@@ -61,6 +62,10 @@ public class Game extends Canvas implements Runnable {
     // Collision system
     private IgnisSampleCollisions.CollisionManager collisionManager;
     private boolean showColliders = false; // Debug view for colliders
+    
+    // ==================== UI SYSTEM ====================
+    // Canvas de interface do usuário
+    private UICanvas uiCanvas;
 
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
@@ -254,6 +259,26 @@ public class Game extends Canvas implements Runnable {
     }
     
     /**
+     * Define o canvas de UI do jogo.
+     * @param canvas O canvas de UI a ser usado
+     */
+    public void setUICanvas(UICanvas canvas) {
+        this.uiCanvas = canvas;
+        if (canvas != null) {
+            canvas.setGame(this);
+            canvas.updateScreenSize(getWidth(), getHeight());
+        }
+    }
+    
+    /**
+     * Obtém o canvas de UI atual.
+     * @return O canvas de UI, ou null se não existir
+     */
+    public UICanvas getUICanvas() {
+        return uiCanvas;
+    }
+    
+    /**
      * Gets the collision manager
      */
     public IgnisSampleCollisions.CollisionManager getCollisionManager() {
@@ -362,6 +387,14 @@ public class Game extends Canvas implements Runnable {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // UI Canvas gets priority when playing
+                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
+                    if (uiCanvas.processMouseClick(e, true)) {
+                        e.consume();
+                        return;
+                    }
+                }
+                
                 // Middle mouse button for panning - handle first to avoid selection
                 if (e.getButton() == MouseEvent.BUTTON2) {
                     startPanning(e.getX(), e.getY());
@@ -376,6 +409,14 @@ public class Game extends Canvas implements Runnable {
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                // UI Canvas gets priority when playing
+                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
+                    if (uiCanvas.processMouseClick(e, false)) {
+                        e.consume();
+                        return;
+                    }
+                }
+                
                 if (e.getButton() == MouseEvent.BUTTON2) {
                     stopPanning();
                     e.consume();
@@ -390,6 +431,11 @@ public class Game extends Canvas implements Runnable {
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
+                // UI Canvas gets priority when playing
+                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
+                    uiCanvas.processMouseMove(e);
+                }
+                
                 // Handle panning first
                 if (isPanning) {
                     handlePanning(e.getX(), e.getY());
@@ -400,6 +446,11 @@ public class Game extends Canvas implements Runnable {
 
             @Override
             public void mouseMoved(MouseEvent e) {
+                // UI Canvas gets priority when playing
+                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
+                    uiCanvas.processMouseMove(e);
+                }
+                
                 updateCursor(e.getX(), e.getY());
             }
         });
@@ -876,6 +927,11 @@ public class Game extends Canvas implements Runnable {
         IgnisSoundEngine.getInstance().stopMusic();
         IgnisSoundEngine.getInstance().stopAllSounds();
         
+        // Limpar a interface de usuário criada pelos scripts
+        if (uiCanvas != null) {
+            uiCanvas.clearChildren();
+        }
+        
         // Remover todos os objetos criados em runtime (projéteis, inimigos spawados, etc.)
         for (GameObject runtimeObj : runtimeObjects) {
             entities.remove(runtimeObj);
@@ -940,6 +996,11 @@ public class Game extends Canvas implements Runnable {
     public void tick() {
         // Update Input system
         Input.update();
+        
+        // Update UI Canvas (even in editing mode for preview)
+        if (uiCanvas != null) {
+            uiCanvas.update();
+        }
         
         // Only update objects if in PLAYING state
         if (gameState == GameState.PLAYING) {
@@ -1090,6 +1151,19 @@ public class Game extends Canvas implements Runnable {
             }
             
             g2d.setTransform(temp);
+        }
+        
+        // ==================== UI RENDERING ====================
+        // Render UI Canvas on top of everything (in SCREEN_SPACE_OVERLAY mode)
+        if (uiCanvas != null && uiCanvas.isVisible()) {
+            // Ensure canvas has correct screen dimensions
+            uiCanvas.updateScreenSize(getWidth(), getHeight());
+            
+            // Reset transform for screen-space rendering
+            g2d.setTransform(originalTransform);
+            
+            // Render UI hierarchy
+            uiCanvas.renderAll(g2d);
         }
 
         g.dispose();

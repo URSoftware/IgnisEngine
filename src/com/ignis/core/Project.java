@@ -82,6 +82,17 @@ public class Project {
         this.currentScene = currentScene;
     }
 
+    /**
+     * Gets the project directory (parent of the project file).
+     * @return The project directory, or null if projectFile is not set
+     */
+    public File getProjectDir() {
+        if (projectFile != null) {
+            return projectFile.getParentFile();
+        }
+        return null;
+    }
+
     public static String getEngineVersion() {
         return ENGINE_VERSION;
     }
