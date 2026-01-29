@@ -5,6 +5,7 @@ import java.awt.Graphics;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 public abstract class GameObject {
 
@@ -25,6 +26,11 @@ public abstract class GameObject {
     
     // Lista de nomes de scripts (para serialização)
     protected List<String> scriptNames = new ArrayList<>();
+    
+    // Collision system
+    protected IgnisSampleCollisions.Collider collider = null;
+    protected IgnisSampleCollisions.ColliderType colliderType = IgnisSampleCollisions.ColliderType.NONE;
+    protected IgnisSampleCollisions.CollisionMode collisionMode = IgnisSampleCollisions.CollisionMode.COLLISION;
 
     public GameObject(String name, Game game, double x, double y, int width, int height) {
         this.id = java.util.UUID.randomUUID().toString();
@@ -192,6 +198,7 @@ public abstract class GameObject {
      * @param scriptName Nome do script
      */
     public void removeScriptByName(String scriptName) {
+        // Remove script instance if it exists
         IgnisScript toRemove = null;
         for (IgnisScript script : scripts) {
             if (script.getScriptName().equals(scriptName)) {
@@ -200,8 +207,12 @@ public abstract class GameObject {
             }
         }
         if (toRemove != null) {
-            removeScript(toRemove);
+            scripts.remove(toRemove);
         }
+        
+        // Always remove from scriptNames list (even if instance doesn't exist)
+        // This handles cases where the script file was deleted but the name remains
+        scriptNames.remove(scriptName);
     }
     
     /**
@@ -278,6 +289,183 @@ public abstract class GameObject {
     public void notifyCollision(GameObject other) {
         for (IgnisScript script : scripts) {
             script.onCollision(other);
+        }
+    }
+    
+    // ==================== COLLISION SYSTEM ====================
+    
+    /**
+     * Gets the current collider attached to this object
+     */
+    public IgnisSampleCollisions.Collider getCollider() {
+        return collider;
+    }
+    
+    /**
+     * Gets the collider type
+     */
+    public IgnisSampleCollisions.ColliderType getColliderType() {
+        return colliderType;
+    }
+    
+    /**
+     * Sets the collider type and creates the appropriate collider
+     */
+    public void setColliderType(IgnisSampleCollisions.ColliderType type) {
+        this.colliderType = type;
+        
+        // Remove old collider from manager if exists
+        if (collider != null && game != null && game.getCollisionManager() != null) {
+            game.getCollisionManager().removeCollider(collider);
+        }
+        
+        // Create new collider based on type
+        switch (type) {
+            case AABB:
+                collider = new IgnisSampleCollisions.AABBCollider(this);
+                break;
+            case CIRCLE:
+                collider = new IgnisSampleCollisions.CircleCollider(this);
+                break;
+            case POLYGON:
+                collider = new IgnisSampleCollisions.PolygonCollider(this);
+                break;
+            case NONE:
+            default:
+                collider = null;
+                break;
+        }
+        
+        // Set collision mode
+        if (collider != null) {
+            collider.setMode(collisionMode);
+            
+            // Register with collision manager
+            if (game != null && game.getCollisionManager() != null) {
+                game.getCollisionManager().addCollider(collider);
+            }
+        }
+    }
+    
+    /**
+     * Gets the collision mode (TRIGGER or COLLISION)
+     */
+    public IgnisSampleCollisions.CollisionMode getCollisionMode() {
+        return collisionMode;
+    }
+    
+    /**
+     * Sets the collision mode
+     */
+    public void setCollisionMode(IgnisSampleCollisions.CollisionMode mode) {
+        this.collisionMode = mode;
+        if (collider != null) {
+            collider.setMode(mode);
+        }
+    }
+    
+    /**
+     * Checks if this object has a collider
+     */
+    public boolean hasCollider() {
+        return collider != null && colliderType != IgnisSampleCollisions.ColliderType.NONE;
+    }
+    
+    /**
+     * Enables or disables the collider
+     */
+    public void setColliderEnabled(boolean enabled) {
+        if (collider != null) {
+            collider.setEnabled(enabled);
+        }
+    }
+    
+    /**
+     * Sets whether to use Continuous Collision Detection
+     */
+    public void setUseCCD(boolean use) {
+        if (collider != null) {
+            collider.setUseCCD(use);
+        }
+    }
+    
+    /**
+     * Serializes collider properties to JSON
+     */
+    public JSONObject saveColliderProperties() {
+        JSONObject props = new JSONObject();
+        props.put("colliderType", colliderType.name());
+        props.put("collisionMode", collisionMode.name());
+        
+        if (collider != null) {
+            props.put("enabled", collider.isEnabled());
+            props.put("offsetX", collider.getOffsetX());
+            props.put("offsetY", collider.getOffsetY());
+            props.put("layer", collider.getLayer());
+            props.put("collisionMask", collider.getCollisionMask());
+            props.put("useCCD", collider.useCCD());
+            
+            if (collider instanceof IgnisSampleCollisions.AABBCollider) {
+                IgnisSampleCollisions.AABBCollider aabb = (IgnisSampleCollisions.AABBCollider) collider;
+                props.put("width", aabb.getWidth());
+                props.put("height", aabb.getHeight());
+            } else if (collider instanceof IgnisSampleCollisions.CircleCollider) {
+                IgnisSampleCollisions.CircleCollider circle = (IgnisSampleCollisions.CircleCollider) collider;
+                props.put("radius", circle.getRadius());
+            } else if (collider instanceof IgnisSampleCollisions.PolygonCollider) {
+                // For polygon, we save vertex count and shape type
+                IgnisSampleCollisions.PolygonCollider poly = (IgnisSampleCollisions.PolygonCollider) collider;
+                props.put("vertexCount", poly.getVertexCount());
+            }
+        }
+        
+        return props;
+    }
+    
+    /**
+     * Loads collider properties from JSON
+     */
+    public void loadColliderProperties(JSONObject props) {
+        if (props == null) return;
+        
+        // Load collider type
+        if (props.has("colliderType")) {
+            try {
+                colliderType = IgnisSampleCollisions.ColliderType.valueOf(props.getString("colliderType"));
+            } catch (IllegalArgumentException e) {
+                colliderType = IgnisSampleCollisions.ColliderType.NONE;
+            }
+        }
+        
+        // Load collision mode
+        if (props.has("collisionMode")) {
+            try {
+                collisionMode = IgnisSampleCollisions.CollisionMode.valueOf(props.getString("collisionMode"));
+            } catch (IllegalArgumentException e) {
+                collisionMode = IgnisSampleCollisions.CollisionMode.COLLISION;
+            }
+        }
+        
+        // Create the collider
+        setColliderType(colliderType);
+        
+        // Apply additional properties
+        if (collider != null) {
+            if (props.has("enabled")) collider.setEnabled(props.getBoolean("enabled"));
+            if (props.has("offsetX") && props.has("offsetY")) {
+                collider.setOffset(props.getDouble("offsetX"), props.getDouble("offsetY"));
+            }
+            if (props.has("layer")) collider.setLayer(props.getInt("layer"));
+            if (props.has("collisionMask")) collider.setCollisionMask(props.getInt("collisionMask"));
+            if (props.has("useCCD")) collider.setUseCCD(props.getBoolean("useCCD"));
+            
+            // Type-specific properties
+            if (collider instanceof IgnisSampleCollisions.AABBCollider && props.has("width") && props.has("height")) {
+                ((IgnisSampleCollisions.AABBCollider) collider).setSize(
+                    props.getDouble("width"), props.getDouble("height"));
+            } else if (collider instanceof IgnisSampleCollisions.CircleCollider && props.has("radius")) {
+                ((IgnisSampleCollisions.CircleCollider) collider).setRadius(props.getDouble("radius"));
+            }
         }
     }
 }

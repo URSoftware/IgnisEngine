@@ -492,4 +492,189 @@ public abstract class IgnisScript {
             cam.translate(shakeX, shakeY);
         }
     }
+    
+    // ==================== MÉTODOS DE COLISÃO ====================
+    
+    /**
+     * Define o tipo de collider para este objeto.
+     * @param type Tipo do collider: "none", "aabb", "circle", "polygon"
+     */
+    protected void setColliderType(String type) {
+        if (gameObject == null) return;
+        
+        IgnisSampleCollisions.ColliderType colliderType;
+        switch (type.toLowerCase()) {
+            case "aabb":
+            case "box":
+                colliderType = IgnisSampleCollisions.ColliderType.AABB;
+                break;
+            case "circle":
+                colliderType = IgnisSampleCollisions.ColliderType.CIRCLE;
+                break;
+            case "polygon":
+            case "poly":
+                colliderType = IgnisSampleCollisions.ColliderType.POLYGON;
+                break;
+            default:
+                colliderType = IgnisSampleCollisions.ColliderType.NONE;
+                break;
+        }
+        gameObject.setColliderType(colliderType);
+    }
+    
+    /**
+     * Define o modo de colisão para este objeto.
+     * @param mode Modo de colisão: "collision" (resposta física) ou "trigger" (apenas eventos)
+     */
+    protected void setCollisionMode(String mode) {
+        if (gameObject == null) return;
+        
+        IgnisSampleCollisions.CollisionMode collisionMode;
+        if (mode.equalsIgnoreCase("trigger")) {
+            collisionMode = IgnisSampleCollisions.CollisionMode.TRIGGER;
+        } else {
+            collisionMode = IgnisSampleCollisions.CollisionMode.COLLISION;
+        }
+        gameObject.setCollisionMode(collisionMode);
+    }
+    
+    /**
+     * Habilita ou desabilita o collider deste objeto.
+     * @param enabled true para habilitar, false para desabilitar
+     */
+    protected void setColliderEnabled(boolean enabled) {
+        if (gameObject != null) {
+            gameObject.setColliderEnabled(enabled);
+        }
+    }
+    
+    /**
+     * Habilita ou desabilita CCD (Continuous Collision Detection) para objetos rápidos.
+     * @param use true para habilitar CCD
+     */
+    protected void setUseCCD(boolean use) {
+        if (gameObject != null) {
+            gameObject.setUseCCD(use);
+        }
+    }
+    
+    /**
+     * Verifica se este objeto possui um collider.
+     * @return true se possui collider configurado
+     */
+    protected boolean hasCollider() {
+        return gameObject != null && gameObject.hasCollider();
+    }
+    
+    /**
+     * Obtém o collider deste objeto.
+     * @return O collider ou null se não existir
+     */
+    protected IgnisSampleCollisions.Collider getCollider() {
+        return gameObject != null ? gameObject.getCollider() : null;
+    }
+    
+    /**
+     * Faz um raycast na cena para detectar colisões.
+     * Útil para detecção de linha de visão, tiros, etc.
+     * 
+     * @param startX Posição X inicial do raio
+     * @param startY Posição Y inicial do raio
+     * @param dirX Direção X do raio
+     * @param dirY Direção Y do raio
+     * @param maxDistance Distância máxima do raio
+     * @return Resultado do raycast contendo informações sobre o que foi atingido
+     */
+    protected IgnisSampleCollisions.RaycastResult raycast(double startX, double startY, 
+                                                           double dirX, double dirY, 
+                                                           double maxDistance) {
+        if (game == null || game.getCollisionManager() == null) {
+            return new IgnisSampleCollisions.RaycastResult();
+        }
+        
+        return IgnisSampleCollisions.raycast(startX, startY, dirX, dirY, maxDistance,
+                                              game.getCollisionManager().getColliders());
+    }
+    
+    /**
+     * Faz um raycast a partir da posição atual do objeto.
+     * @param dirX Direção X do raio
+     * @param dirY Direção Y do raio
+     * @param maxDistance Distância máxima do raio
+     * @return Resultado do raycast
+     */
+    protected IgnisSampleCollisions.RaycastResult raycastFromHere(double dirX, double dirY, double maxDistance) {
+        double startX = transform.x + transform.width / 2.0;
+        double startY = transform.y + transform.height / 2.0;
+        return raycast(startX, startY, dirX, dirY, maxDistance);
+    }
+    
+    /**
+     * Faz um raycast na direção que o objeto está olhando (baseado na rotação).
+     * @param maxDistance Distância máxima do raio
+     * @return Resultado do raycast
+     */
+    protected IgnisSampleCollisions.RaycastResult raycastForward(double maxDistance) {
+        double rad = Math.toRadians(transform.rotation);
+        double dirX = Math.cos(rad);
+        double dirY = Math.sin(rad);
+        return raycastFromHere(dirX, dirY, maxDistance);
+    }
+    
+    /**
+     * Callback chamado quando este objeto entra em contato com outro (trigger ou collision).
+     * Sobrescreva este método para implementar lógica de colisão específica.
+     * 
+     * @param other O outro objeto envolvido na colisão
+     * 
+     * Exemplo de uso:
+     * <pre>
+     * @Override
+     * public void onCollision(GameObject other) {
+     *     if (other.getName().equals("Enemy")) {
+     *         log("Colidiu com inimigo!");
+     *         // Tomar dano, por exemplo
+     *     } else if (other.getName().equals("Coin")) {
+     *         log("Coletou moeda!");
+     *         destroy(other);
+     *     }
+     * }
+     * </pre>
+     */
+    // onCollision já está declarado acima, este é apenas documentação adicional
+    
+    /**
+     * Obtém todas as colisões atuais do gerenciador de colisões.
+     * @return Lista de resultados de colisão do frame atual
+     */
+    protected java.util.List<IgnisSampleCollisions.CollisionResult> getCurrentCollisions() {
+        if (game == null || game.getCollisionManager() == null) {
+            return new java.util.ArrayList<>();
+        }
+        return game.getCollisionManager().getCurrentCollisions();
+    }
+    
+    /**
+     * Configura a camada de colisão deste objeto.
+     * Objetos só colidem com objetos em camadas especificadas por sua máscara.
+     * 
+     * @param layer Camada deste objeto (0-31)
+     */
+    protected void setCollisionLayer(int layer) {
+        if (gameObject != null && gameObject.getCollider() != null) {
+            gameObject.getCollider().setLayer(layer);
+        }
+    }
+    
+    /**
+     * Configura a máscara de colisão deste objeto.
+     * Define com quais camadas este objeto pode colidir.
+     * 
+     * @param mask Máscara de bits indicando camadas válidas (-1 = todas)
+     */
+    protected void setCollisionMask(int mask) {
+        if (gameObject != null && gameObject.getCollider() != null) {
+            gameObject.getCollider().setCollisionMask(mask);
+        }
+    }
 }

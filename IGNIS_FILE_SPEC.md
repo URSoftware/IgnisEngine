@@ -112,6 +112,67 @@ Cada cena representa um conjunto de entidades carregadas simultaneamente.
 * `position` → posição inicial
 * `sprite` → caminho relativo do asset
 * `properties` → dados específicos da entidade
+* `collider` → configuração do collider (opcional)
+
+### Estrutura do Collider
+
+```json
+{
+  "id": "player_01",
+  "type": "Player",
+  "position": { "x": 100, "y": 200 },
+  "sprite": "assets/images/player.png",
+  "collider": {
+    "type": "AABB",
+    "mode": "COLLISION",
+    "enabled": true,
+    "useCCD": false,
+    "layer": 0,
+    "collisionMask": -1,
+    "offsetX": 0.0,
+    "offsetY": 0.0,
+    "width": 32.0,
+    "height": 32.0
+  },
+  "properties": {
+    "speed": 4.5,
+    "health": 100
+  }
+}
+```
+
+### Tipos de Collider
+
+| Tipo | Descrição | Propriedades Específicas |
+|------|-----------|-------------------------|
+| `NONE` | Sem collider | - |
+| `AABB` | Retângulo não-rotacionável | `width`, `height`, `offsetX`, `offsetY` |
+| `CIRCLE` | Círculo | `radius`, `offsetX`, `offsetY` |
+| `POLYGON` | Polígono (SAT) | `vertices[]` (array de pontos x,y) |
+
+### Modos de Colisão
+
+| Modo | Descrição |
+|------|-----------|
+| `COLLISION` | Resposta física (push-back com MTV) |
+| `TRIGGER` | Apenas dispara eventos, sem resposta física |
+
+### Campos do Collider
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `type` | String | Tipo do collider: NONE, AABB, CIRCLE, POLYGON |
+| `mode` | String | Modo: COLLISION ou TRIGGER |
+| `enabled` | Boolean | Se o collider está ativo |
+| `useCCD` | Boolean | Continuous Collision Detection para objetos rápidos |
+| `layer` | Integer | Camada de colisão (0-31) |
+| `collisionMask` | Integer | Máscara de bits para camadas válidas |
+| `offsetX` | Double | Offset X relativo ao centro do objeto |
+| `offsetY` | Double | Offset Y relativo ao centro do objeto |
+| `width` | Double | Largura (AABB) |
+| `height` | Double | Altura (AABB) |
+| `radius` | Double | Raio (CIRCLE) |
+| `vertices` | Array | Lista de pontos [{x,y}] (POLYGON) |
 
 ---
 

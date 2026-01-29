@@ -709,7 +709,7 @@ public class Editor extends JFrame {
     private JPanel createHierarchyPanel() {
         JPanel hierarchy = new JPanel(new BorderLayout());
         hierarchy.setBackground(new Color(45, 45, 45));
-        hierarchy.setBorder(BorderFactory.createTitledBorder(null, "Hierarchy (drag to reorder)", 0, 0, null, Color.WHITE));
+        hierarchy.setBorder(BorderFactory.createTitledBorder(null, "Hierarchy", 0, 0, null, Color.WHITE));
 
         // Model and list
         hierarchyModel = new DefaultListModel<>();
@@ -1305,6 +1305,105 @@ public class Editor extends JFrame {
         
         content.add(cameraSection);
         
+        // ==================== COLLIDER SECTION ====================
+        content.add(Box.createVerticalStrut(15));
+        content.add(createInspectorSectionHeader("Collider"));
+        content.add(Box.createVerticalStrut(8));
+        
+        // Collider panel container
+        JPanel colliderSection = new JPanel();
+        colliderSection.setLayout(new BoxLayout(colliderSection, BoxLayout.Y_AXIS));
+        colliderSection.setBackground(new Color(45, 45, 45));
+        colliderSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+        colliderSection.setName("colliderSection");
+        
+        // Collider type dropdown
+        content.add(createInspectorLabel("Collider Type"));
+        String[] colliderTypes = {"None", "AABB (Box)", "Circle", "Polygon"};
+        JComboBox<String> colliderTypeCombo = new JComboBox<>(colliderTypes);
+        colliderTypeCombo.setName("colliderTypeCombo");
+        colliderTypeCombo.setBackground(new Color(60, 60, 60));
+        colliderTypeCombo.setForeground(Color.WHITE);
+        colliderTypeCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        colliderTypeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        colliderTypeCombo.addActionListener(e -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected != null && !isUpdatingInspector) {
+                int index = colliderTypeCombo.getSelectedIndex();
+                IgnisSampleCollisions.ColliderType type;
+                switch (index) {
+                    case 1: type = IgnisSampleCollisions.ColliderType.AABB; break;
+                    case 2: type = IgnisSampleCollisions.ColliderType.CIRCLE; break;
+                    case 3: type = IgnisSampleCollisions.ColliderType.POLYGON; break;
+                    default: type = IgnisSampleCollisions.ColliderType.NONE; break;
+                }
+                selected.setColliderType(type);
+                updateInspectorCollider(selected);
+                game.repaint();
+            }
+        });
+        JPanel colliderTypeWrapper = new JPanel(new BorderLayout());
+        colliderTypeWrapper.setBackground(new Color(45, 45, 45));
+        colliderTypeWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        colliderTypeWrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        colliderTypeWrapper.add(colliderTypeCombo, BorderLayout.CENTER);
+        content.add(colliderTypeWrapper);
+        content.add(Box.createVerticalStrut(5));
+        
+        // Collision mode dropdown
+        content.add(createInspectorLabel("Collision Mode"));
+        String[] collisionModes = {"Collision (Physical)", "Trigger (Event Only)"};
+        JComboBox<String> collisionModeCombo = new JComboBox<>(collisionModes);
+        collisionModeCombo.setName("collisionModeCombo");
+        collisionModeCombo.setBackground(new Color(60, 60, 60));
+        collisionModeCombo.setForeground(Color.WHITE);
+        collisionModeCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        collisionModeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        collisionModeCombo.addActionListener(e -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected != null && !isUpdatingInspector) {
+                IgnisSampleCollisions.CollisionMode mode = 
+                    collisionModeCombo.getSelectedIndex() == 0 ? 
+                    IgnisSampleCollisions.CollisionMode.COLLISION : 
+                    IgnisSampleCollisions.CollisionMode.TRIGGER;
+                selected.setCollisionMode(mode);
+                game.repaint();
+            }
+        });
+        JPanel collisionModeWrapper = new JPanel(new BorderLayout());
+        collisionModeWrapper.setBackground(new Color(45, 45, 45));
+        collisionModeWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        collisionModeWrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        collisionModeWrapper.add(collisionModeCombo, BorderLayout.CENTER);
+        content.add(collisionModeWrapper);
+        content.add(Box.createVerticalStrut(5));
+        
+        // CCD checkbox
+        JCheckBox ccdCheckbox = new JCheckBox("Use Continuous Collision (CCD)");
+        ccdCheckbox.setName("ccdCheckbox");
+        ccdCheckbox.setBackground(new Color(45, 45, 45));
+        ccdCheckbox.setForeground(Color.WHITE);
+        ccdCheckbox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        ccdCheckbox.setToolTipText("Enable for fast-moving objects like projectiles");
+        ccdCheckbox.addActionListener(e -> {
+            GameObject selected = game.getSelectedObject();
+            if (selected != null && !isUpdatingInspector) {
+                selected.setUseCCD(ccdCheckbox.isSelected());
+            }
+        });
+        content.add(ccdCheckbox);
+        content.add(Box.createVerticalStrut(5));
+        
+        // Collider properties panel (updates dynamically based on type)
+        JPanel colliderPropsPanel = new JPanel();
+        colliderPropsPanel.setLayout(new BoxLayout(colliderPropsPanel, BoxLayout.Y_AXIS));
+        colliderPropsPanel.setBackground(new Color(45, 45, 45));
+        colliderPropsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        colliderPropsPanel.setName("colliderPropsPanel");
+        content.add(colliderPropsPanel);
+        
+        content.add(colliderSection);
+        
         // Scripts section
         content.add(Box.createVerticalStrut(15));
         content.add(createInspectorSectionHeader("Scripts"));
@@ -1487,6 +1586,9 @@ public class Editor extends JFrame {
             // Update appearance (colors)
             updateInspectorAppearance(obj);
             
+            // Atualizar seção de collider
+            updateInspectorCollider(obj);
+            
             // Atualizar lista de scripts
             updateInspectorScripts(obj);
             
@@ -1511,6 +1613,9 @@ public class Editor extends JFrame {
             
             // Reset appearance
             updateInspectorAppearance(null);
+            
+            // Reset collider section
+            updateInspectorCollider(null);
             
             // Limpar lista de scripts
             updateInspectorScripts(null);
@@ -1719,6 +1824,152 @@ public class Editor extends JFrame {
                 nameColorButton.setBackground(Color.WHITE);
             }
         }
+    }
+    
+    /**
+     * Updates the collider section in the Inspector
+     */
+    @SuppressWarnings("unchecked")
+    private void updateInspectorCollider(GameObject obj) {
+        JComboBox<String> colliderTypeCombo = findComponentByName(inspectorPanel, "colliderTypeCombo");
+        JComboBox<String> collisionModeCombo = findComponentByName(inspectorPanel, "collisionModeCombo");
+        JCheckBox ccdCheckbox = findComponentByName(inspectorPanel, "ccdCheckbox");
+        JPanel colliderPropsPanel = findComponentByName(inspectorPanel, "colliderPropsPanel");
+        
+        if (colliderTypeCombo == null || collisionModeCombo == null) return;
+        
+        if (obj != null) {
+            // Update collider type dropdown
+            switch (obj.getColliderType()) {
+                case AABB: colliderTypeCombo.setSelectedIndex(1); break;
+                case CIRCLE: colliderTypeCombo.setSelectedIndex(2); break;
+                case POLYGON: colliderTypeCombo.setSelectedIndex(3); break;
+                default: colliderTypeCombo.setSelectedIndex(0); break;
+            }
+            
+            // Update collision mode dropdown
+            if (obj.getCollisionMode() == IgnisSampleCollisions.CollisionMode.TRIGGER) {
+                collisionModeCombo.setSelectedIndex(1);
+            } else {
+                collisionModeCombo.setSelectedIndex(0);
+            }
+            
+            // Update CCD checkbox
+            if (ccdCheckbox != null) {
+                IgnisSampleCollisions.Collider collider = obj.getCollider();
+                ccdCheckbox.setSelected(collider != null && collider.useCCD());
+            }
+            
+            // Update collider properties panel based on type
+            if (colliderPropsPanel != null) {
+                colliderPropsPanel.removeAll();
+                
+                IgnisSampleCollisions.Collider collider = obj.getCollider();
+                if (collider != null) {
+                    if (collider instanceof IgnisSampleCollisions.AABBCollider) {
+                        IgnisSampleCollisions.AABBCollider aabb = (IgnisSampleCollisions.AABBCollider) collider;
+                        // Width and Height fields for AABB
+                        colliderPropsPanel.add(createColliderPropertyField("Width", 
+                            String.valueOf((int)aabb.getWidth()), 
+                            value -> aabb.setSize(Double.parseDouble(value), aabb.getHeight())));
+                        colliderPropsPanel.add(Box.createVerticalStrut(3));
+                        colliderPropsPanel.add(createColliderPropertyField("Height", 
+                            String.valueOf((int)aabb.getHeight()), 
+                            value -> aabb.setSize(aabb.getWidth(), Double.parseDouble(value))));
+                    } else if (collider instanceof IgnisSampleCollisions.CircleCollider) {
+                        IgnisSampleCollisions.CircleCollider circle = (IgnisSampleCollisions.CircleCollider) collider;
+                        // Radius field for Circle
+                        colliderPropsPanel.add(createColliderPropertyField("Radius", 
+                            String.valueOf((int)circle.getRadius()), 
+                            value -> circle.setRadius(Double.parseDouble(value))));
+                    } else if (collider instanceof IgnisSampleCollisions.PolygonCollider) {
+                        IgnisSampleCollisions.PolygonCollider poly = (IgnisSampleCollisions.PolygonCollider) collider;
+                        // Info label for polygon
+                        JLabel polyInfo = new JLabel("Vertices: " + poly.getVertexCount());
+                        polyInfo.setForeground(Color.LIGHT_GRAY);
+                        polyInfo.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        colliderPropsPanel.add(polyInfo);
+                    }
+                }
+                
+                colliderPropsPanel.revalidate();
+                colliderPropsPanel.repaint();
+            }
+            
+            // Enable controls
+            colliderTypeCombo.setEnabled(true);
+            collisionModeCombo.setEnabled(obj.getColliderType() != IgnisSampleCollisions.ColliderType.NONE);
+            if (ccdCheckbox != null) {
+                ccdCheckbox.setEnabled(obj.getColliderType() != IgnisSampleCollisions.ColliderType.NONE);
+            }
+        } else {
+            // Reset to defaults
+            colliderTypeCombo.setSelectedIndex(0);
+            collisionModeCombo.setSelectedIndex(0);
+            if (ccdCheckbox != null) {
+                ccdCheckbox.setSelected(false);
+            }
+            if (colliderPropsPanel != null) {
+                colliderPropsPanel.removeAll();
+                colliderPropsPanel.revalidate();
+                colliderPropsPanel.repaint();
+            }
+            
+            // Disable controls
+            colliderTypeCombo.setEnabled(false);
+            collisionModeCombo.setEnabled(false);
+            if (ccdCheckbox != null) {
+                ccdCheckbox.setEnabled(false);
+            }
+        }
+    }
+    
+    /**
+     * Creates a property field for collider settings
+     */
+    private JPanel createColliderPropertyField(String label, String value, java.util.function.Consumer<String> onChange) {
+        JPanel panel = new JPanel(new BorderLayout(5, 0));
+        panel.setBackground(new Color(45, 45, 45));
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        
+        JLabel lbl = new JLabel(label + ":");
+        lbl.setForeground(Color.LIGHT_GRAY);
+        lbl.setPreferredSize(new Dimension(50, 20));
+        
+        JTextField field = new JTextField(value);
+        field.setBackground(new Color(60, 60, 60));
+        field.setForeground(Color.WHITE);
+        field.setCaretColor(Color.WHITE);
+        field.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(80, 80, 80)),
+            BorderFactory.createEmptyBorder(2, 4, 2, 4)));
+        
+        field.addActionListener(e -> {
+            try {
+                onChange.accept(field.getText().trim());
+                game.repaint();
+            } catch (NumberFormatException ex) {
+                // Ignore invalid input
+            }
+        });
+        
+        field.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                try {
+                    onChange.accept(field.getText().trim());
+                    game.repaint();
+                } catch (NumberFormatException ex) {
+                    // Ignore invalid input
+                }
+            }
+        });
+        
+        panel.add(lbl, BorderLayout.WEST);
+        panel.add(field, BorderLayout.CENTER);
+        
+        return panel;
     }
     
     /**
@@ -4993,14 +5244,33 @@ public class Editor extends JFrame {
         
         viewMenu.addSeparator();
         
-        // Toggle Grid (placeholder)
+        // Toggle Grid
         JCheckBoxMenuItem showGridItem = new JCheckBoxMenuItem("Show Grid");
-        showGridItem.setSelected(false);
+        showGridItem.setSelected(game.isShowGrid());
+        showGridItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, KeyEvent.CTRL_DOWN_MASK));
         showGridItem.addActionListener(e -> {
-            // TODO: Implement grid toggle
+            game.setShowGrid(showGridItem.isSelected());
             game.repaint();
         });
         viewMenu.add(showGridItem);
+        
+        // Grid Size submenu
+        JMenu gridSizeMenu = new JMenu("Grid Size");
+        int[] gridSizes = {16, 32, 64, 128};
+        ButtonGroup gridSizeGroup = new ButtonGroup();
+        for (int size : gridSizes) {
+            JRadioButtonMenuItem sizeItem = new JRadioButtonMenuItem(size + " px");
+            sizeItem.setSelected(game.getGridSize() == size);
+            sizeItem.addActionListener(e -> {
+                game.setGridSize(size);
+                game.repaint();
+            });
+            gridSizeGroup.add(sizeItem);
+            gridSizeMenu.add(sizeItem);
+        }
+        viewMenu.add(gridSizeMenu);
+        
+        viewMenu.addSeparator();
         
         // Show World Origin
         JCheckBoxMenuItem showOriginItem = new JCheckBoxMenuItem("Show Origin");
@@ -5010,6 +5280,16 @@ public class Editor extends JFrame {
             game.repaint();
         });
         viewMenu.add(showOriginItem);
+        
+        // Show Colliders (Debug)
+        JCheckBoxMenuItem showCollidersItem = new JCheckBoxMenuItem("Show Colliders");
+        showCollidersItem.setSelected(game.isShowColliders());
+        showCollidersItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
+        showCollidersItem.addActionListener(e -> {
+            game.setShowColliders(showCollidersItem.isSelected());
+            game.repaint();
+        });
+        viewMenu.add(showCollidersItem);
         
         menuBar.add(viewMenu);
         

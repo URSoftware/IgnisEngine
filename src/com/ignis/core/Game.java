@@ -43,6 +43,11 @@ public class Game extends Canvas implements Runnable {
     
     // Flag to indicate if we're in editor camera mode (free camera)
     private boolean editorCameraMode = true;
+    
+    // Grid display settings
+    private boolean showGrid = false;
+    private int gridSize = 32; // Grid cell size in world units
+    private Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
 
     private Thread thread;
     private boolean isRunning = false;
@@ -52,6 +57,10 @@ public class Game extends Canvas implements Runnable {
     
     // PrefabManager para instanciar prefabs
     private PrefabManager prefabManager;
+    
+    // Collision system
+    private IgnisSampleCollisions.CollisionManager collisionManager;
+    private boolean showColliders = false; // Debug view for colliders
 
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
@@ -175,6 +184,9 @@ public class Game extends Canvas implements Runnable {
         // Initialize camera and viewport system
         initializeCameraSystem();
         
+        // Initialize collision system
+        collisionManager = new IgnisSampleCollisions.CollisionManager();
+        
         // Initialize Robot for infinite drag
         try {
             robot = new Robot();
@@ -239,6 +251,30 @@ public class Game extends Canvas implements Runnable {
      */
     public PrefabManager getPrefabManager() {
         return prefabManager;
+    }
+    
+    /**
+     * Gets the collision manager
+     */
+    public IgnisSampleCollisions.CollisionManager getCollisionManager() {
+        return collisionManager;
+    }
+    
+    /**
+     * Sets whether to show collider debug visualization
+     */
+    public void setShowColliders(boolean show) {
+        this.showColliders = show;
+        if (collisionManager != null) {
+            collisionManager.setDebugDraw(show);
+        }
+    }
+    
+    /**
+     * Returns whether collider debug visualization is enabled
+     */
+    public boolean isShowColliders() {
+        return showColliders;
     }
     
     /**
@@ -915,30 +951,24 @@ public class Game extends Canvas implements Runnable {
                 entity.tickScripts();
             }
             
-            // Verificar colisões simples (AABB)
-            checkCollisions();
+            // Run collision detection using the advanced collision system
+            if (collisionManager != null) {
+                collisionManager.update();
+            }
         }
     }
     
     /**
-     * Checks collisions between all objects
+     * Registers all entity colliders with the collision manager
+     * Call this after loading a scene or adding entities
      */
-    private void checkCollisions() {
-        for (int i = 0; i < entities.size(); i++) {
-            GameObject a = entities.get(i);
-            for (int j = i + 1; j < entities.size(); j++) {
-                GameObject b = entities.get(j);
-                
-                // Simple AABB check
-                if (a.getX() < b.getX() + b.getWidth() &&
-                    a.getX() + a.getWidth() > b.getX() &&
-                    a.getY() < b.getY() + b.getHeight() &&
-                    a.getY() + a.getHeight() > b.getY()) {
-                    
-                    // Notificar ambos os objetos sobre a colisão
-                    a.notifyCollision(b);
-                    b.notifyCollision(a);
-                }
+    public void refreshColliders() {
+        if (collisionManager == null) return;
+        
+        collisionManager.clear();
+        for (GameObject entity : entities) {
+            if (entity.hasCollider()) {
+                collisionManager.addCollider(entity.getCollider());
             }
         }
     }
@@ -979,6 +1009,11 @@ public class Game extends Canvas implements Runnable {
         
         if (shouldApplyCameraTransform) {
             activeCamera.applyTransform(g2d);
+        }
+        
+        // 3.5 Draw grid in editor mode (before entities, so it appears behind)
+        if (gameState == GameState.EDITING && showGrid && shouldApplyCameraTransform) {
+            drawGrid(g2d);
         }
 
         // 4. Render all entities (respecting Z-Index by list order)
@@ -1048,6 +1083,12 @@ public class Game extends Canvas implements Runnable {
             AffineTransform temp = g2d.getTransform();
             activeCamera.applyTransform(g2d);
             drawWorldOrigin(g2d);
+            
+            // Draw collider debug visualization if enabled
+            if (showColliders && collisionManager != null) {
+                collisionManager.debugRender(g2d);
+            }
+            
             g2d.setTransform(temp);
         }
 
@@ -1100,6 +1141,77 @@ public class Game extends Canvas implements Runnable {
         g2d.setColor(new Color(255, 255, 255, 200));
         g2d.setFont(new Font("Arial", Font.BOLD, 11));
         drawWorldText(g2d, "(0,0)", 6, 6);
+    }
+    
+    /**
+     * Draws the editor grid in world space.
+     * The grid adapts to the camera zoom level for better visibility.
+     */
+    private void drawGrid(Graphics2D g2d) {
+        Camera cam = getActiveCamera();
+        if (cam == null) return;
+        
+        double zoom = cam.getZoom();
+        
+        // Adapt grid size based on zoom level for better visibility
+        int effectiveGridSize = gridSize;
+        if (zoom < 0.25) {
+            effectiveGridSize = gridSize * 8;
+        } else if (zoom < 0.5) {
+            effectiveGridSize = gridSize * 4;
+        } else if (zoom < 1.0) {
+            effectiveGridSize = gridSize * 2;
+        }
+        
+        // Get visible world bounds
+        double[] bounds = cam.getVisibleWorldBounds();
+        double minX = bounds[0];
+        double minY = bounds[1];
+        double maxX = bounds[2];
+        double maxY = bounds[3];
+        
+        // Extend bounds slightly to avoid edge artifacts
+        minX -= effectiveGridSize;
+        minY -= effectiveGridSize;
+        maxX += effectiveGridSize;
+        maxY += effectiveGridSize;
+        
+        // Snap to grid
+        int startX = (int)(Math.floor(minX / effectiveGridSize) * effectiveGridSize);
+        int startY = (int)(Math.floor(minY / effectiveGridSize) * effectiveGridSize);
+        int endX = (int)(Math.ceil(maxX / effectiveGridSize) * effectiveGridSize);
+        int endY = (int)(Math.ceil(maxY / effectiveGridSize) * effectiveGridSize);
+        
+        // Set grid appearance
+        g2d.setColor(gridColor);
+        g2d.setStroke(new BasicStroke(1.0f / (float)zoom)); // Thin lines that stay consistent
+        
+        // Draw vertical lines
+        for (int x = startX; x <= endX; x += effectiveGridSize) {
+            g2d.drawLine(x, startY, x, endY);
+        }
+        
+        // Draw horizontal lines
+        for (int y = startY; y <= endY; y += effectiveGridSize) {
+            g2d.drawLine(startX, y, endX, y);
+        }
+        
+        // Draw major grid lines (every 4 cells) with slightly more opacity
+        g2d.setColor(new Color(gridColor.getRed(), gridColor.getGreen(), gridColor.getBlue(), 
+                              Math.min(255, gridColor.getAlpha() * 2)));
+        g2d.setStroke(new BasicStroke(1.5f / (float)zoom));
+        
+        int majorGridSize = effectiveGridSize * 4;
+        int majorStartX = (int)(Math.floor(minX / majorGridSize) * majorGridSize);
+        int majorStartY = (int)(Math.floor(minY / majorGridSize) * majorGridSize);
+        
+        for (int x = majorStartX; x <= endX; x += majorGridSize) {
+            g2d.drawLine(x, startY, x, endY);
+        }
+        
+        for (int y = majorStartY; y <= endY; y += majorGridSize) {
+            g2d.drawLine(startX, y, endX, y);
+        }
     }
 
     /**
@@ -1482,6 +1594,43 @@ public class Game extends Canvas implements Runnable {
      */
     public boolean isEditorCameraMode() {
         return editorCameraMode;
+    }
+    
+    // ==================== GRID SYSTEM ====================
+    
+    /**
+     * Sets whether the grid should be displayed in editor mode.
+     */
+    public void setShowGrid(boolean show) {
+        this.showGrid = show;
+    }
+    
+    /**
+     * Returns whether the grid is being displayed.
+     */
+    public boolean isShowGrid() {
+        return showGrid;
+    }
+    
+    /**
+     * Sets the grid cell size in world units.
+     */
+    public void setGridSize(int size) {
+        this.gridSize = Math.max(8, size); // Minimum 8 units
+    }
+    
+    /**
+     * Returns the current grid cell size.
+     */
+    public int getGridSize() {
+        return gridSize;
+    }
+    
+    /**
+     * Sets the grid color.
+     */
+    public void setGridColor(Color color) {
+        this.gridColor = color;
     }
 
     // ==================== COORDINATE CONVERSION ====================

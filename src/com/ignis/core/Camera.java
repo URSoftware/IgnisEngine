@@ -390,37 +390,28 @@ public class Camera extends GameObject {
     @Override
     public void render(java.awt.Graphics g) {
         // Camera itself is usually not rendered
-        // But in editor mode, we might draw a camera icon or bounds
+        // But in editor mode, we draw a simple circle indicator at camera center
         if (!visible) return;
 
         java.awt.Graphics2D g2d = (java.awt.Graphics2D) g;
         
-        // In editor, draw a camera gizmo at its position
+        // In editor, draw a simple circle indicator at camera center position
         if (game != null && game.getGameState() == Game.GameState.EDITING) {
-            int iconSize = 32;
             int cx = (int) x;
             int cy = (int) y;
             
-            // Draw camera body
-            g2d.setColor(new java.awt.Color(100, 150, 255, 150));
-            g2d.fillRect(cx - iconSize/2, cy - iconSize/3, iconSize, iconSize * 2/3);
+            // Calculate radius based on zoom to keep consistent screen size
+            int radius = (int)(16 / zoom);
+            radius = Math.max(8, radius); // Minimum visible size
             
-            // Draw lens
-            g2d.setColor(new java.awt.Color(80, 120, 200));
-            g2d.fillOval(cx + iconSize/2 - 8, cy - 8, 16, 16);
+            // Draw a simple semi-transparent circle (50% opacity)
+            g2d.setColor(new java.awt.Color(100, 180, 255, 128)); // 128 = 50% opacity
+            g2d.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
             
-            // Draw border
-            g2d.setColor(new java.awt.Color(50, 100, 180));
-            g2d.drawRect(cx - iconSize/2, cy - iconSize/3, iconSize, iconSize * 2/3);
-            
-            // Draw "CAM" label (flip Y to compensate for inverted Y-axis)
-            g2d.setColor(java.awt.Color.WHITE);
-            g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 10));
-            java.awt.geom.AffineTransform oldTransform = g2d.getTransform();
-            g2d.translate(cx - 12, cy - 4);
-            g2d.scale(1, -1);
-            g2d.drawString("CAM", 0, 0);
-            g2d.setTransform(oldTransform);
+            // Subtle border
+            g2d.setColor(new java.awt.Color(80, 150, 220, 180));
+            g2d.setStroke(new java.awt.BasicStroke(1.5f));
+            g2d.drawOval(cx - radius, cy - radius, radius * 2, radius * 2);
         }
     }
 
