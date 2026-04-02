@@ -76,6 +76,30 @@ public class Editor extends JFrame {
     // Prefab manager
     private PrefabManager prefabManager;
     
+    // AI Integration
+    private AIIntegration aiIntegration;
+    private AuxiliaryPanel auxiliaryPanel;
+    
+    // ==================== ALERT SYSTEM ====================
+    // Fila de mensagens de alerta com timestamps
+    private java.util.Queue<AlertMessage> alertQueue = new java.util.LinkedList<>();
+    private static final int ALERT_DISPLAY_TIME = 3000; // 3 segundos
+    private static final int MAX_ALERTS_ON_SCREEN = 5; // Máximo de alertas simultâneos
+    
+    private static class AlertMessage {
+        String message;
+        long createdTime;
+        
+        AlertMessage(String message) {
+            this.message = message;
+            this.createdTime = System.currentTimeMillis();
+        }
+        
+        boolean isExpired() {
+            return System.currentTimeMillis() - createdTime > ALERT_DISPLAY_TIME;
+        }
+    }
+    
     // ==================== UNDO SYSTEM ====================
     // Stack to store undo actions
     private java.util.Deque<UndoAction> undoStack = new java.util.ArrayDeque<>();
@@ -438,10 +462,19 @@ public class Editor extends JFrame {
 
         viewport.add(layeredPane, BorderLayout.CENTER);
 
-        // ==================== INSPECTOR PANEL ====================
+        // ==================== RIGHT PANEL WITH TABS (INSPECTOR + AUXILIARY) ====================
+        JTabbedPane rightTabbedPane = new JTabbedPane();
+        rightTabbedPane.setBackground(new Color(45, 45, 45));
+        rightTabbedPane.setForeground(Color.WHITE);
+        
+        // Create Inspector Panel
         inspectorPanel = createInspectorPanel();
-
-        rightSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, viewport, inspectorPanel);
+        rightTabbedPane.addTab("📋 Inspector", inspectorPanel);
+        
+        // Initialize AI Integration (after projectRoot is set in current context)
+        // Will be properly initialized when project is loaded
+        
+        rightSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, viewport, rightTabbedPane);
         rightSplit.setResizeWeight(0.75);
         rightSplit.setDividerSize(5);
         rightSplit.setContinuousLayout(false); // Disable to prevent flickering during resize
@@ -457,6 +490,9 @@ public class Editor extends JFrame {
 
         add(mainPanel);
         setVisible(true);
+        
+        // Passar referência do editor ao game para poder exibir alertas
+        game.setEditor(this);
 
         // Load saved layout after window is visible
         SwingUtilities.invokeLater(() -> {
@@ -4034,6 +4070,9 @@ public class Editor extends JFrame {
                 // Initialize PrefabManager
                 prefabManager = new PrefabManager(projectFolder, game, scriptManager);
                 game.setPrefabManager(prefabManager);
+                
+                // Initialize AI Integration
+                initializeAIIntegration(projectFolder);
             }
         } else {
             // No project loaded, show the projects root folder
@@ -4050,6 +4089,65 @@ public class Editor extends JFrame {
             // Clear PrefabManager
             prefabManager = null;
             game.setPrefabManager(null);
+            
+            // Clear AI Integration
+            aiIntegration = null;
+            removeAuxiliaryTab();
+        }
+    }
+    
+    /**
+     * Initializes AI integration for the current project
+     */
+    private void initializeAIIntegration(File projectFolder) {
+        // Initialize AI Integration
+        aiIntegration = new AIIntegration(projectFolder);
+        
+        // Add Auxiliary tab if not already added
+        JTabbedPane rightTabbedPane = null;
+        Component[] components = rightSplit.getComponents();
+        for (Component comp : components) {
+            if (comp instanceof JTabbedPane) {
+                rightTabbedPane = (JTabbedPane) comp;
+                break;
+            }
+        }
+        
+        if (rightTabbedPane != null) {
+            // Remove existing auxiliary tab if it exists
+            removeAuxiliaryTab();
+            
+            // Create and add new auxiliary panel
+            auxiliaryPanel = new AuxiliaryPanel(aiIntegration, game);
+            
+            // Set callback to refresh file tree when files are created/modified
+            auxiliaryPanel.setFileRefreshCallback(() -> refreshFileTree());
+            
+            rightTabbedPane.addTab("🤖 Auxiliary", auxiliaryPanel);
+        }
+    }
+    
+    /**
+     * Removes the Auxiliary tab from the right panel
+     */
+    private void removeAuxiliaryTab() {
+        JTabbedPane rightTabbedPane = null;
+        Component[] components = rightSplit.getComponents();
+        for (Component comp : components) {
+            if (comp instanceof JTabbedPane) {
+                rightTabbedPane = (JTabbedPane) comp;
+                break;
+            }
+        }
+        
+        if (rightTabbedPane != null) {
+            // Find and remove auxiliary tab
+            for (int i = 0; i < rightTabbedPane.getTabCount(); i++) {
+                if (rightTabbedPane.getTitleAt(i).contains("Auxiliary")) {
+                    rightTabbedPane.removeTabAt(i);
+                    break;
+                }
+            }
         }
     }
 
@@ -4427,7 +4525,7 @@ public class Editor extends JFrame {
                 }
             }
 
-            label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+            label.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
 
             if (isSelected) {
                 label.setBackground(new Color(0, 120, 215));
@@ -5645,6 +5743,48 @@ public class Editor extends JFrame {
         }
     }
 
+    // ==================== ALERT SYSTEM METHODS ====================
+    
+    /**
+     * Exibe uma mensagem de alerta na tela do editor
+     * A mensagem aparecerá no canto superior esquerdo por 3 segundos
+     * @param message A mensagem a ser exibida
+     */
+    public void alert(String message) {
+        alertQueue.offer(new AlertMessage(message));
+        
+        // Remove alertas expirados
+        while (!alertQueue.isEmpty() && alertQueue.peek().isExpired()) {
+            alertQueue.poll();
+        }
+        
+        // Limita o número de alertas na tela
+        while (alertQueue.size() > MAX_ALERTS_ON_SCREEN) {
+            alertQueue.poll();
+        }
+    }
+    
+    /**
+     * Obtém a lista de alertas ativos para renderização
+     * Remove alertas expirados automaticamente
+     */
+    protected java.util.List<AlertMessage> getActiveAlerts() {
+        java.util.List<AlertMessage> activeAlerts = new java.util.ArrayList<>();
+        
+        // Remove alertas expirados e coleta os ativos
+        Iterator<AlertMessage> it = alertQueue.iterator();
+        while (it.hasNext()) {
+            AlertMessage alert = it.next();
+            if (alert.isExpired()) {
+                it.remove();
+            } else {
+                activeAlerts.add(alert);
+            }
+        }
+        
+        return activeAlerts;
+    }
+    
     // ==================== PROJECT MANAGEMENT ====================
 
     /**

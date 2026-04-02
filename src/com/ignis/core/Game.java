@@ -66,6 +66,9 @@ public class Game extends Canvas implements Runnable {
     // ==================== UI SYSTEM ====================
     // Canvas de interface do usuário
     private UICanvas uiCanvas;
+    
+    // Reference to the editor for displaying alerts
+    private Object editorReference = null;
 
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
@@ -284,6 +287,35 @@ public class Game extends Canvas implements Runnable {
     public IgnisSampleCollisions.CollisionManager getCollisionManager() {
         return collisionManager;
     }
+    
+    /**
+     * Define a referência do editor para exibir alertas
+     */
+    public void setEditor(Object editor) {
+        this.editorReference = editor;
+    }
+    
+    /**
+     * Exibe uma mensagem de alerta no editor (se disponível)
+     * @param message A mensagem a ser exibida
+     */
+    public void alert(String message) {
+        if (editorReference != null) {
+            try {
+                // Use reflection para chamar o método alert do editor
+                Class<?> editorClass = editorReference.getClass();
+                java.lang.reflect.Method alertMethod = editorClass.getMethod("alert", String.class);
+                alertMethod.invoke(editorReference, message);
+            } catch (Exception e) {
+                // Silenciosamente ignorar se o editor não tiver o método alert
+                System.err.println("Aviso: Não foi possível chamar alert() no editor: " + e.getMessage());
+            }
+        } else {
+            // Se não há editor, exibir no console
+            System.out.println("[ALERT] " + message);
+        }
+    }
+    
     
     /**
      * Sets whether to show collider debug visualization
@@ -1165,9 +1197,81 @@ public class Game extends Canvas implements Runnable {
             // Render UI hierarchy
             uiCanvas.renderAll(g2d);
         }
+        
+        // ==================== ALERTS RENDERING ====================
+        // Render alerts on top of everything
+        g2d.setTransform(originalTransform);
+        renderAlerts(g2d);
 
         g.dispose();
         bs.show();
+    }
+    
+    /**
+     * Renderiza mensagens de alerta na tela do editor
+     */
+    private void renderAlerts(Graphics2D g2d) {
+        if (editorReference == null) return;
+        
+        try {
+            // Use reflection para obter os alertas do editor
+            Class<?> editorClass = editorReference.getClass();
+            java.lang.reflect.Method getAlertsMethod = editorClass.getMethod("getActiveAlerts");
+            @SuppressWarnings("unchecked")
+            java.util.List<Object> alerts = (java.util.List<Object>) getAlertsMethod.invoke(editorReference);
+            
+            if (alerts == null || alerts.isEmpty()) return;
+            
+            // Configurar font e cores
+            Font alertFont = new Font("Courier New", Font.BOLD, 14);
+            g2d.setFont(alertFont);
+            
+            int x = 15;
+            int y = 35;
+            int lineHeight = 22;
+            
+            // Renderizar cada alerta
+            for (int i = 0; i < alerts.size() && i < 5; i++) {
+                Object alertObj = alerts.get(i);
+                
+                // Obter a mensagem do alerta via reflection
+                Class<?> alertClass = alertObj.getClass();
+                java.lang.reflect.Field messageField = alertClass.getDeclaredField("message");
+                messageField.setAccessible(true);
+                String message = (String) messageField.get(alertObj);
+                
+                // Calcular opacidade baseado na idade do alerta
+                java.lang.reflect.Field createdTimeField = alertClass.getDeclaredField("createdTime");
+                createdTimeField.setAccessible(true);
+                long createdTime = createdTimeField.getLong(alertObj);
+                long age = System.currentTimeMillis() - createdTime;
+                
+                // Fade out no último segundo
+                float opacity = 1.0f;
+                if (age > 2000) { // Último 1 segundo de 3 segundos totais
+                    opacity = 1.0f - ((age - 2000) / 1000.0f);
+                }
+                
+                // Definir cor com transparência
+                int alpha = (int)(255 * opacity);
+                g2d.setColor(new java.awt.Color(0, 200, 100, alpha));
+                
+                // Desenhar caixa de fundo
+                java.awt.FontMetrics fm = g2d.getFontMetrics();
+                int textWidth = fm.stringWidth(message);
+                int textHeight = fm.getHeight();
+                
+                g2d.fillRect(x - 5, y - textHeight + 5, textWidth + 10, textHeight + 4);
+                
+                // Desenhar texto
+                g2d.setColor(new java.awt.Color(255, 255, 255, alpha));
+                g2d.drawString(message, x, y);
+                
+                y += lineHeight;
+            }
+        } catch (Exception e) {
+            // Silenciosamente ignorar erros ao renderizar alertas
+        }
     }
 
     /**
