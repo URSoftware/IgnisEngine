@@ -313,6 +313,18 @@ public class Editor extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
 
+        // Configurar o icone do app desktop
+        try {
+            java.net.URL iconUrl = getClass().getResource("/com/ignis/core_assets/icons/IconeIgnis.png");
+            if (iconUrl != null) {
+                setIconImage(new ImageIcon(iconUrl).getImage());
+            } else {
+                System.err.println("[Editor] IconeIgnis.png nao encontrado no classpath");
+            }
+        } catch (Exception e) {
+            System.err.println("[Editor] Erro ao configurar o icone da janela: " + e.getMessage());
+        }
+
         JPanel mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(Color.DARK_GRAY);
 
