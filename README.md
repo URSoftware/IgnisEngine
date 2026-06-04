@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-  <img src="Icons/IgnisEngineBanner.jpg" alt="IgnisEngine Banner" width="400px" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);" />
+  <img src="Icons/IgnisEngineBanner.jpg" alt="IgnisEngine Banner" width="250px" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);" />
 </p>
 
 <img src="https://img.shields.io/badge/IgnisEngine-2D_Game_Engine-FF4500?style=for-the-badge&logo=openjdk&logoColor=white" alt="IgnisEngine"/>
