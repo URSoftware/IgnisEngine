@@ -1,154 +1,72 @@
-<div align="center">
-
-<p align="center">
-  <img src="Icons/IgnisEngineBanner.jpg" alt="IgnisEngine Banner" width="250px" style="border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);" />
-</p>
-
-<img src="https://img.shields.io/badge/IgnisEngine-2D_Game_Engine-FF4500?style=for-the-badge&logo=openjdk&logoColor=white" alt="IgnisEngine"/>
-
-<br/>
-
-[![Java](https://img.shields.io/badge/Java-11+-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://www.java.com)
-[![Maven](https://img.shields.io/badge/Maven-3.9.6-C71A36?style=flat-square&logo=apachemaven&logoColor=white)](https://maven.apache.org)
-[![License](https://img.shields.io/badge/License-URSoftware-0078D4?style=flat-square&logo=azuredevops&logoColor=white)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-In_Development-F9A825?style=flat-square&logo=git&logoColor=white)](https://github.com/URSoftware/IgnisEngine)
-
-</div>
-
+---
+tags: [ignis-engine, core, java, readme, documentation]
+updated: 2026-06-11
+type: project-hub
 ---
 
 # IgnisEngine
 
-A 2D graphics engine developed in Java, focused on rendering and 2D game creation.
+<p align="center">
+  <img src="Icons/IgnisEngineBanner.jpg" alt="IgnisEngine Banner" width="250px" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);" />
+</p>
 
-## Overview
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-11+-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" />
+  <img src="https://img.shields.io/badge/Maven-3.9.6-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white" alt="Maven" />
+  <img src="https://img.shields.io/badge/License-URSoftware-0078D4?style=for-the-badge&logo=azuredevops&logoColor=white" alt="License" />
+  <img src="https://img.shields.io/badge/Status-In%20Development-F9A825?style=for-the-badge&logo=git&logoColor=white" alt="Status" />
+</p>
 
-IgnisEngine is a 2D graphics engine built in pure Java using Java 2D for rendering. The project is structured into well-defined components that work together to provide a complete 2D game development platform with an integrated visual editor.
+IgnisEngine é uma engine gráfica 2D desenvolvida em Java puro, focada em renderização e na criação simplificada de jogos bidimensionais. O projeto é estruturado em componentes bem definidos que trabalham de forma coordenada para fornecer uma plataforma completa com um editor visual integrado.
 
-## Project Structure
+---
+
+## Estrutura do Projeto
 
 ```
 IgnisEngine/
-├── src/com/ignis/
-│   ├── core/               # Main graphics engine (engine core)
-│   │   ├── Game.java           # Main class with rendering and game loop
-│   │   └── GameObject.java      # Base class for game objects
-│   ├── editor/             # Visual editor for game modeling
-│   │   ├── Editor.java          # Editor with graphical interface
-│   │   └── settings.json        # Editor layout settings
-│   └── main/               # Main application (game built with the engine)
-│       └── Main.java
-├── doc/                    # Project documentation
-├── .mvn/wrapper/           # Maven Wrapper for reproducible builds
-├── pom.xml                 # Maven configuration
-└── README.md
+├── 📁 src/com/ignis/
+│   ├── 📁 core/                 # Core da engine (loop principal e renderização)
+│   │   ├── 📄 Game.java         # Loop do jogo, tick/render e canvas
+│   │   └── 📄 GameObject.java   # Classe base para objetos de jogo
+│   ├── 📁 editor/               # Editor visual integrado para modelagem de cenas
+│   │   ├── 📄 Editor.java       # Interface gráfica e gerenciamento de painéis
+│   │   └── 📄 settings.json     # Configurações salvas do layout do editor
+│   └── 📁 main/                 # Ponto de entrada do jogo construído na engine
+│       └── 📄 Main.java
+├── 📁 doc/                      # Documentação técnica detalhada (Módulos do Vault)
+├── 📁 .mvn/wrapper/             # Maven Wrapper para execução independente de versão
+├── 📄 pom.xml                   # Configuração de dependências Maven
+└── 📄 README.md                 # Este arquivo (Hub Central)
 ```
-
-## Components
-
-### Core — Graphics Engine
-
-The heart of IgnisEngine, responsible for rendering and execution.
-
-- Rendering loop with buffer strategy
-- Tick/render system for update and draw cycles
-- Resizable window with fullscreen mode support
-- 2D canvas management
-- Base for 2D game creation
-- Reusable GameObject system
 
 ---
 
-### Editor — Visual Development Tool
+## Componentes
 
-A professional visual tool for game development and modeling.
+### 🎮 Core — Motor Gráfico
+O coração do IgnisEngine, responsável por toda a lógica de renderização e execução física/lógica:
+* Loop de atualização e desenho constante (Tick/Render).
+* Gerenciamento de tela com suporte a redimensionamento e modo tela cheia.
+* Sistema de `GameObject` reutilizável para gerenciar elementos em cena.
 
-- **Hierarchy** — Game object tree view
-- **Viewport** — Real-time game preview
-- **Inspector** — Object properties and settings
+### 🛠️ Editor — Ferramenta de Modelagem
+Interface visual profissional para agilizar o desenvolvimento:
+* **Hierarchy:** Árvore estrutural contendo todos os objetos presentes na cena.
+* **Viewport:** Área de visualização em tempo real do estado de renderização.
+* **Inspector:** Editor de propriedades e atributos dinâmicos do objeto selecionado.
+* Salvamento automático do layout e restauração das preferências do desenvolvedor via JSON.
 
-Additional features:
-- Automatic custom layout saving
-- Dynamic panel resizing
-- User preferences persistence in JSON
-- File menu with project and scene options
-- Seamless integration with the engine core
-
----
-
-### Main — Game Application
-
-The main application where the developed game runs.
-
-- Final project consuming core and editor
-- Compilation and execution of the developed game
-- Integrates all engine components
+### 🚀 Main — Execução do Jogo
+A aplicação consumidora final que acopla o motor e o editor para a compilação e execução final do jogo desenvolvido.
 
 ---
-
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Java 11+ |
-| Graphics | Java 2D (AWT/Swing) |
-| Structure | Canvas + JFrame |
-| Build System | Maven 3.9.6 |
-| JSON | org.json 20231013 |
-
-## Getting Started
-
-### Build with Maven
-
-```bash
-# Compile the project
-./mvnw clean compile
-
-# Run tests
-./mvnw test
-
-# Package
-./mvnw package
-
-# Clean and install
-./mvnw clean install
-```
-
-### Run in an IDE
-
-1. Clone the repository
-   ```bash
-   git clone https://github.com/URSoftware/IgnisEngine.git
-   ```
-2. Open in your preferred Java IDE (VS Code, IntelliJ, Eclipse)
-3. **Using the editor (recommended):** Compile and run `src.com.ignis.editor.Editor`
-   - The window opens in fullscreen mode
-   - Panel layout is saved automatically
-   - Custom layout is restored on next launch
-4. **Testing the engine core:** Compile and run `src.com.ignis.core.Game`
-5. **Running the game:** Compile and run `src.com.ignis.main.Main`
-
-## Editor Configuration
-
-Layout settings are saved automatically to `src/com/ignis/editor/settings.json`:
-
-```json
-{
-  "mainSplitDividerLocation": 250,
-  "rightSplitDividerLocation": 1229
-}
-```
-
-| Key | Description |
-|---|---|
-| `mainSplitDividerLocation` | Position of the divider between Hierarchy and right panels (pixels) |
-| `rightSplitDividerLocation` | Position of the divider between Viewport and Inspector (pixels) |
 
 ## Hub de Documentação
 
 Toda a documentação técnica detalhada do projeto está modularizada na pasta [doc/](doc/). Abaixo está o índice organizado de arquivos por área de interesse:
 
-### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
+### 🧠 Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
 * **[Manual de Uso Completo](doc/AGENT_MODE_GUIDE.md)**: Guia profundo contendo exemplos práticos, operações suportadas e troubleshooting de API.
 * **[Guia de Integração de IA](doc/AI_INTEGRATION_GUIDE.md)**: Configurações do modelo Google Gemini 2.5 Flash na engine.
@@ -161,7 +79,7 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Melhorias de Prompts de IA](doc/AGENT_PROMPT_IMPROVEMENT.md)**: Engenharia de prompts usada para guiar o assistente de forma precisa.
 * **[Status Final de Implementação](doc/AGENT_MODE_STATUS.md)**: Diagnóstico final de funcionalidade e prontidão do agente.
 
-### Programação e Scripts (IgnisScript)
+### 📝 Programação e Scripts (IgnisScript)
 * **[Guia Completo do IgnisScript](doc/IGNIS_SCRIPTS.md)**: Manual definitivo para criação de comportamento e scripts em formato Ignis.
 * **[Referência da API de Scripts](doc/IGNIS_SCRIPT_API.md)**: Lista completa das chamadas de API, classes de física, entrada e controle de objetos.
 * **[Manual de Consulta Rápida](doc/IGNISSCRIPT_QUICK_REFERENCE.md)**: Resumo sintático rápido das funções e loops.
@@ -170,7 +88,7 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Documentação do Scripting para Agentes](doc/AGENT_IGNISSCRIPT_DOCUMENTATION.md)**: Guia fornecido para orientar IAs a programarem scripts.
 * **[Correção do Script do Jogador](doc/PLAYER_SCRIPT_FIX.md)**: Correção de bugs de movimentação do jogador.
 
-### Sistemas Físicos e Renderização (Colisão e Câmera)
+### ⚙️ Sistemas Físicos e Renderização (Colisão e Câmera)
 * **[Sistema de Colisões Integrado](doc/IGNIS_COLLISION_SYSTEM.md)**: Lógica do mecanismo AABB/Círculo no espaço bidimensional.
 * **[Guia de Física e Colisões](doc/COLLISION_AND_ALERTS_GUIDE.md)**: Regras de restrição física, trigger de áudio e física de movimento.
 * **[Integração do Sistema de Colisão](doc/COLLISION_SYSTEM_INTEGRATION.md)**: Como acoplar os listeners físicos ao motor gráfico principal.
@@ -178,32 +96,94 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Referência Rápida de Colisão](doc/IGNIS_COLLISION_QUICKREF.md)**: Resumo de funções úteis de colisão.
 * **[Sistema de Controle de Câmera](doc/CAMERA_SYSTEM_DOCS.md)**: Movimento de zoom, foco no jogador e limites de viewport da câmera 2D.
 
-### Sistema de Alertas (Alert System)
+### 🔔 Sistema de Alertas (Alert System)
 * **[Arquitetura de Alertas Visuais](doc/ALERT_SYSTEM_IMPLEMENTATION.md)**: Sistema de notificações temporizadas do painel flutuante do Viewport.
 * **[Guia de Início Rápido de Alertas](doc/ALERT_QUICK_START.md)**: Configurações rápidas para testar alertas simples.
 * **[Manual de Referência de Alertas](doc/ALERT_QUICK_REFERENCE.md)**: Tabela de métodos e constantes do componente de alerta.
 * **[Validação e Testes de Alertas](doc/TESTING_ALERTS.md)**: Roteiros de testes visuais e temporizações das filas de alerta.
 
-### Históricos e Resumos Globais
+### 🗂️ Históricos e Resumos Globais
 * **[Sumário de Implementações](doc/CHANGES_IMPLEMENTATION_SUMMARY.md)**: Lista completa das alterações físicas feitas no core e no editor.
 * **[Sumário Geral de Mudanças](doc/CHANGES_SUMMARY.md)**: Registro histórico das evoluções estruturais globais.
 
+---
 
-## Requirements
+## Requisitos do Sistema
 
-| Requirement | Minimum Version |
-|---|---|
-| Java | 11 or higher |
-| Maven | 3.6.0+ (or use the included Maven Wrapper) |
-
-## License
-
-This project is part of URSoftware development.
+| Tecnologia | Versão Mínima | Observação |
+|---|---|---|
+| **Java** | 11+ | Compatível com JDK 11 ou superior |
+| **Maven** | 3.6.0+ | Ou utilize o Maven Wrapper incluso (`mvnw`) |
 
 ---
 
-<div align="center">
+## Como Começar (Quick Start)
 
-[![URSoftware](https://img.shields.io/badge/URSoftware-Organization-0D1117?style=flat-square&logo=github&logoColor=white)](https://github.com/URSoftware)
+### Compilação com Maven
 
-</div>
+Utilize os comandos a seguir no terminal para compilar e empacotar o projeto:
+
+```bash
+# Compilar o código do projeto
+./mvnw clean compile
+
+# Executar testes
+./mvnw test
+
+# Empacotar para arquivo JAR executável
+./mvnw package
+
+# Limpar e instalar no repositório local
+./mvnw clean install
+```
+
+### Executando em uma IDE
+
+1. Clone o repositório:
+   ```bash
+   git clone https://github.com/URSoftware/IgnisEngine.git
+   ```
+2. Abra a pasta do projeto em sua IDE Java de preferência (VS Code, IntelliJ IDEA ou Eclipse).
+3. **Para iniciar o Editor Visual (Recomendado):** Execute a classe `src.com.ignis.editor.Editor`.
+   - O editor abrirá configurado por padrão.
+   - Divisórias de painéis ajustadas dinamicamente pelo mouse serão persistidas automaticamente ao sair.
+4. **Para iniciar apenas o Core de teste:** Execute a classe `src.com.ignis.core.Game`.
+5. **Para iniciar o jogo final:** Execute a classe `src.com.ignis.main.Main`.
+
+### Configuração do Editor Visual
+
+As configurações do layout do editor são salvas no arquivo `src/com/ignis/editor/settings.json`:
+
+```json
+{
+  "mainSplitDividerLocation": 250,
+  "rightSplitDividerLocation": 1229
+}
+```
+
+---
+
+## Autores
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/ThyagoToledo">
+        <img src="https://github.com/ThyagoToledo.png" width="100px;" alt="Thyago Toledo"/>
+        <br />
+        <sub><b>Thyago Toledo</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/URSoftware">
+        <img src="https://github.com/URSoftware.png" width="100px;" alt="URSoftware"/>
+        <br />
+        <sub><b>URSoftware</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
+---
+
+Este projeto é desenvolvido e distribuído pela organização **URSoftware**. Para mais informações, consulte os termos de licença de uso incluídos no repositório.
