@@ -169,6 +169,13 @@ As configurações do layout do editor são salvas no arquivo `src/com/ignis/edi
       </a>
     </td>
     <td align="center">
+      <a href="https://github.com/FeronZerbana">
+        <img src="https://github.com/FeronZerbana.png" width="100px;" alt="FeronZerbana"/>
+        <br />
+        <sub><b>FeronZerbana</b></sub>
+      </a>
+    </td>
+    <td align="center">
       <a href="https://github.com/URSoftware">
         <img src="https://github.com/URSoftware.png" width="100px;" alt="URSoftware"/>
         <br />
