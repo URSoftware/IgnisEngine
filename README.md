@@ -157,6 +157,22 @@ As configurações do layout do editor são salvas no arquivo `src/com/ignis/edi
 
 ---
 
+## Organização
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/URSoftware">
+        <img src="https://github.com/URSoftware.png" width="100px;" alt="URSoftware"/>
+        <br />
+        <sub><b>URSoftware</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Autores
 
 <table>
@@ -173,13 +189,6 @@ As configurações do layout do editor são salvas no arquivo `src/com/ignis/edi
         <img src="https://github.com/FeronZerbana.png" width="100px;" alt="FeronZerbana"/>
         <br />
         <sub><b>FeronZerbana</b></sub>
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://github.com/URSoftware">
-        <img src="https://github.com/URSoftware.png" width="100px;" alt="URSoftware"/>
-        <br />
-        <sub><b>URSoftware</b></sub>
       </a>
     </td>
   </tr>
