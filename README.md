@@ -1,9 +1,3 @@
----
-tags: [ignis-engine, core, java, readme, documentation]
-updated: 2026-06-11
-type: project-hub
----
-
 # IgnisEngine
 
 <p align="center">
@@ -44,20 +38,20 @@ IgnisEngine/
 
 ## Componentes
 
-### 🎮 Core — Motor Gráfico
+### Core — Motor Gráfico
 O coração do IgnisEngine, responsável por toda a lógica de renderização e execução física/lógica:
 * Loop de atualização e desenho constante (Tick/Render).
 * Gerenciamento de tela com suporte a redimensionamento e modo tela cheia.
 * Sistema de `GameObject` reutilizável para gerenciar elementos em cena.
 
-### 🛠️ Editor — Ferramenta de Modelagem
+### Editor — Ferramenta de Modelagem
 Interface visual profissional para agilizar o desenvolvimento:
 * **Hierarchy:** Árvore estrutural contendo todos os objetos presentes na cena.
 * **Viewport:** Área de visualização em tempo real do estado de renderização.
 * **Inspector:** Editor de propriedades e atributos dinâmicos do objeto selecionado.
 * Salvamento automático do layout e restauração das preferências do desenvolvedor via JSON.
 
-### 🚀 Main — Execução do Jogo
+### Main — Execução do Jogo
 A aplicação consumidora final que acopla o motor e o editor para a compilação e execução final do jogo desenvolvido.
 
 ---
@@ -66,7 +60,7 @@ A aplicação consumidora final que acopla o motor e o editor para a compilaçã
 
 Toda a documentação técnica detalhada do projeto está modularizada na pasta [doc/](doc/). Abaixo está o índice organizado de arquivos por área de interesse:
 
-### 🧠 Inteligência Artificial e Modo Agente (AI & AGENT Mode)
+### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
 * **[Manual de Uso Completo](doc/AGENT_MODE_GUIDE.md)**: Guia profundo contendo exemplos práticos, operações suportadas e troubleshooting de API.
 * **[Guia de Integração de IA](doc/AI_INTEGRATION_GUIDE.md)**: Configurações do modelo Google Gemini 2.5 Flash na engine.
@@ -79,7 +73,7 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Melhorias de Prompts de IA](doc/AGENT_PROMPT_IMPROVEMENT.md)**: Engenharia de prompts usada para guiar o assistente de forma precisa.
 * **[Status Final de Implementação](doc/AGENT_MODE_STATUS.md)**: Diagnóstico final de funcionalidade e prontidão do agente.
 
-### 📝 Programação e Scripts (IgnisScript)
+### Programação e Scripts (IgnisScript)
 * **[Guia Completo do IgnisScript](doc/IGNIS_SCRIPTS.md)**: Manual definitivo para criação de comportamento e scripts em formato Ignis.
 * **[Referência da API de Scripts](doc/IGNIS_SCRIPT_API.md)**: Lista completa das chamadas de API, classes de física, entrada e controle de objetos.
 * **[Manual de Consulta Rápida](doc/IGNISSCRIPT_QUICK_REFERENCE.md)**: Resumo sintático rápido das funções e loops.
@@ -88,7 +82,7 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Documentação do Scripting para Agentes](doc/AGENT_IGNISSCRIPT_DOCUMENTATION.md)**: Guia fornecido para orientar IAs a programarem scripts.
 * **[Correção do Script do Jogador](doc/PLAYER_SCRIPT_FIX.md)**: Correção de bugs de movimentação do jogador.
 
-### ⚙️ Sistemas Físicos e Renderização (Colisão e Câmera)
+### Sistemas Físicos e Renderização (Colisão e Câmera)
 * **[Sistema de Colisões Integrado](doc/IGNIS_COLLISION_SYSTEM.md)**: Lógica do mecanismo AABB/Círculo no espaço bidimensional.
 * **[Guia de Física e Colisões](doc/COLLISION_AND_ALERTS_GUIDE.md)**: Regras de restrição física, trigger de áudio e física de movimento.
 * **[Integração do Sistema de Colisão](doc/COLLISION_SYSTEM_INTEGRATION.md)**: Como acoplar os listeners físicos ao motor gráfico principal.
@@ -96,13 +90,13 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 * **[Referência Rápida de Colisão](doc/IGNIS_COLLISION_QUICKREF.md)**: Resumo de funções úteis de colisão.
 * **[Sistema de Controle de Câmera](doc/CAMERA_SYSTEM_DOCS.md)**: Movimento de zoom, foco no jogador e limites de viewport da câmera 2D.
 
-### 🔔 Sistema de Alertas (Alert System)
+### Sistema de Alertas (Alert System)
 * **[Arquitetura de Alertas Visuais](doc/ALERT_SYSTEM_IMPLEMENTATION.md)**: Sistema de notificações temporizadas do painel flutuante do Viewport.
 * **[Guia de Início Rápido de Alertas](doc/ALERT_QUICK_START.md)**: Configurações rápidas para testar alertas simples.
 * **[Manual de Referência de Alertas](doc/ALERT_QUICK_REFERENCE.md)**: Tabela de métodos e constantes do componente de alerta.
 * **[Validação e Testes de Alertas](doc/TESTING_ALERTS.md)**: Roteiros de testes visuais e temporizações das filas de alerta.
 
-### 🗂️ Históricos e Resumos Globais
+### Históricos e Resumos Globais
 * **[Sumário de Implementações](doc/CHANGES_IMPLEMENTATION_SUMMARY.md)**: Lista completa das alterações físicas feitas no core e no editor.
 * **[Sumário Geral de Mudanças](doc/CHANGES_SUMMARY.md)**: Registro histórico das evoluções estruturais globais.
 
