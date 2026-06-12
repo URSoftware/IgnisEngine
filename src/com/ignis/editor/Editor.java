@@ -1517,203 +1517,6 @@ public class Editor extends JFrame {
         content.add(Box.createVerticalStrut(5));
         content.add(importImageWrapper);
         
-        // ==================== AUDIO SECTION ====================
-        content.add(Box.createVerticalStrut(15));
-        content.add(createInspectorSectionHeader("Audio"));
-        content.add(Box.createVerticalStrut(8));
-        
-        // Audio panel (will be updated dynamically)
-        JPanel audioPanel = new JPanel();
-        audioPanel.setLayout(new BoxLayout(audioPanel, BoxLayout.Y_AXIS));
-        audioPanel.setBackground(new Color(45, 45, 45));
-        audioPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        audioPanel.setName("audioPanel");
-        content.add(audioPanel);
-        
-        // Music Path field with browse button
-        content.add(createInspectorLabel("Music Path"));
-        JPanel musicPathPanel = new JPanel(new BorderLayout(5, 0));
-        musicPathPanel.setBackground(new Color(45, 45, 45));
-        musicPathPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        musicPathPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        
-        JTextField musicPathField = createInspectorTextField();
-        musicPathField.setName("musicPathField");
-        musicPathField.setEditable(false);
-        musicPathField.setToolTipText("Drag an audio file here or click Browse");
-        
-        // Enable drop on music path field
-        musicPathField.setTransferHandler(new TransferHandler() {
-            @Override
-            public boolean canImport(TransferHandler.TransferSupport support) {
-                return support.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
-            }
-            
-            @Override
-            public boolean importData(TransferHandler.TransferSupport support) {
-                if (!canImport(support)) return false;
-                try {
-                    @SuppressWarnings("unchecked")
-                    java.util.List<File> files = (java.util.List<File>) 
-                        support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
-                    if (!files.isEmpty()) {
-                        File file = files.get(0);
-                        String name = file.getName().toLowerCase();
-                        if (name.endsWith(".wav") || name.endsWith(".mp3") || 
-                            name.endsWith(".ogg") || name.endsWith(".aiff")) {
-                            setMusicPathForSelectedObject(file.getAbsolutePath());
-                            return true;
-                        }
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-                return false;
-            }
-        });
-        
-        JButton browseMusicBtn = new JButton("...");
-        browseMusicBtn.setPreferredSize(new Dimension(30, 26));
-        browseMusicBtn.setBackground(new Color(70, 70, 70));
-        browseMusicBtn.setForeground(Color.WHITE);
-        browseMusicBtn.setFocusPainted(false);
-        browseMusicBtn.setBorderPainted(false);
-        browseMusicBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        browseMusicBtn.addActionListener(e -> browseForMusicFile());
-        
-        musicPathPanel.add(musicPathField, BorderLayout.CENTER);
-        musicPathPanel.add(browseMusicBtn, BorderLayout.EAST);
-        content.add(musicPathPanel);
-        content.add(Box.createVerticalStrut(8));
-        
-        // Volume slider
-        content.add(createInspectorLabel("Volume"));
-        JPanel volumePanel = new JPanel(new BorderLayout(5, 0));
-        volumePanel.setBackground(new Color(45, 45, 45));
-        volumePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        volumePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        
-        JSlider volumeSlider = new JSlider(0, 100, 100);
-        volumeSlider.setName("volumeSlider");
-        volumeSlider.setBackground(new Color(45, 45, 45));
-        volumeSlider.setForeground(Color.WHITE);
-        volumeSlider.addChangeListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().setVolume(volumeSlider.getValue() / 100f);
-            }
-        });
-        
-        JLabel volumeValueLabel = new JLabel("100%");
-        volumeValueLabel.setName("volumeValueLabel");
-        volumeValueLabel.setForeground(Color.WHITE);
-        volumeValueLabel.setPreferredSize(new Dimension(40, 20));
-        volumeSlider.addChangeListener(e -> {
-            volumeValueLabel.setText(volumeSlider.getValue() + "%");
-        });
-        
-        volumePanel.add(volumeSlider, BorderLayout.CENTER);
-        volumePanel.add(volumeValueLabel, BorderLayout.EAST);
-        content.add(volumePanel);
-        content.add(Box.createVerticalStrut(5));
-        
-        // Loop checkbox
-        JCheckBox loopCheckbox = new JCheckBox("Loop");
-        loopCheckbox.setName("audioLoopCheckbox");
-        loopCheckbox.setBackground(new Color(45, 45, 45));
-        loopCheckbox.setForeground(Color.WHITE);
-        loopCheckbox.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().setLoop(loopCheckbox.isSelected());
-            }
-        });
-        content.add(loopCheckbox);
-        content.add(Box.createVerticalStrut(3));
-        
-        // Auto-play checkbox
-        JCheckBox autoPlayCheckbox = new JCheckBox("Auto Play");
-        autoPlayCheckbox.setName("audioAutoPlayCheckbox");
-        autoPlayCheckbox.setBackground(new Color(45, 45, 45));
-        autoPlayCheckbox.setForeground(Color.WHITE);
-        autoPlayCheckbox.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().setAutoPlay(autoPlayCheckbox.isSelected());
-            }
-        });
-        content.add(autoPlayCheckbox);
-        content.add(Box.createVerticalStrut(3));
-        
-        // Is Background Music checkbox
-        JCheckBox bgMusicCheckbox = new JCheckBox("Background Music");
-        bgMusicCheckbox.setName("audioBgMusicCheckbox");
-        bgMusicCheckbox.setBackground(new Color(45, 45, 45));
-        bgMusicCheckbox.setForeground(Color.WHITE);
-        bgMusicCheckbox.setToolTipText("If checked, plays as background music (only one at a time)");
-        bgMusicCheckbox.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().setBackgroundMusic(bgMusicCheckbox.isSelected());
-            }
-        });
-        content.add(bgMusicCheckbox);
-        content.add(Box.createVerticalStrut(8));
-        
-        // Audio control buttons
-        JPanel audioControlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
-        audioControlPanel.setBackground(new Color(45, 45, 45));
-        audioControlPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        audioControlPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        
-        JButton playAudioBtn = new JButton("▶");
-        playAudioBtn.setBackground(new Color(70, 130, 70));
-        playAudioBtn.setForeground(Color.WHITE);
-        playAudioBtn.setFocusPainted(false);
-        playAudioBtn.setBorderPainted(false);
-        playAudioBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        playAudioBtn.setToolTipText("Play");
-        playAudioBtn.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().play();
-            }
-        });
-        
-        JButton stopAudioBtn = new JButton("■");
-        stopAudioBtn.setBackground(new Color(180, 70, 70));
-        stopAudioBtn.setForeground(Color.WHITE);
-        stopAudioBtn.setFocusPainted(false);
-        stopAudioBtn.setBorderPainted(false);
-        stopAudioBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        stopAudioBtn.setToolTipText("Stop");
-        stopAudioBtn.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null && selected.getMusicPath() != null) {
-                selected.getMusicPath().stop();
-            }
-        });
-        
-        JButton clearAudioBtn = new JButton("✕");
-        clearAudioBtn.setBackground(new Color(100, 100, 100));
-        clearAudioBtn.setForeground(Color.WHITE);
-        clearAudioBtn.setFocusPainted(false);
-        clearAudioBtn.setBorderPainted(false);
-        clearAudioBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        clearAudioBtn.setToolTipText("Clear audio");
-        clearAudioBtn.addActionListener(e -> {
-            GameObject selected = game.getSelectedObject();
-            if (selected != null) {
-                selected.setMusicPath(null);
-                updateInspectorAudio(selected);
-            }
-        });
-        
-        audioControlPanel.add(playAudioBtn);
-        audioControlPanel.add(stopAudioBtn);
-        audioControlPanel.add(clearAudioBtn);
-        content.add(audioControlPanel);
-
         // Add glue to push everything to top
         content.add(Box.createVerticalGlue());
 
@@ -1840,10 +1643,7 @@ public class Editor extends JFrame {
             
             // Atualizar seção de sprite
             updateInspectorSprite(obj);
-            
-            // Atualizar seção de áudio
-            updateInspectorAudio(obj);
-            
+
             // Update camera section visibility and values
             updateInspectorCameraSection(obj);
         } else {
@@ -1871,10 +1671,7 @@ public class Editor extends JFrame {
             
             // Limpar seção de sprite
             updateInspectorSprite(null);
-            
-            // Limpar seção de áudio
-            updateInspectorAudio(null);
-            
+
             // Hide camera section
             updateInspectorCameraSection(null);
         }
@@ -2920,136 +2717,6 @@ public class Editor extends JFrame {
         return "..." + path.substring(path.length() - maxLength + 3);
     }
     
-    // ==================== AUDIO INSPECTOR METHODS ====================
-    
-    /**
-     * Updates the audio section in the inspector
-     */
-    private void updateInspectorAudio(GameObject obj) {
-        JTextField musicPathField = findComponentByName(inspectorPanel, "musicPathField");
-        JSlider volumeSlider = findComponentByName(inspectorPanel, "volumeSlider");
-        JLabel volumeValueLabel = findComponentByName(inspectorPanel, "volumeValueLabel");
-        JCheckBox loopCheckbox = findComponentByName(inspectorPanel, "audioLoopCheckbox");
-        JCheckBox autoPlayCheckbox = findComponentByName(inspectorPanel, "audioAutoPlayCheckbox");
-        JCheckBox bgMusicCheckbox = findComponentByName(inspectorPanel, "audioBgMusicCheckbox");
-        
-        if (obj != null && obj.getMusicPath() != null) {
-            MusicPath mp = obj.getMusicPath();
-            
-            if (musicPathField != null) {
-                String path = mp.getPath();
-                if (path != null && !path.isEmpty()) {
-                    musicPathField.setText(new File(path).getName());
-                    musicPathField.setToolTipText(path);
-                } else {
-                    musicPathField.setText("");
-                    musicPathField.setToolTipText("Drag an audio file here or click Browse");
-                }
-            }
-            
-            if (volumeSlider != null) {
-                volumeSlider.setValue((int) (mp.getVolume() * 100));
-            }
-            
-            if (volumeValueLabel != null) {
-                volumeValueLabel.setText((int) (mp.getVolume() * 100) + "%");
-            }
-            
-            if (loopCheckbox != null) {
-                loopCheckbox.setSelected(mp.isLoop());
-            }
-            
-            if (autoPlayCheckbox != null) {
-                autoPlayCheckbox.setSelected(mp.isAutoPlay());
-            }
-            
-            if (bgMusicCheckbox != null) {
-                bgMusicCheckbox.setSelected(mp.isBackgroundMusic());
-            }
-        } else {
-            // Reset to defaults
-            if (musicPathField != null) {
-                musicPathField.setText("");
-                musicPathField.setToolTipText("Drag an audio file here or click Browse");
-            }
-            
-            if (volumeSlider != null) {
-                volumeSlider.setValue(100);
-            }
-            
-            if (volumeValueLabel != null) {
-                volumeValueLabel.setText("100%");
-            }
-            
-            if (loopCheckbox != null) {
-                loopCheckbox.setSelected(false);
-            }
-            
-            if (autoPlayCheckbox != null) {
-                autoPlayCheckbox.setSelected(false);
-            }
-            
-            if (bgMusicCheckbox != null) {
-                bgMusicCheckbox.setSelected(false);
-            }
-        }
-    }
-    
-    /**
-     * Opens a file dialog to browse for audio files
-     */
-    private void browseForMusicFile() {
-        GameObject obj = game.getSelectedObject();
-        if (obj == null) {
-            JOptionPane.showMessageDialog(this, 
-                "Select an object first!", 
-                "No Selection", 
-                JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select Audio File");
-        chooser.setFileFilter(new FileNameExtensionFilter(
-            "Audio Files (*.wav, *.mp3, *.ogg, *.aiff)", 
-            "wav", "mp3", "ogg", "aiff"));
-        
-        // Start from project sounds folder if available
-        if (currentProject != null) {
-            File soundsDir = new File(currentProject.getProjectDir(), "project/assets/sounds");
-            if (soundsDir.exists()) {
-                chooser.setCurrentDirectory(soundsDir);
-            } else {
-                File musicDir = new File(currentProject.getProjectDir(), "project/assets/music");
-                if (musicDir.exists()) {
-                    chooser.setCurrentDirectory(musicDir);
-                }
-            }
-        }
-        
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            setMusicPathForSelectedObject(chooser.getSelectedFile().getAbsolutePath());
-        }
-    }
-    
-    /**
-     * Sets the music path for the selected object
-     */
-    private void setMusicPathForSelectedObject(String path) {
-        GameObject obj = game.getSelectedObject();
-        if (obj == null) return;
-        
-        MusicPath musicPath = obj.getMusicPath();
-        if (musicPath == null) {
-            musicPath = new MusicPath(path);
-            obj.setMusicPath(musicPath);
-        } else {
-            musicPath.setPath(path);
-        }
-        
-        updateInspectorAudio(obj);
-    }
-    
     /**
      * Shows dialog to add a script to the selected object
      */
@@ -3362,15 +3029,88 @@ public class Editor extends JFrame {
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
-            String imagePath = selectedFile.getAbsolutePath();
-            
+            String imagePath = importSpriteIntoProject(selectedFile);
+
             // Set the sprite path on the object
             selected.setSpritePath(imagePath);
-            
+
             // Update inspector to show the new sprite
             updateInspector(selected);
-            
+
             System.out.println("Imported image for " + selected.getName() + ": " + imagePath);
+        }
+    }
+
+    /**
+     * Copies an external image into project/assets/sprites and returns its
+     * path relative to the project folder (e.g. "assets/sprites/Grama.jpg"),
+     * keeping the project portable. Images already inside the project folder
+     * are referenced in place. Falls back to the absolute path when no
+     * project is loaded.
+     */
+    private String importSpriteIntoProject(File imageFile) {
+        File projectFolder = null;
+        if (currentProject != null && currentProject.getProjectFile() != null) {
+            projectFolder = IgnisProjectIO.getProjectFolder(currentProject.getProjectFile());
+        }
+        if (projectFolder == null) {
+            System.err.println("No project loaded; keeping absolute sprite path: "
+                    + imageFile.getAbsolutePath());
+            return imageFile.getAbsolutePath();
+        }
+
+        AssetResolver.setProjectFolder(projectFolder);
+
+        // Already inside the project folder: just store the relative path
+        String relative = AssetResolver.relativize(imageFile);
+        if (relative != null) {
+            return relative;
+        }
+
+        File spritesFolder = new File(projectFolder, "assets/sprites");
+        spritesFolder.mkdirs();
+
+        // Avoid clobbering a different image that has the same file name
+        String name = imageFile.getName();
+        String baseName = name;
+        String extension = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            baseName = name.substring(0, dot);
+            extension = name.substring(dot);
+        }
+        File dest = new File(spritesFolder, name);
+        int suffix = 1;
+        while (dest.exists() && !sameFileContent(imageFile, dest)) {
+            dest = new File(spritesFolder, baseName + "_" + suffix + extension);
+            suffix++;
+        }
+
+        try {
+            if (!dest.exists()) {
+                Files.copy(imageFile.toPath(), dest.toPath());
+            }
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not copy image into the project assets:\n" + ex.getMessage() +
+                    "\n\nThe absolute path will be used instead (not portable).",
+                    "Import Image",
+                    JOptionPane.WARNING_MESSAGE);
+            return imageFile.getAbsolutePath();
+        }
+
+        String destRelative = AssetResolver.relativize(dest);
+        return destRelative != null ? destRelative : dest.getAbsolutePath();
+    }
+
+    private static boolean sameFileContent(File a, File b) {
+        try {
+            if (a.length() != b.length()) {
+                return false;
+            }
+            return Arrays.equals(Files.readAllBytes(a.toPath()), Files.readAllBytes(b.toPath()));
+        } catch (IOException e) {
+            return false;
         }
     }
     
@@ -5654,6 +5394,16 @@ public class Editor extends JFrame {
 
         menuBar.add(buildMenu);
 
+        // ==================== TOOLS MENU ====================
+        JMenu toolsMenu = new JMenu("Tools");
+
+        JMenuItem imageEditorItem = new JMenuItem("Image Editor");
+        imageEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        imageEditorItem.addActionListener(e -> openImageEditor());
+        toolsMenu.add(imageEditorItem);
+
+        menuBar.add(toolsMenu);
+
         // ==================== VIEW MENU (CAMERA CONTROLS) ====================
         JMenu viewMenu = new JMenu("View");
         
@@ -5748,6 +5498,21 @@ public class Editor extends JFrame {
         menuBar.add(viewMenu);
         
         setJMenuBar(menuBar);
+    }
+
+    /**
+     * Opens the integrated image editor. When a project is loaded, textures
+     * exported from it land directly in project/assets/sprites.
+     */
+    private void openImageEditor() {
+        File spritesFolder = null;
+        if (currentProject != null && currentProject.getProjectFile() != null) {
+            File projectFolder = IgnisProjectIO.getProjectFolder(currentProject.getProjectFile());
+            spritesFolder = new File(projectFolder, "assets/sprites");
+        }
+        com.ignis.imageeditor.ImageEditorFrame imageEditor =
+                new com.ignis.imageeditor.ImageEditorFrame(spritesFolder);
+        imageEditor.setVisible(true);
     }
 
     /**

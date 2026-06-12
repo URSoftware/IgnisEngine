@@ -106,6 +106,6 @@ A exportação converte as estruturas do projeto (cenas/entidades lidas do `.ign
 
 ## Limitações Conhecidas
 
-- Sprites referenciados por caminho absoluto fora da pasta do projeto não são incluídos no pacote (corrigir no fluxo de import de assets do editor).
-- O build Java requer Java instalado na máquina do jogador (empacotamento de JRE via jlink/jpackage é evolução planejada).
+- O build Java requer Java 17+ instalado na máquina do jogador (empacotamento de JRE via jlink/jpackage é evolução planejada).
+- Cenas antigas com sprites em caminho absoluto continuam funcionando localmente, mas não são portáveis; reimporte a imagem pelo Inspector para convertê-la em caminho relativo (`assets/sprites/...`).
 - O runtime C++ é um esqueleto compilável: a portagem do loop de jogo (tick/render/colisões) para C++ é a próxima etapa do item 2 do roadmap.

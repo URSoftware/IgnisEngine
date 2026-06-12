@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Java-11+-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" />
+  <img src="https://img.shields.io/badge/Java-17_LTS-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" />
   <img src="https://img.shields.io/badge/Maven-3.9.6-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white" alt="Maven" />
   <img src="https://img.shields.io/badge/License-URSoftware-0078D4?style=for-the-badge&logo=azuredevops&logoColor=white" alt="License" />
   <img src="https://img.shields.io/badge/Status-In%20Development-F9A825?style=for-the-badge&logo=git&logoColor=white" alt="Status" />
@@ -28,10 +28,11 @@ IgnisEngine/
 │   │   └── 📄 ...               # Estratégias Java/C++, configuração e utilitários
 │   ├── 📁 editor/               # Editor visual integrado para modelagem de cenas
 │   │   ├── 📄 Editor.java       # Interface gráfica e gerenciamento de painéis
-│   │   ├── 📄 BuildDialog.java  # Diálogo de build (menu Build)
-│   │   └── 📄 settings.json     # Configurações salvas do layout do editor
+│   │   └── 📄 BuildDialog.java  # Diálogo de build (menu Build)
+│   ├── 📁 imageeditor/          # Editor de imagens integrado (Tools → Image Editor)
 │   └── 📁 runtime/              # Runtime standalone dos jogos distribuídos
 │       └── 📄 GameRuntime.java  # Entry point dos builds (carrega .ignis e executa)
+├── 📄 editor_layout.json        # Layout do editor (gerado automaticamente)
 ├── 📁 doc/                      # Documentação técnica detalhada (Módulos do Vault)
 ├── 📁 .mvn/wrapper/             # Maven Wrapper para execução independente de versão
 ├── 📄 pom.xml                   # Configuração de dependências Maven
@@ -69,6 +70,9 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 
 ### Builder e Distribuição
 * **[Guia do Builder](doc/BUILDER_GUIDE.md)**: Geração dos binários finais do jogo — builds JVM para Windows/Linux/macOS, exportação de projetos C++ para consoles, uso pelo editor (Build → Build Project) e pela linha de comando.
+
+### Ferramentas Integradas
+* **[Editor de Imagens](doc/IMAGE_EDITOR_GUIDE.md)**: Desenho 2D, pintura, camadas, undo/redo e exportação de texturas direto para os assets do projeto (Tools → Image Editor).
 
 ### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
@@ -116,8 +120,8 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 
 | Tecnologia | Versão Mínima | Observação |
 |---|---|---|
-| **Java** | 11+ | Compatível com JDK 11 ou superior |
-| **Maven** | 3.6.0+ | Ou utilize o Maven Wrapper incluso (`mvnw`) |
+| **Java** | 17 (LTS) | Versão oficial do projeto; JDKs mais novos compilam para 17 via `release` |
+| **Maven** | — | Não é necessário instalar: use o Maven Wrapper incluso (`mvnw` / `mvnw.cmd`) |
 
 ---
 
@@ -156,12 +160,12 @@ Utilize os comandos a seguir no terminal para compilar e empacotar o projeto:
 
 ### Configuração do Editor Visual
 
-As configurações do layout do editor são salvas no arquivo `src/com/ignis/editor/settings.json`:
+As configurações do layout do editor são salvas automaticamente no arquivo `editor_layout.json`, criado na raiz do projeto ao fechar o editor:
 
 ```json
 {
-  "mainSplitDividerLocation": 250,
-  "rightSplitDividerLocation": 1229
+  "hierarchyWidth": 250,
+  "inspectorWidth": 1229
 }
 ```
 
