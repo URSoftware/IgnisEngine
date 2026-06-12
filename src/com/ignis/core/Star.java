@@ -95,22 +95,7 @@ public class Star extends GameObject {
      * Load sprite image from file path
      */
     public void loadSprite() {
-        if (spritePath != null && !spritePath.isEmpty()) {
-            try {
-                File imageFile = AssetResolver.resolve(spritePath);
-                if (imageFile.exists()) {
-                    spriteImage = ImageIO.read(imageFile);
-                } else {
-                    System.err.println("Sprite file not found: " + spritePath);
-                    spriteImage = null;
-                }
-            } catch (Exception e) {
-                System.err.println("Failed to load sprite: " + e.getMessage());
-                spriteImage = null;
-            }
-        } else {
-            spriteImage = null;
-        }
+        spriteImage = AssetResolver.loadImage(spritePath);
     }
     
     @Override
