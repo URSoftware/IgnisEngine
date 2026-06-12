@@ -2171,7 +2171,7 @@ public class Editor extends JFrame {
     }
     
     /**
-     * Creates a panel with editable fields for all public variables of a script
+     * Creates a panel with editable fields for all annotated variables of a script
      */
     private JPanel createScriptVariablesPanel(IgnisScript script) {
         JPanel panel = new JPanel();
@@ -2181,25 +2181,15 @@ public class Editor extends JFrame {
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         panel.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 2));
         
-        Class<?> clazz = script.getClass();
-        Field[] fields = clazz.getDeclaredFields();
+        List<Field> fields = ScriptSerializationHelper.getSerializedFields(script.getClass());
         
         boolean hasPublicFields = false;
         
         for (Field field : fields) {
-            // Only show non-static fields that are not from parent class
-            if (Modifier.isStatic(field.getModifiers())) {
-                continue;
-            }
-            
-            // Check if field is accessible (public or private that we can expose)
-            // For now, we'll expose all declared fields of the script class
-            field.setAccessible(true);
-            
             Class<?> fieldType = field.getType();
             
             // Only support basic types
-            if (isSupportedType(fieldType)) {
+            if (ScriptSerializationHelper.isSupportedType(fieldType)) {
                 hasPublicFields = true;
                 JPanel fieldPanel = createFieldEditorPanel(script, field);
                 panel.add(fieldPanel);

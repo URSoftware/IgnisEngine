@@ -91,8 +91,19 @@ public class PrefabManager {
         // Scripts
         if (!object.getScriptNames().isEmpty()) {
             JSONArray scripts = new JSONArray();
-            for (String scriptName : object.getScriptNames()) {
-                scripts.put(scriptName);
+            for (int i = 0; i < object.getScriptNames().size(); i++) {
+                String scriptName = object.getScriptNames().get(i);
+                JSONObject scriptData = new JSONObject();
+                scriptData.put("name", scriptName);
+                
+                if (i < object.getScripts().size()) {
+                    IgnisScript script = object.getScripts().get(i);
+                    JSONObject variables = ScriptSerializationHelper.saveScriptVariables(script);
+                    if (variables.length() > 0) {
+                        scriptData.put("variables", variables);
+                    }
+                }
+                scripts.put(scriptData);
             }
             json.put("scripts", scripts);
         }
@@ -183,18 +194,45 @@ public class PrefabManager {
         
         // Scripts
         if (json.has("scripts")) {
-            JSONArray scripts = json.getJSONArray("scripts");
+            JSONArray scriptsArray = json.getJSONArray("scripts");
             List<String> scriptNames = new ArrayList<>();
             
-            for (int i = 0; i < scripts.length(); i++) {
-                String scriptName = scripts.getString(i);
-                scriptNames.add(scriptName);
+            for (int i = 0; i < scriptsArray.length(); i++) {
+                Object scriptEntry = scriptsArray.get(i);
+                String scriptName = null;
+                JSONObject variables = null;
                 
-                // Create script instance if ScriptManager is available
-                if (scriptManager != null) {
-                    IgnisScript instance = scriptManager.createScriptInstance(scriptName, object, game);
-                    if (instance != null) {
-                        object.getScripts().add(instance);
+                if (scriptEntry instanceof String) {
+                    scriptName = (String) scriptEntry;
+                } else if (scriptEntry instanceof JSONObject) {
+                    JSONObject scriptData = (JSONObject) scriptEntry;
+                    scriptName = scriptData.getString("name");
+                    if (scriptData.has("variables")) {
+                        variables = scriptData.getJSONObject("variables");
+                    }
+                }
+                
+                if (scriptName != null) {
+                    scriptNames.add(scriptName);
+                    
+                    // Create script instance if ScriptManager is available
+                    if (scriptManager != null) {
+                        IgnisScript instance = scriptManager.createScriptInstance(scriptName, object, game);
+                        if (instance != null) {
+                            object.getScripts().add(instance);
+                            if (variables != null) {
+                                final Game activeGame = game;
+                                ScriptSerializationHelper.loadScriptVariables(instance, variables, name -> {
+                                    if (activeGame == null) return null;
+                                    for (GameObject entity : activeGame.getEntities()) {
+                                        if (name.equals(entity.getName())) {
+                                            return entity;
+                                        }
+                                    }
+                                    return null;
+                                });
+                            }
+                        }
                     }
                 }
             }

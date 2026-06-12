@@ -1,8 +1,10 @@
 import com.ignis.core.IgnisScript;
+import com.ignis.core.Serialize;
 import com.ignis.core.Input;
 import java.awt.event.KeyEvent;
 
 public class Player extends IgnisScript {
+    @Serialize
     private float movementSpeed = 4.0f; // Speed at which the player moves
 
     @Override

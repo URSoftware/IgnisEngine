@@ -42,9 +42,13 @@ public final class AppIconHelper {
             if (baseImage != null) {
                 int[] resolutions = {16, 24, 32, 48, 64, 128, 256};
                 for (int size : resolutions) {
-                    Image scaled = baseImage.getScaledInstance(size, size, Image.SCALE_SMOOTH);
-                    // Force loading of the scaled image pixels so AWT/Swing can use it immediately without lag
-                    new javax.swing.ImageIcon(scaled);
+                    BufferedImage scaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+                    java.awt.Graphics2D g2 = scaled.createGraphics();
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.drawImage(baseImage, 0, 0, size, size, null);
+                    g2.dispose();
                     cachedIcons.add(scaled);
                 }
             }
