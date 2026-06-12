@@ -29,6 +29,7 @@ IgnisEngine/
 │   ├── 📁 editor/               # Editor visual integrado para modelagem de cenas
 │   │   ├── 📄 Editor.java       # Interface gráfica e gerenciamento de painéis
 │   │   └── 📄 BuildDialog.java  # Diálogo de build (menu Build)
+│   ├── 📁 animation/            # Sistema de animação 2D (modelo + Animator runtime)
 │   ├── 📁 imageeditor/          # Editor de imagens integrado (Tools → Image Editor)
 │   └── 📁 runtime/              # Runtime standalone dos jogos distribuídos
 │       └── 📄 GameRuntime.java  # Entry point dos builds (carrega .ignis e executa)
@@ -73,6 +74,10 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 
 ### Ferramentas Integradas
 * **[Editor de Imagens](doc/IMAGE_EDITOR_GUIDE.md)**: Desenho 2D, pintura, camadas, undo/redo e exportação de texturas direto para os assets do projeto (Tools → Image Editor).
+* **[Sistema de Animação](doc/ANIMATION_GUIDE.md)**: Animação 2D por sprites — timeline, keyframes, loop e transições; editor com pré-visualização e atribuição a objetos (Tools → Animation Editor).
+
+### Qualidade e Manutenção
+* **[Auditoria Técnica (2026-06-12)](doc/AUDIT_2026-06-12.md)**: Achados da inspeção profunda (leaks, threads, export C++, serialização) com causa raiz, impacto e correção.
 
 ### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
