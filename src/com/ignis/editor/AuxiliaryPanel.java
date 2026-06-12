@@ -23,6 +23,7 @@ public class AuxiliaryPanel extends JPanel {
     private Runnable fileRefreshCallback;
     
     // Settings tab components
+    private JComboBox<String> providerCombo;
     private JPasswordField apiKeyField;
     private JLabel apiStatusLabel;
     
@@ -78,8 +79,36 @@ public class AuxiliaryPanel extends JPanel {
         panel.setBackground(new Color(45, 45, 45));
         panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         
+        // AI Provider Section
+        JLabel providerLabel = new JLabel("AI Provider");
+        providerLabel.setForeground(Color.WHITE);
+        providerLabel.setFont(new Font("Arial", Font.BOLD, 13));
+        providerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(providerLabel);
+        
+        panel.add(Box.createVerticalStrut(8));
+        
+        providerCombo = new JComboBox<>(new String[] {"Gemini", "OpenAI", "Claude"});
+        providerCombo.setSelectedItem(aiIntegration.getActiveProviderName());
+        providerCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        providerCombo.setPreferredSize(new Dimension(250, 32));
+        providerCombo.setBackground(new Color(60, 60, 60));
+        providerCombo.setForeground(Color.WHITE);
+        providerCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        providerCombo.addActionListener(e -> {
+            String selected = (String) providerCombo.getSelectedItem();
+            if (selected != null) {
+                aiIntegration.setActiveProviderName(selected);
+                apiKeyField.setText(aiIntegration.getApiKeyFor(selected));
+                updateApiStatus();
+            }
+        });
+        panel.add(providerCombo);
+        
+        panel.add(Box.createVerticalStrut(15));
+        
         // API Key section
-        JLabel apiLabel = new JLabel("Google Gemini API Key");
+        JLabel apiLabel = new JLabel("API Key");
         apiLabel.setForeground(Color.WHITE);
         apiLabel.setFont(new Font("Arial", Font.BOLD, 13));
         apiLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -116,10 +145,11 @@ public class AuxiliaryPanel extends JPanel {
         saveButton.setFocusPainted(false);
         saveButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         saveButton.addActionListener(e -> {
+            String selected = (String) providerCombo.getSelectedItem();
             String apiKey = new String(apiKeyField.getPassword()).trim();
-            aiIntegration.setApiKey(apiKey);
+            aiIntegration.setApiKeyFor(selected, apiKey);
             updateApiStatus();
-            JOptionPane.showMessageDialog(this, "API Key saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "API Key for " + selected + " saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
         });
         panel.add(saveButton);
         
@@ -390,8 +420,8 @@ public class AuxiliaryPanel extends JPanel {
                         "PROJECT DOCUMENTATION:\n" + documentation + "\n\n" +
                         "USER QUESTION:\n" + question;
                 
-                // Call Google Gemini API
-                String response = callGeminiAPI(fullPrompt, false);
+                // Call active AI provider
+                String response = aiIntegration.callActiveAI(fullPrompt);
                 
                 SwingUtilities.invokeLater(() -> {
                     askOutputArea.setText(response);
@@ -593,8 +623,8 @@ public class AuxiliaryPanel extends JPanel {
                 System.out.println("[AGENT] Sending task to Gemini...");
                 System.out.println("[AGENT] Task: " + task);
                 
-                // Call Google Gemini API
-                String response = callGeminiAPI(agentPrompt, true);
+                // Call active AI provider
+                String response = aiIntegration.callActiveAI(agentPrompt);
                 
                 System.out.println("[AGENT] Received response (" + response.length() + " chars)");
                 
@@ -650,223 +680,7 @@ public class AuxiliaryPanel extends JPanel {
         return true;
     }
     
-    /**
-     * Calls Google Gemini API
-     */
-    private String callGeminiAPI(String prompt, boolean agentMode) throws Exception {
-        String apiKey = aiIntegration.getApiKey();
-        if (apiKey == null || apiKey.isEmpty()) {
-            throw new IllegalArgumentException("API Key not configured");
-        }
-        
-        try {
-            // Try to use HttpClient for REST API call
-            return callGeminiAPIViaREST(apiKey, prompt);
-        } catch (Exception e) {
-            // If HTTP call fails, return helpful message
-            System.err.println("Failed to call Gemini API: " + e.getMessage());
-            return "The API infrastructure is ready, but the call failed.\n" +
-                   "Reason: " + e.getMessage() + "\n\n" +
-                   "This usually means:\n" +
-                   "1. Invalid API key\n" +
-                   "2. Network connectivity issue\n" +
-                   "3. API rate limit exceeded\n" +
-                   "4. Google Generative AI SDK not installed\n\n" +
-                   "Please check your API key and try again.";
-        }
-    }
-    
-    /**
-     * Calls Gemini API using REST (requires Java 11+)
-     */
-    private String callGeminiAPIViaREST(String apiKey, String prompt) throws Exception {
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
-        
-        // Build JSON request body
-        String jsonBody = "{\n" +
-            "  \"contents\": [{\n" +
-            "    \"parts\": [{\n" +
-            "      \"text\": \"" + escapeJson(prompt) + "\"\n" +
-            "    }]\n" +
-            "  }]\n" +
-            "}";
-        
-        try {
-            // Try with Java 11+ HttpClient
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(url))
-                .header("Content-Type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-            
-            java.net.http.HttpResponse<String> response = client.send(request, 
-                java.net.http.HttpResponse.BodyHandlers.ofString());
-            
-            if (response.statusCode() == 200) {
-                return parseGeminiResponse(response.body());
-            } else {
-                String errorMsg = "API Error: " + response.statusCode() + "\n";
-                errorMsg += response.body();
-                System.err.println("API Error Response: " + errorMsg);
-                return errorMsg;
-            }
-        } catch ( NoClassDefFoundError e) {
-            // Java 11+ HttpClient not available, try legacy URLConnection
-            return callGeminiAPIViaURLConnection(url, jsonBody);
-        }
-    }
-    
-    /**
-     * Fallback for older Java versions using URLConnection
-     */
-    private String callGeminiAPIViaURLConnection(String urlString, String jsonBody) throws Exception {
-        java.net.URL url = new java.net.URL(urlString);
-        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setDoOutput(true);
-        
-        try (java.io.OutputStream os = conn.getOutputStream()) {
-            byte[] input = jsonBody.getBytes("utf-8");
-            os.write(input, 0, input.length);
-        }
-        
-        int status = conn.getResponseCode();
-        if (status == 200) {
-            try (java.io.BufferedReader br = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(conn.getInputStream(), "utf-8"))) {
-                StringBuilder response = new StringBuilder();
-                String responseLine;
-                while ((responseLine = br.readLine()) != null) {
-                    response.append(responseLine.trim());
-                }
-                return parseGeminiResponse(response.toString());
-            }
-        } else {
-            // Read error response
-            StringBuilder errorResponse = new StringBuilder();
-            try (java.io.BufferedReader br = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(conn.getErrorStream(), "utf-8"))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    errorResponse.append(line);
-                }
-            } catch (Exception e) {
-                // Ignore error reading error stream
-            }
-            String errMsg = "API Error: " + status + "\n" + errorResponse.toString();
-            System.err.println(errMsg);
-            return errMsg;
-        }
-    }
-    
-    /**
-     * Parses the JSON response from Gemini API
-     * Handles: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
-     */
-    private String parseGeminiResponse(String jsonResponse) {
-        try {
-            System.out.println("[API RESPONSE] Received " + jsonResponse.length() + " bytes");
-            
-            // Check if it's an error response
-            if (jsonResponse.contains("\"error\"")) {
-                System.err.println("[API ERROR] Error response: " + jsonResponse);
-                return "API Error: " + jsonResponse;
-            }
-            
-            // More robust JSON parsing
-            // Structure: {"candidates":[{"content":{"parts":[{"text":"actual text here"}]}}]}
-            String text = extractJsonField(jsonResponse, "\"text\"");
-            if (text != null && !text.isEmpty()) {
-                System.out.println("[PARSED] Successfully extracted " + text.length() + " chars");
-                return text;
-            }
-            
-            // If parsing fails, return raw response for debugging
-            System.err.println("[PARSE ERROR] Could not extract text field from: " + jsonResponse);
-            return "Unexpected response format:\n\n" + jsonResponse;
-        } catch (Exception e) {
-            System.err.println("[PARSE EXCEPTION] " + e.getMessage());
-            e.printStackTrace();
-            return "Error parsing response: " + e.getMessage();
-        }
-    }
-    
-    /**
-     * Extracts JSON string value from response
-     * Handles escaped quotes and newlines correctly
-     */
-    private String extractJsonField(String json, String fieldName) {
-        // Find the field
-        String marker = fieldName + ":";
-        int fieldIndex = json.indexOf(marker);
-        if (fieldIndex == -1) {
-            return null;
-        }
-        
-        // Skip to the opening quote
-        int startIdx = json.indexOf('"', fieldIndex + marker.length());
-        if (startIdx == -1) {
-            return null;
-        }
-        
-        startIdx++; // Skip the opening quote
-        
-        // Find the closing quote, accounting for escaped quotes
-        StringBuilder result = new StringBuilder();
-        boolean inString = true;
-        for (int i = startIdx; i < json.length() && inString; i++) {
-            char c = json.charAt(i);
-            
-            if (c == '\\' && i + 1 < json.length()) {
-                // Handle escape sequence
-                char next = json.charAt(i + 1);
-                switch (next) {
-                    case 'n':
-                        result.append('\n');
-                        i++; // Skip the next char
-                        break;
-                    case 't':
-                        result.append('\t');
-                        i++;
-                        break;
-                    case 'r':
-                        result.append('\r');
-                        i++;
-                        break;
-                    case '"':
-                        result.append('"');
-                        i++;
-                        break;
-                    case '\\':
-                        result.append('\\');
-                        i++;
-                        break;
-                    default:
-                        result.append(c);
-                }
-            } else if (c == '"') {
-                // End of string
-                inString = false;
-            } else {
-                result.append(c);
-            }
-        }
-        
-        return result.toString();
-    }
-    
-    /**
-     * Escapes special characters for JSON
-     */
-    private String escapeJson(String text) {
-        return text.replace("\\", "\\\\")
-                   .replace("\"", "\\\"")
-                   .replace("\n", "\\n")
-                   .replace("\r", "\\r")
-                   .replace("\t", "\\t");
-    }
+
     
     /**
      * Parses AI response and executes file operations for AGENT mode
@@ -1003,11 +817,12 @@ public class AuxiliaryPanel extends JPanel {
      * Updates the API status label
      */
     private void updateApiStatus() {
+        String active = aiIntegration.getActiveProviderName();
         if (aiIntegration.hasApiKey()) {
-            apiStatusLabel.setText("Status: ✓ Configured");
+            apiStatusLabel.setText("Status (" + active + "): ✓ Configured");
             apiStatusLabel.setForeground(Color.GREEN);
         } else {
-            apiStatusLabel.setText("Status: ✗ Not configured");
+            apiStatusLabel.setText("Status (" + active + "): ✗ Not configured");
             apiStatusLabel.setForeground(Color.RED);
         }
     }

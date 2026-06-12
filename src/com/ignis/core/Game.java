@@ -1075,6 +1075,16 @@ public class Game extends Canvas implements Runnable {
         }
     }
 
+    @Override
+    public void update(Graphics g) {
+        paint(g);
+    }
+
+    @Override
+    public void paint(Graphics g) {
+        render();
+    }
+
     public void render() {
         BufferStrategy bs = this.getBufferStrategy();
         if (bs == null) {

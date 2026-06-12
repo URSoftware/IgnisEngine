@@ -14,6 +14,11 @@ public class AIIntegration {
     private String apiKey = "";
     private File projectRoot;
     private final String SETTINGS_FILE = "ai_settings.json";
+    private String activeProviderName = "Gemini";
+    private final Map<String, String> providerKeys = new HashMap<>();
+    private final Map<String, AIServiceProvider> providers = new HashMap<>();
+    private final Map<String, Long> lastRequestTimes = new HashMap<>();
+    private static final long MIN_REQUEST_INTERVAL_MS = 2000;
     
     // Documentation files to include in context
     private static final String[] DOCUMENTATION_FILES = {
@@ -29,21 +34,71 @@ public class AIIntegration {
      */
     public AIIntegration(File projectRoot) {
         this.projectRoot = projectRoot;
+        
+        // Register default providers
+        providers.put("Gemini", new GeminiProvider());
+        
+        // Skeletons for future providers
+        providers.put("OpenAI", new AIServiceProvider() {
+            @Override public String getName() { return "OpenAI"; }
+            @Override public String callAPI(String apiKey, String prompt) throws Exception {
+                throw new UnsupportedOperationException("OpenAI integration is under construction. Please use Gemini.");
+            }
+        });
+        providers.put("Claude", new AIServiceProvider() {
+            @Override public String getName() { return "Claude"; }
+            @Override public String callAPI(String apiKey, String prompt) throws Exception {
+                throw new UnsupportedOperationException("Claude integration is under construction. Please use Gemini.");
+            }
+        });
+        
         loadSettings();
     }
     
+    public String getActiveProviderName() {
+        return activeProviderName;
+    }
+
+    public void setActiveProviderName(String name) {
+        if (providers.containsKey(name)) {
+            this.activeProviderName = name;
+            saveSettings();
+        }
+    }
+
+    public List<String> getAvailableProviders() {
+        List<String> list = new ArrayList<>(providers.keySet());
+        Collections.sort(list);
+        return list;
+    }
+
     /**
-     * Gets the current API key
+     * Gets the active API key
      */
     public String getApiKey() {
-        return apiKey;
+        return providerKeys.getOrDefault(activeProviderName, "");
     }
     
     /**
-     * Sets and saves the API key
+     * Sets and saves the active API key
      */
     public void setApiKey(String key) {
-        this.apiKey = key != null ? key : "";
+        providerKeys.put(activeProviderName, key != null ? key : "");
+        if ("Gemini".equals(activeProviderName)) {
+            this.apiKey = key != null ? key : "";
+        }
+        saveSettings();
+    }
+
+    public String getApiKeyFor(String provider) {
+        return providerKeys.getOrDefault(provider, "");
+    }
+
+    public void setApiKeyFor(String provider, String key) {
+        providerKeys.put(provider, key != null ? key : "");
+        if ("Gemini".equals(provider)) {
+            this.apiKey = key != null ? key : "";
+        }
         saveSettings();
     }
     
@@ -51,7 +106,42 @@ public class AIIntegration {
      * Checks if API key is configured
      */
     public boolean hasApiKey() {
-        return apiKey != null && !apiKey.trim().isEmpty();
+        String key = getApiKey();
+        return key != null && !key.trim().isEmpty();
+    }
+
+    private synchronized boolean checkRateLimit(String provider) {
+        long currentTime = System.currentTimeMillis();
+        long lastTime = lastRequestTimes.getOrDefault(provider, 0L);
+        long timeSinceLastRequest = currentTime - lastTime;
+        
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+            return false;
+        }
+        
+        lastRequestTimes.put(provider, currentTime);
+        return true;
+    }
+
+    /**
+     * Calls the active AI provider with the configured key and prompt
+     */
+    public String callActiveAI(String prompt) throws Exception {
+        AIServiceProvider provider = providers.get(activeProviderName);
+        if (provider == null) {
+            throw new IllegalStateException("Active AI provider '" + activeProviderName + "' is not registered.");
+        }
+        
+        if (!checkRateLimit(activeProviderName)) {
+            throw new Exception("Rate limit reached. Please wait a moment before sending another prompt.");
+        }
+        
+        String key = getApiKey();
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException(activeProviderName + " API key is not configured in Settings.");
+        }
+        
+        return provider.callAPI(key, prompt);
     }
     
     /**
@@ -236,15 +326,41 @@ public class AIIntegration {
     }
     
     /**
-     * Loads AI settings from local storage
+     * Loads AI settings from secure user home directory with legacy fallback
      */
     private void loadSettings() {
         try {
-            File settingsFile = new File(projectRoot, SETTINGS_FILE);
-            if (settingsFile.exists()) {
-                String content = new String(Files.readAllBytes(settingsFile.toPath()), StandardCharsets.UTF_8);
+            File userHomeDir = new File(System.getProperty("user.home"), ".ignis");
+            File secureSettingsFile = new File(userHomeDir, SETTINGS_FILE);
+            
+            if (secureSettingsFile.exists()) {
+                String content = new String(Files.readAllBytes(secureSettingsFile.toPath()), StandardCharsets.UTF_8);
                 JSONObject json = new JSONObject(content);
                 apiKey = json.optString("apiKey", "");
+                activeProviderName = json.optString("activeProvider", "Gemini");
+                if (json.has("apiKeys")) {
+                    JSONObject keysObj = json.getJSONObject("apiKeys");
+                    for (String key : keysObj.keySet()) {
+                        providerKeys.put(key, keysObj.getString(key));
+                    }
+                }
+                // Backwards compatibility if apiKeys was empty but apiKey existed
+                if (!providerKeys.containsKey("Gemini") && !apiKey.isEmpty()) {
+                    providerKeys.put("Gemini", apiKey);
+                }
+            } else {
+                // Legacy fallback: read from project root and migrate
+                File projectSettingsFile = new File(projectRoot, SETTINGS_FILE);
+                if (projectSettingsFile.exists()) {
+                    String content = new String(Files.readAllBytes(projectSettingsFile.toPath()), StandardCharsets.UTF_8);
+                    JSONObject json = new JSONObject(content);
+                    apiKey = json.optString("apiKey", "");
+                    activeProviderName = json.optString("activeProvider", "Gemini");
+                    if (!apiKey.isEmpty()) {
+                        providerKeys.put("Gemini", apiKey);
+                    }
+                    saveSettings(); // Save to home & delete legacy
+                }
             }
         } catch (Exception e) {
             System.err.println("Error loading AI settings: " + e.getMessage());
@@ -252,15 +368,33 @@ public class AIIntegration {
     }
     
     /**
-     * Saves AI settings to local storage
+     * Saves AI settings securely to user home directory and deletes legacy project root files
      */
     private void saveSettings() {
         try {
+            File userHomeDir = new File(System.getProperty("user.home"), ".ignis");
+            if (!userHomeDir.exists()) {
+                userHomeDir.mkdirs();
+            }
+            File secureSettingsFile = new File(userHomeDir, SETTINGS_FILE);
+            
             JSONObject json = new JSONObject();
             json.put("apiKey", apiKey);
+            json.put("activeProvider", activeProviderName);
             
-            File settingsFile = new File(projectRoot, SETTINGS_FILE);
-            Files.write(settingsFile.toPath(), json.toString(2).getBytes(StandardCharsets.UTF_8));
+            JSONObject keysObj = new JSONObject();
+            for (Map.Entry<String, String> entry : providerKeys.entrySet()) {
+                keysObj.put(entry.getKey(), entry.getValue());
+            }
+            json.put("apiKeys", keysObj);
+            
+            Files.write(secureSettingsFile.toPath(), json.toString(2).getBytes(StandardCharsets.UTF_8));
+            
+            // Delete project root legacy file if it exists to avoid exposing API key
+            File projectSettingsFile = new File(projectRoot, SETTINGS_FILE);
+            if (projectSettingsFile.exists()) {
+                projectSettingsFile.delete();
+            }
         } catch (Exception e) {
             System.err.println("Error saving AI settings: " + e.getMessage());
         }

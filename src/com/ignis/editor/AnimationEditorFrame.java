@@ -63,6 +63,7 @@ public class AnimationEditorFrame extends JFrame {
 
     public AnimationEditorFrame(File projectFolder, File spritesFolder, GameObject targetObject) {
         super("Ignis Animation Editor");
+        com.ignis.core.AppIconHelper.setWindowIcon(this);
         this.projectFolder = projectFolder;
         this.spritesFolder = spritesFolder;
         this.targetObject = targetObject;

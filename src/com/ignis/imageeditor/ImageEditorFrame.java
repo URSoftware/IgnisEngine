@@ -32,6 +32,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -50,13 +51,18 @@ public class ImageEditorFrame extends JFrame {
     private final DefaultListModel<ImageDocument.Layer> layerModel = new DefaultListModel<>();
     private final JList<ImageDocument.Layer> layerList = new JList<>(layerModel);
     private final JLabel colorPreview = new JLabel("   ");
+    private final JLabel statusLabel = new JLabel(" Ready");
 
     /** Project assets/sprites folder, or null when opened standalone. */
     private File exportFolder;
     private File currentFile;
 
+    private JComboBox<String> zoomCombo;
+    private static final double[] ZOOM_LEVELS = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
+
     public ImageEditorFrame(File exportFolder) {
         super("Ignis Image Editor");
+        com.ignis.core.AppIconHelper.setWindowIcon(this);
         this.exportFolder = exportFolder;
 
         canvas = new PaintCanvas(new ImageDocument(256, 256));
@@ -70,18 +76,48 @@ public class ImageEditorFrame extends JFrame {
             public void onColorPicked(Color picked) {
                 colorPreview.setBackground(picked);
             }
+
+            @Override
+            public void onMouseMoved(Point imagePos) {
+                updateStatus(imagePos);
+            }
         });
 
         setJMenuBar(buildMenuBar());
         add(buildToolBar(), BorderLayout.NORTH);
 
-        JScrollPane canvasScroll = new JScrollPane(canvas);
+        JPanel canvasWrapper = new JPanel(new java.awt.GridBagLayout());
+        canvasWrapper.setBackground(new Color(35, 35, 35));
+        canvasWrapper.add(canvas);
+
+        JScrollPane canvasScroll = new JScrollPane(canvasWrapper);
         canvasScroll.getViewport().setBackground(new Color(35, 35, 35));
+        
+        // Ctrl + Wheel Zoom
+        canvasScroll.addMouseWheelListener(e -> {
+            if (e.isControlDown()) {
+                e.consume();
+                if (e.getWheelRotation() < 0) {
+                    zoomIn();
+                } else if (e.getWheelRotation() > 0) {
+                    zoomOut();
+                }
+            }
+        });
+
         add(canvasScroll, BorderLayout.CENTER);
 
         add(buildLayersPanel(), BorderLayout.EAST);
 
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        statusPanel.setBorder(BorderFactory.createEtchedBorder());
+        statusPanel.setBackground(new Color(45, 45, 45));
+        statusLabel.setForeground(Color.LIGHT_GRAY);
+        statusPanel.add(statusLabel);
+        add(statusPanel, BorderLayout.SOUTH);
+
         refreshLayers();
+        updateStatus(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setSize(1000, 700);
         setLocationByPlatform(true);
@@ -167,14 +203,17 @@ public class ImageEditorFrame extends JFrame {
         toolbar.add(new JLabel(" Size: "));
         JSpinner sizeSpinner = new JSpinner(new SpinnerNumberModel(4, 1, 128, 1));
         sizeSpinner.setMaximumSize(new Dimension(60, 26));
-        sizeSpinner.addChangeListener(e -> canvas.setBrushSize((Integer) sizeSpinner.getValue()));
+        sizeSpinner.addChangeListener(e -> {
+            canvas.setBrushSize((Integer) sizeSpinner.getValue());
+            updateStatus(null);
+        });
         toolbar.add(sizeSpinner);
 
         toolbar.addSeparator();
 
         // Zoom
         toolbar.add(new JLabel(" Zoom: "));
-        JComboBox<String> zoomCombo = new JComboBox<>(
+        zoomCombo = new JComboBox<>(
                 new String[]{"25%", "50%", "100%", "200%", "400%", "800%"});
         zoomCombo.setSelectedItem("100%");
         zoomCombo.setMaximumSize(new Dimension(90, 26));
@@ -182,6 +221,7 @@ public class ImageEditorFrame extends JFrame {
             String value = (String) zoomCombo.getSelectedItem();
             if (value != null) {
                 canvas.setZoom(Integer.parseInt(value.replace("%", "")) / 100.0);
+                updateStatus(null);
             }
         });
         toolbar.add(zoomCombo);
@@ -381,6 +421,47 @@ public class ImageEditorFrame extends JFrame {
             return new File(file.getParentFile(), file.getName() + ".png");
         }
         return file;
+    }
+
+    private void zoomIn() {
+        double currentZoom = canvas.getZoom();
+        for (int i = 0; i < ZOOM_LEVELS.length; i++) {
+            if (ZOOM_LEVELS[i] > currentZoom + 0.001) {
+                setZoomLevel(ZOOM_LEVELS[i]);
+                return;
+            }
+        }
+    }
+
+    private void zoomOut() {
+        double currentZoom = canvas.getZoom();
+        for (int i = ZOOM_LEVELS.length - 1; i >= 0; i--) {
+            if (ZOOM_LEVELS[i] < currentZoom - 0.001) {
+                setZoomLevel(ZOOM_LEVELS[i]);
+                return;
+            }
+        }
+    }
+
+    private void setZoomLevel(double zoom) {
+        canvas.setZoom(zoom);
+        String match = (int) Math.round(zoom * 100) + "%";
+        if (zoomCombo != null) {
+            for (int i = 0; i < zoomCombo.getItemCount(); i++) {
+                if (zoomCombo.getItemAt(i).equals(match)) {
+                    zoomCombo.setSelectedIndex(i);
+                    break;
+                }
+            }
+        }
+        updateStatus(null);
+    }
+
+    private void updateStatus(Point imgPos) {
+        String coords = (imgPos == null) ? "[- , -]" : "[" + imgPos.x + ", " + imgPos.y + "]";
+        int brushSize = canvas.getBrushSize();
+        int zoomPercent = (int) Math.round(canvas.getZoom() * 100);
+        statusLabel.setText(String.format(" Coords: %s  |  Brush Size: %d px  |  Zoom: %d%%", coords, brushSize, zoomPercent));
     }
 
     /** Standalone launcher (no project integration). */

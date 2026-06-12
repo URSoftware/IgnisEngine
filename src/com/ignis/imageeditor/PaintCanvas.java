@@ -39,6 +39,7 @@ public class PaintCanvas extends JPanel {
     private Point dragStart;
     private Point dragCurrent;
     private boolean painting;
+    private Point mouseImagePos;
 
     private final Deque<UndoEntry> undoStack = new ArrayDeque<>();
     private final Deque<UndoEntry> redoStack = new ArrayDeque<>();
@@ -48,6 +49,8 @@ public class PaintCanvas extends JPanel {
         void onDocumentChanged();
 
         void onColorPicked(Color picked);
+
+        void onMouseMoved(Point imagePos);
     }
 
     private CanvasListener listener;
@@ -68,17 +71,43 @@ public class PaintCanvas extends JPanel {
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                onPress(toImage(e.getPoint()));
+                mouseImagePos = toImage(e.getPoint());
+                onPress(mouseImagePos);
+                if (listener != null) {
+                    listener.onMouseMoved(mouseImagePos);
+                }
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                onDrag(toImage(e.getPoint()));
+                mouseImagePos = toImage(e.getPoint());
+                onDrag(mouseImagePos);
+                if (listener != null) {
+                    listener.onMouseMoved(mouseImagePos);
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 onRelease(toImage(e.getPoint()));
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                mouseImagePos = toImage(e.getPoint());
+                repaint();
+                if (listener != null) {
+                    listener.onMouseMoved(mouseImagePos);
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                mouseImagePos = null;
+                repaint();
+                if (listener != null) {
+                    listener.onMouseMoved(null);
+                }
             }
         };
         addMouseListener(mouse);
@@ -123,6 +152,10 @@ public class PaintCanvas extends JPanel {
 
     public void setBrushSize(int brushSize) {
         this.brushSize = Math.max(1, brushSize);
+    }
+
+    public int getBrushSize() {
+        return brushSize;
     }
 
     public void setZoom(double zoom) {
@@ -365,6 +398,37 @@ public class PaintCanvas extends JPanel {
                 default -> {
                 }
             }
+        }
+
+        // Pixel grid (only when zoomed in at 400% or more)
+        if (zoom >= 4.0) {
+            g.setColor(new Color(128, 128, 128, 80)); // Semi-transparent grey
+            g.setStroke(new BasicStroke(1.0f));
+            for (int x = 1; x < document.getWidth(); x++) {
+                int px = (int) (x * zoom);
+                g.drawLine(px, 0, px, h);
+            }
+            for (int y = 1; y < document.getHeight(); y++) {
+                int py = (int) (y * zoom);
+                g.drawLine(0, py, w, py);
+            }
+        }
+
+        // Brush area of influence preview (non-destructive)
+        if (mouseImagePos != null && (tool == ToolType.PENCIL || tool == ToolType.ERASER)) {
+            double cx = (mouseImagePos.x + 0.5) * zoom;
+            double cy = (mouseImagePos.y + 0.5) * zoom;
+            double r = (brushSize * zoom) / 2.0;
+
+            g.setStroke(new BasicStroke(1.0f));
+            
+            // Outer white ring
+            g.setColor(Color.WHITE);
+            g.drawOval((int) (cx - r - 1), (int) (cy - r - 1), (int) (2 * r + 2), (int) (2 * r + 2));
+            
+            // Inner black ring
+            g.setColor(Color.BLACK);
+            g.drawOval((int) (cx - r), (int) (cy - r), (int) (2 * r), (int) (2 * r));
         }
 
         // Canvas border

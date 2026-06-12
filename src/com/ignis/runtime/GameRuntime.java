@@ -132,6 +132,7 @@ public class GameRuntime {
                 ? config.title
                 : project.getProjectName();
         JFrame frame = new JFrame(title);
+        com.ignis.core.AppIconHelper.setWindowIcon(frame);
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         frame.addWindowListener(new WindowAdapter() {
             @Override
