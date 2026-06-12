@@ -60,6 +60,9 @@ A aplicação consumidora final que acopla o motor e o editor para a compilaçã
 
 Toda a documentação técnica detalhada do projeto está modularizada na pasta [doc/](doc/). Abaixo está o índice organizado de arquivos por área de interesse:
 
+### Planejamento
+* **[Roadmap do IgnisEngine](doc/ROADMAP.md)**: Planejamento oficial de evolução do motor — Builder multiplataforma, exportação C++, editores integrados (imagem, animação e áudio), expansão da IA, sistema de notas e plataforma Comunidade/Marketplace.
+
 ### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
 * **[Manual de Uso Completo](doc/AGENT_MODE_GUIDE.md)**: Guia profundo contendo exemplos práticos, operações suportadas e troubleshooting de API.
