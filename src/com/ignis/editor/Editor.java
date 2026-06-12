@@ -1612,9 +1612,9 @@ public class Editor extends JFrame {
         if (obj != null) {
             setInspectorEnabled(true);
             inspectorNameField.setText(obj.getName());
-            inspectorPosXField.setText(String.format("%.1f", obj.getX()));
-            inspectorPosYField.setText(String.format("%.1f", obj.getY()));
-            inspectorRotationField.setText(String.format("%.1f", obj.getRotation()));
+            inspectorPosXField.setText(String.format(Locale.US, "%.1f", obj.getX()));
+            inspectorPosYField.setText(String.format(Locale.US, "%.1f", obj.getY()));
+            inspectorRotationField.setText(String.format(Locale.US, "%.1f", obj.getRotation()));
             inspectorScaleXField.setText(String.valueOf(obj.getWidth()));
             inspectorScaleYField.setText(String.valueOf(obj.getHeight()));
             
@@ -1691,10 +1691,10 @@ public class Editor extends JFrame {
                 obj.setName(name);
             }
 
-            // Parse numeric values
-            String posXText = inspectorPosXField.getText().trim();
-            String posYText = inspectorPosYField.getText().trim();
-            String rotText = inspectorRotationField.getText().trim();
+            // Parse numeric values (robust against locale-specific comma separators)
+            String posXText = inspectorPosXField.getText().trim().replace(',', '.');
+            String posYText = inspectorPosYField.getText().trim().replace(',', '.');
+            String rotText = inspectorRotationField.getText().trim().replace(',', '.');
             String widthText = inspectorScaleXField.getText().trim();
             String heightText = inspectorScaleYField.getText().trim();
 
@@ -5282,9 +5282,9 @@ public class Editor extends JFrame {
                     if (selected != null) {
                         // Update position fields without triggering full refresh
                         isUpdatingInspector = true;
-                        inspectorPosXField.setText(String.format("%.1f", selected.getX()));
-                        inspectorPosYField.setText(String.format("%.1f", selected.getY()));
-                        inspectorRotationField.setText(String.format("%.1f", selected.getRotation()));
+                        inspectorPosXField.setText(String.format(Locale.US, "%.1f", selected.getX()));
+                        inspectorPosYField.setText(String.format(Locale.US, "%.1f", selected.getY()));
+                        inspectorRotationField.setText(String.format(Locale.US, "%.1f", selected.getRotation()));
                         isUpdatingInspector = false;
                     }
                 }
@@ -5397,6 +5397,21 @@ public class Editor extends JFrame {
         animationEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         animationEditorItem.addActionListener(e -> openAnimationEditor());
         toolsMenu.add(animationEditorItem);
+
+        JMenuItem audioEditorItem = new JMenuItem("Audio Editor (DAW)");
+        audioEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        audioEditorItem.addActionListener(e -> openAudioEditor());
+        toolsMenu.add(audioEditorItem);
+
+        JMenuItem noteSystemItem = new JMenuItem("Note System (Notion)");
+        noteSystemItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        noteSystemItem.addActionListener(e -> openNoteSystem());
+        toolsMenu.add(noteSystemItem);
+
+        JMenuItem communityItem = new JMenuItem("Community & Marketplace");
+        communityItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        communityItem.addActionListener(e -> openCommunityMarketplace());
+        toolsMenu.add(communityItem);
 
         menuBar.add(toolsMenu);
 
@@ -5526,6 +5541,29 @@ public class Editor extends JFrame {
         AnimationEditorFrame animationEditor =
                 new AnimationEditorFrame(projectFolder, spritesFolder, game.getSelectedObject());
         animationEditor.setVisible(true);
+    }
+
+    private void openAudioEditor() {
+        com.ignis.audioeditor.AudioEditorFrame audioEditor = new com.ignis.audioeditor.AudioEditorFrame();
+        audioEditor.setVisible(true);
+    }
+
+    private void openNoteSystem() {
+        File projectFolder = null;
+        if (currentProject != null && currentProject.getProjectFile() != null) {
+            projectFolder = IgnisProjectIO.getProjectFolder(currentProject.getProjectFile());
+        }
+        com.ignis.notes.NoteSystemFrame noteSystem = new com.ignis.notes.NoteSystemFrame(projectFolder, aiIntegration);
+        noteSystem.setVisible(true);
+    }
+
+    private void openCommunityMarketplace() {
+        File projectFolder = null;
+        if (currentProject != null && currentProject.getProjectFile() != null) {
+            projectFolder = IgnisProjectIO.getProjectFolder(currentProject.getProjectFile());
+        }
+        com.ignis.community.CommunityFrame community = new com.ignis.community.CommunityFrame(projectFolder);
+        community.setVisible(true);
     }
 
     /**
