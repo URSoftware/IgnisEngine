@@ -8,8 +8,8 @@ Planejamento oficial de evolução do motor gráfico. Todos os módulos devem se
 
 | # | Módulo | Status |
 |---|--------|--------|
-| 1 | Builder multiplataforma (Java) | Planejado |
-| 2 | Sistema de exportação para C++ | Planejado |
+| 1 | Builder multiplataforma (Java) | Implementado — ver [BUILDER_GUIDE.md](BUILDER_GUIDE.md) |
+| 2 | Sistema de exportação para C++ | Implementado (esqueleto compilável; portagem do loop nativo pendente) |
 | 3 | Editor de imagens integrado | Planejado |
 | 4 | Sistema de animações (2D/3D) | Planejado |
 | 5 | Integração Gemini (expansão do Agent Mode) | Parcial — base existente |

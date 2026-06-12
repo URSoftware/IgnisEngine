@@ -23,11 +23,15 @@ IgnisEngine/
 │   ├── 📁 core/                 # Core da engine (loop principal e renderização)
 │   │   ├── 📄 Game.java         # Loop do jogo, tick/render e canvas
 │   │   └── 📄 GameObject.java   # Classe base para objetos de jogo
+│   ├── 📁 builder/              # Builder: geração dos binários finais (Java e C++)
+│   │   ├── 📄 Builder.java      # Orquestrador de builds multiplataforma
+│   │   └── 📄 ...               # Estratégias Java/C++, configuração e utilitários
 │   ├── 📁 editor/               # Editor visual integrado para modelagem de cenas
 │   │   ├── 📄 Editor.java       # Interface gráfica e gerenciamento de painéis
+│   │   ├── 📄 BuildDialog.java  # Diálogo de build (menu Build)
 │   │   └── 📄 settings.json     # Configurações salvas do layout do editor
-│   └── 📁 main/                 # Ponto de entrada do jogo construído na engine
-│       └── 📄 Main.java
+│   └── 📁 runtime/              # Runtime standalone dos jogos distribuídos
+│       └── 📄 GameRuntime.java  # Entry point dos builds (carrega .ignis e executa)
 ├── 📁 doc/                      # Documentação técnica detalhada (Módulos do Vault)
 ├── 📁 .mvn/wrapper/             # Maven Wrapper para execução independente de versão
 ├── 📄 pom.xml                   # Configuração de dependências Maven
@@ -62,6 +66,9 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 
 ### Planejamento
 * **[Roadmap do IgnisEngine](doc/ROADMAP.md)**: Planejamento oficial de evolução do motor — Builder multiplataforma, exportação C++, editores integrados (imagem, animação e áudio), expansão da IA, sistema de notas e plataforma Comunidade/Marketplace.
+
+### Builder e Distribuição
+* **[Guia do Builder](doc/BUILDER_GUIDE.md)**: Geração dos binários finais do jogo — builds JVM para Windows/Linux/macOS, exportação de projetos C++ para consoles, uso pelo editor (Build → Build Project) e pela linha de comando.
 
 ### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
 * **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
@@ -145,7 +152,7 @@ Utilize os comandos a seguir no terminal para compilar e empacotar o projeto:
    - O editor abrirá configurado por padrão.
    - Divisórias de painéis ajustadas dinamicamente pelo mouse serão persistidas automaticamente ao sair.
 4. **Para iniciar apenas o Core de teste:** Execute a classe `src.com.ignis.core.Game`.
-5. **Para iniciar o jogo final:** Execute a classe `src.com.ignis.main.Main`.
+5. **Para gerar e executar o jogo final:** Use o menu **Build → Build Project...** no editor (ou a CLI `com.ignis.builder.Builder`) e execute o launcher gerado. Detalhes no [Guia do Builder](doc/BUILDER_GUIDE.md).
 
 ### Configuração do Editor Visual
 

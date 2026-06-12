@@ -5643,7 +5643,17 @@ public class Editor extends JFrame {
         fileMenu.add(exitItem);
 
         menuBar.add(fileMenu);
-        
+
+        // ==================== BUILD MENU ====================
+        JMenu buildMenu = new JMenu("Build");
+
+        JMenuItem buildProjectItem = new JMenuItem("Build Project...");
+        buildProjectItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        buildProjectItem.addActionListener(e -> openBuildDialog());
+        buildMenu.add(buildProjectItem);
+
+        menuBar.add(buildMenu);
+
         // ==================== VIEW MENU (CAMERA CONTROLS) ====================
         JMenu viewMenu = new JMenu("View");
         
@@ -5739,7 +5749,25 @@ public class Editor extends JFrame {
         
         setJMenuBar(menuBar);
     }
-    
+
+    /**
+     * Opens the Build dialog for the current project.
+     * Requires a saved project (.ignis file on disk).
+     */
+    private void openBuildDialog() {
+        if (currentProject == null || currentProject.getProjectFile() == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Open or save a project before building.",
+                    "Build Project",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        BuildDialog dialog = new BuildDialog(this,
+                currentProject.getProjectFile(),
+                currentProject.getProjectName());
+        dialog.setVisible(true);
+    }
+
     /**
      * Focuses the camera on the currently selected object.
      */
