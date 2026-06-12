@@ -101,7 +101,13 @@ public class CppExportStrategy implements BuildStrategy {
         sb.append("    int scriptCount;\n");
         sb.append("};\n\n");
 
+        // Filename of the project's entry scene (e.g. "main.scene.json"), used to
+        // emit a stable SCENE_MAIN alias decoupled from the scene's display name.
+        String mainSceneFile = projectJson.optString("mainScene", "");
+        String mainSymbol = null;
+
         List<String> sceneEntries = BuildIO.listZipEntries(request.getIgnisFile(), "scenes/", ".scene.json");
+        Set<String> usedSymbols = new HashSet<>();
         for (String entryName : sceneEntries) {
             String sceneText = BuildIO.readZipEntryText(request.getIgnisFile(), entryName);
             if (sceneText == null) {
@@ -109,7 +115,15 @@ public class CppExportStrategy implements BuildStrategy {
             }
             JSONObject sceneJson = new JSONObject(sceneText);
             String sceneName = sceneJson.optString("sceneName", "Scene");
-            String symbol = "SCENE_" + sceneName.toUpperCase().replaceAll("[^A-Z0-9]", "_");
+            String symbol = uniqueSymbol(sceneName, usedSymbols);
+
+            // First scene is the default entry; an explicit mainScene match wins.
+            if (mainSymbol == null) {
+                mainSymbol = symbol;
+            }
+            if (!mainSceneFile.isEmpty() && entryName.endsWith(mainSceneFile)) {
+                mainSymbol = symbol;
+            }
 
             sb.append("// Scene: ").append(sceneName).append(" (").append(entryName).append(")\n");
             sb.append("constexpr EntityData ").append(symbol).append("[] = {\n");
@@ -138,8 +152,33 @@ public class CppExportStrategy implements BuildStrategy {
                     .append(entities != null ? entities.length() : 0).append(";\n\n");
         }
 
+        // Canonical entry-scene alias so main.cpp never depends on a scene's name.
+        // Falls back to an empty scene when the project ships no scenes.
+        sb.append("// Canonical entry scene (decoupled from scene display name)\n");
+        if (mainSymbol != null) {
+            sb.append("constexpr const EntityData* SCENE_MAIN = ").append(mainSymbol).append(";\n");
+            sb.append("constexpr int SCENE_MAIN_COUNT = ").append(mainSymbol).append("_COUNT;\n\n");
+        } else {
+            sb.append("constexpr const EntityData* SCENE_MAIN = nullptr;\n");
+            sb.append("constexpr int SCENE_MAIN_COUNT = 0;\n\n");
+        }
+
         sb.append("} // namespace ignis\n");
         return sb.toString();
+    }
+
+    /** Builds a C++ identifier from a scene name, disambiguating collisions. */
+    private static String uniqueSymbol(String sceneName, Set<String> used) {
+        // The "SCENE_" prefix guarantees a valid identifier start; only an
+        // all-symbol scene name would leave nothing after it.
+        String suffixPart = sceneName.toUpperCase().replaceAll("[^A-Z0-9]", "_");
+        String base = "SCENE_" + (suffixPart.isEmpty() ? "UNNAMED" : suffixPart);
+        String symbol = base;
+        int counter = 2;
+        while (!used.add(symbol)) {
+            symbol = base + "_" + counter++;
+        }
+        return symbol;
     }
 
     private static String escape(String value) {
@@ -210,7 +249,7 @@ public class CppExportStrategy implements BuildStrategy {
                 + "#include \"ignis_runtime.hpp\"\n"
                 + "#include \"scene_data.h\"\n\n"
                 + "int main() {\n"
-                + "    ignis::runtime_init(ignis::SCENE_MAINSCENE, ignis::SCENE_MAINSCENE_COUNT);\n"
+                + "    ignis::runtime_init(ignis::SCENE_MAIN, ignis::SCENE_MAIN_COUNT);\n"
                 + "    // Platform backends own the real game loop; this skeleton runs one frame.\n"
                 + "    ignis::runtime_tick(1.0 / 60.0);\n"
                 + "    ignis::runtime_render();\n"
