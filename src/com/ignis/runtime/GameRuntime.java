@@ -136,9 +136,7 @@ public class GameRuntime {
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                game.stop();
-                frame.dispose();
-                System.exit(0);
+                shutdown(game, frame);
             }
         });
 
@@ -166,6 +164,37 @@ public class GameRuntime {
         // Start simulation: compiles scripts, initializes them and enters PLAYING state
         game.playWorld();
         game.start();
+    }
+
+    /**
+     * Orderly shutdown: stops the game loop and audio off the EDT, then exits.
+     * A watchdog guarantees the process dies even if a resource hangs, so no
+     * orphan process is ever left behind.
+     */
+    private static void shutdown(Game game, JFrame frame) {
+        frame.setVisible(false);
+        frame.dispose();
+
+        Thread watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException ignored) {
+                return;
+            }
+            Runtime.getRuntime().halt(0);
+        }, "IgnisShutdownWatchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
+
+        Thread shutdownThread = new Thread(() -> {
+            try {
+                game.stop();
+                com.ignis.core.IgnisSoundEngine.getInstance().shutdown();
+            } finally {
+                System.exit(0);
+            }
+        }, "IgnisShutdown");
+        shutdownThread.start();
     }
 
     private static void fail(String message, Exception cause) {

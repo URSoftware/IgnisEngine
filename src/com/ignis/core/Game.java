@@ -51,7 +51,8 @@ public class Game extends Canvas implements Runnable {
     private Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
 
     private Thread thread;
-    private boolean isRunning = false;
+    // volatile: written by the EDT (stop) and read by the game loop thread
+    private volatile boolean isRunning = false;
     
     // ScriptManager para gerenciar scripts
     private ScriptManager scriptManager;
@@ -894,10 +895,14 @@ public class Game extends Canvas implements Runnable {
 
     public synchronized void stop() {
         isRunning = false;
+        // Joining from the loop thread itself would deadlock (self-join)
+        if (thread == null || thread == Thread.currentThread()) {
+            return;
+        }
         try {
-            thread.join();
+            thread.join(2000);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -1861,9 +1866,15 @@ public class Game extends Canvas implements Runnable {
                 tick();
                 render();
                 delta--;
+            } else {
+                // Yield between frames instead of busy-spinning a full core
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
-
-        stop();
     }
 }
