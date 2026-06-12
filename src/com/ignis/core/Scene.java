@@ -123,7 +123,12 @@ public class Scene {
             if (entity.getMusicPath() != null) {
                 entityJson.put("musicPath", entity.getMusicPath().toJSON());
             }
-            
+
+            // Save attached animation component
+            if (entity.getAnimator() != null && !entity.getAnimator().getAnimations().isEmpty()) {
+                entityJson.put("animator", entity.getAnimator().toJSON());
+            }
+
             // Save attached scripts with their variable values
             if (!entity.getScriptNames().isEmpty()) {
                 JSONArray scriptsArray = new JSONArray();
@@ -236,7 +241,13 @@ public class Scene {
                 MusicPath musicPath = MusicPath.fromJSON(entityJson.getJSONObject("musicPath"));
                 entity.setMusicPath(musicPath);
             }
-            
+
+            // Load attached animation component
+            if (entityJson.has("animator")) {
+                entity.setAnimator(
+                        com.ignis.animation.Animator.fromJSON(entityJson.getJSONObject("animator")));
+            }
+
             // Load attached scripts (supports both old string format and new object format)
             if (entityJson.has("scripts")) {
                 JSONArray scriptsArray = entityJson.getJSONArray("scripts");

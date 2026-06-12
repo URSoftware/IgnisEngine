@@ -979,9 +979,10 @@ public class Game extends Canvas implements Runnable {
         // Restore initial positions
         restoreInitialSnapshots();
         
-        // Resetar scripts
+        // Resetar scripts e animadores (restaura sprite anterior à animação)
         for (GameObject entity : entities) {
             entity.resetScripts();
+            entity.resetAnimator();
         }
     }
 
@@ -1044,7 +1045,10 @@ public class Game extends Canvas implements Runnable {
             for (int i = 0; i < entities.size(); i++) {
                 GameObject entity = entities.get(i);
                 entity.tick();
-                
+
+                // Advance sprite animation (fixed 60 ticks/sec step)
+                entity.tickAnimator(1.0 / 60.0);
+
                 // Executar scripts anexados ao objeto
                 entity.tickScripts();
             }

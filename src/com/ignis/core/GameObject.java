@@ -34,6 +34,11 @@ public abstract class GameObject {
     // Audio component
     protected MusicPath musicPath = null;
 
+    // Animation component (optional). Drives the sprite over time during play.
+    protected com.ignis.animation.Animator animator = null;
+    // Sprite shown before the animator took over, restored when play stops.
+    private transient String spritePathBeforeAnimation = null;
+
     public GameObject(String name, Game game, double x, double y, int width, int height) {
         this.id = java.util.UUID.randomUUID().toString();
         this.name = name;
@@ -176,6 +181,58 @@ public abstract class GameObject {
      */
     public void setMusicPath(MusicPath musicPath) {
         this.musicPath = musicPath;
+    }
+
+    // ==================== ANIMATION COMPONENT ====================
+
+    public com.ignis.animation.Animator getAnimator() {
+        return animator;
+    }
+
+    public void setAnimator(com.ignis.animation.Animator animator) {
+        this.animator = animator;
+    }
+
+    /** Returns the existing animator or creates and attaches a new one. */
+    public com.ignis.animation.Animator getOrCreateAnimator() {
+        if (animator == null) {
+            animator = new com.ignis.animation.Animator();
+        }
+        return animator;
+    }
+
+    /**
+     * Advances the animator one fixed step (called every frame while the world
+     * is playing) and applies the current frame to this object's sprite. The
+     * sprite present before animation started is captured so it can be restored
+     * when the world stops, keeping the editor state intact.
+     */
+    public void tickAnimator(double dt) {
+        if (animator == null) {
+            return;
+        }
+        animator.update(dt);
+        String frame = animator.getCurrentSpritePath();
+        if (frame != null && !frame.isEmpty()) {
+            if (spritePathBeforeAnimation == null) {
+                spritePathBeforeAnimation = spritePath;
+            }
+            if (!frame.equals(spritePath)) {
+                setSpritePath(frame);
+            }
+        }
+    }
+
+    /** Resets the animator and restores the pre-animation sprite. */
+    public void resetAnimator() {
+        if (animator == null) {
+            return;
+        }
+        animator.reset();
+        if (spritePathBeforeAnimation != null) {
+            setSpritePath(spritePathBeforeAnimation);
+            spritePathBeforeAnimation = null;
+        }
     }
 
     // Metodo para obter o tipo da entidade (nome da classe)

@@ -5402,6 +5402,11 @@ public class Editor extends JFrame {
         imageEditorItem.addActionListener(e -> openImageEditor());
         toolsMenu.add(imageEditorItem);
 
+        JMenuItem animationEditorItem = new JMenuItem("Animation Editor");
+        animationEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        animationEditorItem.addActionListener(e -> openAnimationEditor());
+        toolsMenu.add(animationEditorItem);
+
         menuBar.add(toolsMenu);
 
         // ==================== VIEW MENU (CAMERA CONTROLS) ====================
@@ -5513,6 +5518,23 @@ public class Editor extends JFrame {
         com.ignis.imageeditor.ImageEditorFrame imageEditor =
                 new com.ignis.imageeditor.ImageEditorFrame(spritesFolder);
         imageEditor.setVisible(true);
+    }
+
+    /**
+     * Opens the animation editor. Frames are picked from the project's sprites,
+     * saved to project/assets/animations, and an Animator can be assigned to the
+     * currently selected object.
+     */
+    private void openAnimationEditor() {
+        File projectFolder = null;
+        File spritesFolder = null;
+        if (currentProject != null && currentProject.getProjectFile() != null) {
+            projectFolder = IgnisProjectIO.getProjectFolder(currentProject.getProjectFile());
+            spritesFolder = new File(projectFolder, "assets/sprites");
+        }
+        AnimationEditorFrame animationEditor =
+                new AnimationEditorFrame(projectFolder, spritesFolder, game.getSelectedObject());
+        animationEditor.setVisible(true);
     }
 
     /**
