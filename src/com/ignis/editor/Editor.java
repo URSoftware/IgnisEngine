@@ -719,6 +719,13 @@ public class Editor extends JFrame {
                 // Update file browser to project directory
                 updateProjectRoot();
 
+                // Compile and reload scripts so they are instantiated and variables are loaded
+                if (scriptManager != null) {
+                    System.out.println("Compiling scripts on project open...");
+                    scriptManager.compileAllScripts();
+                    reloadAllScriptInstances();
+                }
+
                 // Update title
                 setTitle("IgnisEngine - Editor - " + currentProject.getProjectName());
 
@@ -2400,6 +2407,77 @@ public class Editor extends JFrame {
             enableGameObjectPickMode(script, field, comboBox);
         });
         
+        // Setup Drag & Drop from Hierarchy
+        DropTargetListener dropListener = new DropTargetListener() {
+            private final javax.swing.border.Border originalBorder = comboBox.getBorder();
+            private final javax.swing.border.Border highlightBorder = BorderFactory.createLineBorder(new Color(100, 200, 255), 1);
+
+            @Override
+            public void dragEnter(DropTargetDragEvent dtde) {
+                if (dtde.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY_OR_MOVE);
+                    comboBox.setBorder(highlightBorder);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dragOver(DropTargetDragEvent dtde) {
+                if (dtde.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+                    dtde.acceptDrag(DnDConstants.ACTION_COPY_OR_MOVE);
+                } else {
+                    dtde.rejectDrag();
+                }
+            }
+
+            @Override
+            public void dropActionChanged(DropTargetDragEvent dtde) {}
+
+            @Override
+            public void dragExit(DropTargetEvent dte) {
+                comboBox.setBorder(originalBorder);
+            }
+
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                comboBox.setBorder(originalBorder);
+                try {
+                    if (dtde.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+                        dtde.acceptDrop(DnDConstants.ACTION_COPY_OR_MOVE);
+                        String name = (String) dtde.getTransferable().getTransferData(DataFlavor.stringFlavor);
+                        
+                        GameObject target = null;
+                        for (GameObject entity : game.getEntities()) {
+                            if (entity.getName().equals(name)) {
+                                if (entity != script.getGameObject()) {
+                                    target = entity;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (target != null) {
+                            field.set(script, target);
+                            comboBox.setSelectedItem(target.getName());
+                            dtde.dropComplete(true);
+                        } else {
+                            dtde.dropComplete(false);
+                        }
+                    } else {
+                        dtde.rejectDrop();
+                    }
+                } catch (Exception ex) {
+                    System.err.println("Error processing drag and drop: " + ex.getMessage());
+                    dtde.dropComplete(false);
+                }
+            }
+        };
+        
+        new DropTarget(comboBox, dropListener);
+        new DropTarget(panel, dropListener);
+        new DropTarget(pickButton, dropListener);
+        
         panel.add(comboBox, BorderLayout.CENTER);
         panel.add(pickButton, BorderLayout.EAST);
         
@@ -2757,6 +2835,12 @@ public class Editor extends JFrame {
             // Add script to object
             if (!obj.getScriptNames().contains(selected)) {
                 obj.getScriptNames().add(selected);
+                if (scriptManager != null) {
+                    IgnisScript instance = scriptManager.createScriptInstance(selected, obj, game);
+                    if (instance != null) {
+                        obj.getScripts().add(instance);
+                    }
+                }
                 updateInspectorScripts(obj);
             } else {
                 JOptionPane.showMessageDialog(this,
@@ -2932,6 +3016,7 @@ public class Editor extends JFrame {
             if (scriptManager.compileScript(scriptFile)) {
                 statusLabel.setText(" ✓ Compilation successful");
                 statusLabel.setForeground(new Color(100, 200, 100));
+                reloadAllScriptInstances();
             } else {
                 statusLabel.setText(" ✕ Compilation failed - check console");
                 statusLabel.setForeground(new Color(200, 100, 100));
@@ -2944,6 +3029,7 @@ public class Editor extends JFrame {
                 if (scriptManager.compileScript(scriptFile)) {
                     statusLabel.setText(" ✓ Saved and compiled successfully");
                     statusLabel.setForeground(new Color(100, 200, 100));
+                    reloadAllScriptInstances();
                 } else {
                     statusLabel.setText(" ✕ Saved but compilation failed - check console");
                     statusLabel.setForeground(new Color(200, 150, 100));
@@ -3735,6 +3821,7 @@ public class Editor extends JFrame {
                 File file = (File) node.getUserObject();
                 if (file.getName().endsWith(".java") && scriptManager != null) {
                     if (scriptManager.compileScript(file)) {
+                        reloadAllScriptInstances();
                         JOptionPane.showMessageDialog(this,
                             "Script compiled successfully!",
                             "Compile",

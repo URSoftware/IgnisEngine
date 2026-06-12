@@ -40,7 +40,7 @@ public class Game extends Canvas implements Runnable {
     private Viewport viewport;
     
     // List of all cameras (for multi-camera support)
-    private List<Camera> cameras = new ArrayList<>();
+    private List<Camera> cameras = new java.util.concurrent.CopyOnWriteArrayList<>();
     
     // Flag to indicate if we're in editor camera mode (free camera)
     private boolean editorCameraMode = true;
@@ -70,22 +70,22 @@ public class Game extends Canvas implements Runnable {
     
     // Reference to the editor for displaying alerts
     private Object editorReference = null;
-
+ 
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
         EDITING, // Editor mode - no simulation
         PLAYING, // World running
         PAUSED // World paused
     }
-
+ 
     private GameState gameState = GameState.EDITING;
-
+ 
     // Snapshot of initial object positions
     private Map<String, EntitySnapshot> initialSnapshots = new HashMap<>();
-    
+     
     // Lista de objetos criados em runtime (durante o jogo)
     // Estes objetos serão removidos quando o jogo parar
-    private List<GameObject> runtimeObjects = new ArrayList<>();
+    private List<GameObject> runtimeObjects = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     // ==================== SELECTION SYSTEM ====================
     private GameObject selectedObject = null;
@@ -867,6 +867,7 @@ public class Game extends Canvas implements Runnable {
     public void setSelectedObject(GameObject obj) {
         this.selectedObject = obj;
         notifySelectionListeners();
+        repaint();
     }
 
     public GameObject getSelectedObject() {
@@ -1029,7 +1030,7 @@ public class Game extends Canvas implements Runnable {
         return gameState == GameState.PLAYING || gameState == GameState.PAUSED;
     }
 
-    private java.util.List<GameObject> entities = new java.util.ArrayList<>();
+    private java.util.List<GameObject> entities = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     public void tick() {
         // Update Input system
@@ -1086,13 +1087,32 @@ public class Game extends Canvas implements Runnable {
     }
 
     public void render() {
-        BufferStrategy bs = this.getBufferStrategy();
-        if (bs == null) {
-            this.createBufferStrategy(3);
+        if (!this.isDisplayable()) {
             return;
         }
 
-        Graphics g = bs.getDrawGraphics();
+        BufferStrategy bs = this.getBufferStrategy();
+        if (bs == null) {
+            try {
+                this.createBufferStrategy(3);
+            } catch (IllegalStateException e) {
+                // Wait for the component to be fully ready
+            }
+            return;
+        }
+
+        Graphics g = null;
+        try {
+            g = bs.getDrawGraphics();
+        } catch (Exception e) {
+            // Buffer strategy was not fully validated/created
+            return;
+        }
+
+        if (g == null) {
+            return;
+        }
+
         Graphics2D g2d = (Graphics2D) g;
 
         // Clear background
@@ -1872,19 +1892,31 @@ public class Game extends Canvas implements Runnable {
         double delta = 0;
 
         while (isRunning) {
-            long now = System.nanoTime();
-            delta += (now - lastTime) / ns;
-            lastTime = now;
+            try {
+                long now = System.nanoTime();
+                delta += (now - lastTime) / ns;
+                lastTime = now;
 
-            if (delta >= 1) {
-                tick();
-                render();
-                delta--;
-            } else {
-                // Yield between frames instead of busy-spinning a full core
+                if (delta >= 1) {
+                    tick();
+                    render();
+                    delta--;
+                } else {
+                    // Yield between frames instead of busy-spinning a full core
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            } catch (Throwable t) {
+                System.err.println("Error in game loop thread: " + t.getMessage());
+                t.printStackTrace();
+                // Avoid fast spinning if there's a persistent error
                 try {
-                    Thread.sleep(1);
-                } catch (InterruptedException e) {
+                    Thread.sleep(100);
+                } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     break;
                 }
