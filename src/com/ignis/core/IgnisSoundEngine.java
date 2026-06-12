@@ -15,8 +15,8 @@ public class IgnisSoundEngine {
     // ==================== SINGLETON ====================
     
     private static IgnisSoundEngine instance;
-    
-    public static IgnisSoundEngine getInstance() {
+
+    public static synchronized IgnisSoundEngine getInstance() {
         if (instance == null) {
             instance = new IgnisSoundEngine();
         }
@@ -24,8 +24,10 @@ public class IgnisSoundEngine {
     }
 
     // ==================== CONSTANTES ====================
-    
-    private static final int MAX_SOUND_EFFECTS = 32;
+
+    // Concurrent SFX voices. Threads are daemon so they never keep the JVM
+    // alive on their own (defense-in-depth against orphan processes).
+    private static final int MAX_SOUND_EFFECTS = 8;
     
     // ==================== CAMPOS ====================
     
@@ -64,7 +66,11 @@ public class IgnisSoundEngine {
         soundCallbacks = new ConcurrentHashMap<>();
         musicCallbacks = new ConcurrentHashMap<>();
         activeSoundEffects = Collections.synchronizedList(new ArrayList<>());
-        audioExecutor = Executors.newFixedThreadPool(MAX_SOUND_EFFECTS);
+        audioExecutor = Executors.newFixedThreadPool(MAX_SOUND_EFFECTS, runnable -> {
+            Thread thread = new Thread(runnable, "IgnisAudio");
+            thread.setDaemon(true);
+            return thread;
+        });
         initialized = true;
         
         System.out.println("[IgnisSoundEngine] Audio engine initialized!");
@@ -490,12 +496,19 @@ public class IgnisSoundEngine {
             if (!baseFormat.matches(targetFormat)) {
                 convertedStream = AudioSystem.getAudioInputStream(targetFormat, audioStream);
             }
-            
-            Clip clip = AudioSystem.getClip();
-            clip.open(convertedStream);
-            
-            return clip;
-            
+
+            // clip.open() copies the stream fully into memory; the source streams
+            // (and any underlying file handle) must be closed to avoid leaking
+            // file descriptors on every non-cached play.
+            try {
+                Clip clip = AudioSystem.getClip();
+                clip.open(convertedStream);
+                return clip;
+            } finally {
+                convertedStream.close();
+                audioStream.close();
+            }
+
         } catch (UnsupportedAudioFileException e) {
             System.err.println("[IgnisSoundEngine] Formato de áudio não suportado: " + filePath);
             System.err.println("  Formatos suportados: WAV, AIFF, AU");
