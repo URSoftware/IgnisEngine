@@ -13,8 +13,10 @@
     <description>Java Game Engine Editor</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Official supported Java version: 17 (LTS). 'release' pins both
+             bytecode level and visible API, so builds on newer JDKs still
+             produce 17-compatible classes. -->
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -29,14 +31,23 @@
 
     <build>
         <sourceDirectory>src</sourceDirectory>
+        <resources>
+            <!-- Bundle non-Java assets (editor icons) into the classpath so
+                 getResource() works from target/classes and from packaged jars -->
+            <resource>
+                <directory>src</directory>
+                <excludes>
+                    <exclude>**/*.java</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <release>17</release>
                 </configuration>
             </plugin>
             <plugin>
