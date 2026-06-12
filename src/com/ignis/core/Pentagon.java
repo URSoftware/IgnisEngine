@@ -95,7 +95,7 @@ public class Pentagon extends GameObject {
     public void loadSprite() {
         if (spritePath != null && !spritePath.isEmpty()) {
             try {
-                File imageFile = new File(spritePath);
+                File imageFile = AssetResolver.resolve(spritePath);
                 if (imageFile.exists()) {
                     spriteImage = ImageIO.read(imageFile);
                 } else {

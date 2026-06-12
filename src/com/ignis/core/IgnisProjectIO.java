@@ -78,6 +78,9 @@ public class IgnisProjectIO {
         File projectFolder = new File(projectMainFolder, PROJECT_FOLDER_NAME);
         ensureProjectFolderStructure(projectFolder);
 
+        // Relative asset paths in scenes resolve against this folder
+        AssetResolver.setProjectFolder(projectFolder);
+
         // The .ignis file goes into the project folder
         File actualIgnisFile = new File(projectMainFolder, projectName + ".ignis");
 
@@ -193,6 +196,10 @@ public class IgnisProjectIO {
     public static Project load(File ignisFile, Game game) throws IOException {
         Project project = new Project();
         project.setProjectFile(ignisFile);
+
+        // Must be set before parsing scenes: entities load their sprites
+        // immediately, resolving relative paths against the project folder
+        AssetResolver.setProjectFolder(getProjectFolder(ignisFile));
 
         // Extract and read the ZIP
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(ignisFile))) {
