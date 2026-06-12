@@ -118,17 +118,26 @@ public class ScriptManager {
      * @return Number of scripts compiled successfully
      */
     public int compileAllScripts() {
-        int count = 0;
         File[] scripts = scriptsFolder.listFiles((dir, name) -> name.endsWith(".java"));
-        
-        if (scripts != null) {
-            for (File script : scripts) {
-                if (compileScript(script)) {
-                    count++;
-                }
+        if (scripts == null || scripts.length == 0) {
+            return 0;
+        }
+
+        // On a JRE (e.g. a distributed build) there is no compiler. Rather than
+        // failing once per script, fall back to the pre-compiled classes that
+        // ship in scripts/compiled/ — loaded lazily by loadScriptClass().
+        if (ToolProvider.getSystemJavaCompiler() == null) {
+            System.out.println("[ScriptManager] No JDK compiler available; "
+                    + "using pre-compiled scripts from compiled/.");
+            return 0;
+        }
+
+        int count = 0;
+        for (File script : scripts) {
+            if (compileScript(script)) {
+                count++;
             }
         }
-        
         return count;
     }
 
