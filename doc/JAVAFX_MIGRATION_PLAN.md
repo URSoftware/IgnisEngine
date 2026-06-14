@@ -128,8 +128,13 @@ Justificativa: o render acoplado ao AWT e o `Editor.java` monolítico tornam o b
 - ✅ **F2 — Painéis nativos (feito):** abrir projeto `.ignis` real no viewport (FileChooser → `IgnisProjectIO.load`); Hierarchy `TreeView` com seleção que desenha contorno no viewport (`Game.renderWorldTo` com objeto selecionado); Inspector `GridPane` editável (nome/x/y/largura/altura/rotação/visível) escrevendo no `GameObject` em tempo real. Pendente: ToolBar, atalhos, e Play/Stop no viewport JavaFX.
 - 🔄 **F3 — Janelas-ferramenta (em andamento):** trabalho dividido Claude/Gemini.
   - ✅ **Claude:** `BuildDialog` nativo (`FxBuildDialog`, reusa a API do `Builder`); **ToolBar** (Abrir/Build/Play/Stop); **atalhos** (Ctrl+O, Ctrl+B, F5, F6); **Play/Stop** ligados ao loop da engine (`playWorld`/`start`, `stopWorld`/`stop`, `ScriptManager` no carregar projeto).
-  - ✅ **Gemini:** `CommunityFrame` → `FxCommunityWindow`.
-  - **Pendente (Gemini):** Notes → Animation → ImageEditor/PaintCanvas → AudioEditor → editor de código (RichTextFX). Cada nova `Fx*` é ligada no menu pelo Claude; o interop Swing segue como fallback até a versão nativa entrar.
+  - ✅ **Gemini (100% Completo):**
+    - `CommunityFrame` → `FxCommunityWindow` (Comunidade & Marketplace).
+    - `NoteSystemFrame` → `FxNotesWindow` (Notas & AI Wiki com HTMLEditor e Gemini API).
+    - `AnimationEditorFrame` → `FxAnimationEditor` (Editor de Animação com Timeline customizada e AnimationTimer).
+    - `ImageEditorFrame` / `PaintCanvas` → `FxImageEditor` / `FxPaintCanvas` (Editor de Imagens com camadas e estabilizador de traço).
+    - `AudioEditorFrame` → `FxAudioEditor` (DAW com Waveform PCM e 3-Band Equalizer crossover integrado ao Mixer).
+    - `ScriptEditorWindow` / `EditorTextPane` / `AutocompleteManager` → `FxCodeEditor` (Editor de Código baseado em RichTextFX com autocomplete context-sensitive, Ghost Text, temas por CSS dinâmico e auto-save).
   - **Pendente (geral):** rotear input de teclado/mouse do jogo para o viewport FX (Play hoje roda simulação/scripts por tempo, mas sem input).
 - **F4 — Tema e limpeza:** CSS escuro (substitui cores hardcoded), layout persistido (SplitPane/Stage), remover `javafx-swing`. `runtime/GameRuntime` pode permanecer AWT (menor footprint) — decidir.
 
