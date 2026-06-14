@@ -23,6 +23,9 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.ToolBar;
+import javafx.scene.control.Button;
+import javafx.scene.control.Separator;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.WritableImage;
@@ -30,6 +33,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -52,6 +58,9 @@ public class IgnisEditorApp extends Application {
     private boolean suppressInspectorEvents = false;
     private File projectFolder;
     private File currentIgnisFile;
+    private Button playButton;
+    private Button stopButton;
+    private boolean playing = false;
 
     private final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
     private TreeView<String> hierarchy;
@@ -66,7 +75,19 @@ public class IgnisEditorApp extends Application {
         seedSampleScene();
 
         BorderPane root = new BorderPane();
-        root.setTop(buildMenuBar(stage));
+
+        // Menu + ToolBar (Fase 3)
+        Button btnOpen = new Button("Abrir");
+        btnOpen.setOnAction(e -> openProject(stage));
+        Button btnBuild = new Button("Build");
+        btnBuild.setOnAction(e -> openBuildDialog());
+        playButton = new Button("▶ Play");
+        playButton.setOnAction(e -> playWorld());
+        stopButton = new Button("⏹ Stop");
+        stopButton.setOnAction(e -> stopWorld());
+        stopButton.setDisable(true);
+        ToolBar toolBar = new ToolBar(btnOpen, btnBuild, new Separator(), playButton, stopButton);
+        root.setTop(new VBox(buildMenuBar(stage), toolBar));
 
         // ---- Viewport central ----
         Pane viewportPane = new Pane();
@@ -91,8 +112,13 @@ public class IgnisEditorApp extends Application {
         root.setBottom(status);
 
         javafx.scene.Scene scene = new javafx.scene.Scene(root, 1100, 700);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN), () -> openProject(stage));
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN), this::openBuildDialog);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), this::playWorld);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), this::stopWorld);
         stage.setTitle("IgnisEngine — Editor (JavaFX) [migracao]");
         stage.setScene(scene);
+        stage.setOnCloseRequest(e -> stopGameLoop());
         stage.show();
 
         startRenderBridge(canvas);
@@ -157,6 +183,9 @@ public class IgnisEditorApp extends Application {
             Project project = IgnisProjectIO.load(fileChosen, game);
             this.currentIgnisFile = fileChosen;
             this.projectFolder = IgnisProjectIO.getProjectFolder(fileChosen);
+            try {
+                game.setScriptManager(new com.ignis.core.ScriptManager(projectFolder));
+            } catch (Exception ignore) { /* scripts opcionais para Play */ }
             game.getEntities().clear();
             setSelected(null);
             Scene scene = project.getCurrentScene();
@@ -234,19 +263,52 @@ public class IgnisEditorApp extends Application {
                 () -> new com.ignis.community.CommunityFrame(projectFolder));
     }
 
+    // Build nativo em JavaFX (Fase 3, passo 1).
     private void openBuildDialog() {
         if (!requireProject() || currentIgnisFile == null) return;
-        final File ignis = currentIgnisFile;
-        final String name = ignis.getName().replace(".ignis", "");
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            try {
-                com.ignis.editor.BuildDialog dlg = new com.ignis.editor.BuildDialog(null, ignis, name);
-                dlg.setVisible(true);
-            } catch (Throwable t) {
-                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
-                        "Falha ao abrir Build:\n" + t.getMessage()).showAndWait());
-            }
-        });
+        String name = currentIgnisFile.getName().replace(".ignis", "");
+        try {
+            FxBuildDialog dlg = new FxBuildDialog(currentIgnisFile, name);
+            dlg.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Build:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    // ---------------- Play / Stop ----------------
+    // Play inicia o loop da engine (game.start()): o render() do loop sai cedo (Game nao
+    // esta em tela) e o tick() avanca a simulacao; a ponte JavaFX desenha cada frame.
+    // Limitacao atual: input de teclado/mouse do jogo ainda nao roteado para o viewport FX.
+
+    private void playWorld() {
+        if (playing) return;
+        try {
+            game.playWorld();
+            game.start();
+            playing = true;
+            playButton.setDisable(true);
+            stopButton.setDisable(false);
+            setStatus("Executando (Play)…");
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao iniciar Play:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private void stopWorld() {
+        if (!playing) return;
+        stopGameLoop();
+        setStatus("Parado (edicao)");
+    }
+
+    private void stopGameLoop() {
+        if (!playing) return;
+        try {
+            game.stopWorld();
+            game.stop();
+        } catch (Exception ignore) { /* best-effort */ }
+        playing = false;
+        if (playButton != null) playButton.setDisable(false);
+        if (stopButton != null) stopButton.setDisable(true);
     }
 
     // ---------------- Hierarchy ----------------
