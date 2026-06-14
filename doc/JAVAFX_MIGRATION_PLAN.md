@@ -1,7 +1,10 @@
 # Plano de Migração da Interface do Editor: Swing/AWT → JavaFX
 
-> Status: terreno preparado · Java alvo: 17 LTS · JavaFX alvo: 17 LTS · 2026-06-14
+> Status: **F0 (infra) + F1 (casca + ponte de render) implementadas na `main`** · Java 17 · JavaFX 17 · 2026-06-14
 > Complementa [ARCHITECTURE.md](ARCHITECTURE.md) e [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md).
+>
+> **Como rodar:** editor JavaFX (em migração) → `mvnw javafx:run` · editor Swing clássico → `mvnw exec:java`.
+> Ponte de render: `com.ignis.core.Game#renderWorldTo` → `BufferedImage` → `SwingFXUtils` → `Canvas` em `com.ignis.editor.fx.IgnisEditorApp`.
 
 ## Estratégia de branches
 
@@ -120,8 +123,8 @@ Justificativa: o render acoplado ao AWT e o `Editor.java` monolítico tornam o b
 
 ## 9. Fases (ordem recomendada)
 
-- **F0 — Infra/build:** deps JavaFX 17 (`javafx-controls`, `javafx-graphics`, `javafx-swing`) + `javafx-maven-plugin`; pacote `com.ignis.editor.fx` (Swing intacto). *Não é UI ainda.*
-- **F1 — Casca + ponte:** `Application`/`BorderPane`; ponte de render no `Canvas` FX central; Hierarchy/Inspector ainda via `SwingNode`. Medir FPS.
+- ✅ **F0 — Infra/build (feito):** deps JavaFX 17 (`javafx-controls`, `javafx-graphics`, `javafx-swing`) + `javafx-maven-plugin`; pacote `com.ignis.editor.fx` (Swing intacto). Compila (`mvnw compile`).
+- ✅ **F1 — Casca + ponte (feito):** `IgnisEditorApp` (`Application`/`BorderPane`/`MenuBar`/`SplitPane`); ponte de render num `Canvas` FX central (`Game.renderWorldTo` → `SwingFXUtils` → `Canvas` via `AnimationTimer`); Hierarchy já nativa (`TreeView`); Inspector placeholder. Pendente: validar FPS em uso real e ligar o viewport a um projeto/cena carregado (hoje cena de amostra).
 - **F2 — Painéis nativos:** Hierarchy = `TreeView`; Inspector = `GridPane` + binding; `MenuBar`/`ToolBar`; remover `SwingNode` desses painéis.
 - **F3 — Janelas-ferramenta:** migrar uma a uma (BuildDialog → Community → Notes → Animation → ImageEditor/PaintCanvas → AudioEditor → editor de código com RichTextFX).
 - **F4 — Tema e limpeza:** CSS escuro (substitui cores hardcoded), layout persistido (SplitPane/Stage), remover `javafx-swing`. `runtime/GameRuntime` pode permanecer AWT (menor footprint) — decidir.
