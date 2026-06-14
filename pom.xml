@@ -18,6 +18,8 @@
              produce 17-compatible classes. -->
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- JavaFX 17 LTS — migracao da UI do editor (branch main). Ver doc/JAVAFX_MIGRATION_PLAN.md -->
+        <javafx.version>17.0.12</javafx.version>
     </properties>
 
     <dependencies>
@@ -26,6 +28,24 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>20231013</version>
+        </dependency>
+
+        <!-- JavaFX (migracao da UI do editor — branch main). SwingFXUtils (modulo
+             javafx-swing) faz a ponte BufferedImage <-> JavaFX usada no viewport. -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-swing</artifactId>
+            <version>${javafx.version}</version>
         </dependency>
     </dependencies>
 
@@ -56,6 +76,16 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>com.ignis.editor.Editor</mainClass>
+                </configuration>
+            </plugin>
+            <!-- Editor JavaFX (em migracao). Rodar com:  mvnw javafx:run
+                 O editor Swing classico continua via exec:java (mainClass acima). -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>com.ignis.editor.fx.IgnisEditorApp</mainClass>
                 </configuration>
             </plugin>
         </plugins>

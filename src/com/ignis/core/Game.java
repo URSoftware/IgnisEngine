@@ -1261,7 +1261,55 @@ public class Game extends Canvas implements Runnable {
         g.dispose();
         bs.show();
     }
-    
+
+    /**
+     * Renderiza o "mundo" (fundo + camera + grid + entidades) em um Graphics2D
+     * arbitrario de tamanho width x height. Base da PONTE DE RENDER do editor
+     * JavaFX (offscreen BufferedImage -> SwingFXUtils -> Canvas JavaFX), sem
+     * depender de BufferStrategy/AWT Canvas. Aditivo: NAO altera render() (usado
+     * pelo editor Swing). Ver doc/JAVAFX_MIGRATION_PLAN.md (ponte de render).
+     */
+    public synchronized void renderWorldTo(Graphics2D g2d, int width, int height) {
+        if (g2d == null || width <= 0 || height <= 0) return;
+
+        g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Fundo
+        g2d.setColor(Color.GRAY);
+        g2d.fillRect(0, 0, width, height);
+
+        Camera activeCamera = getActiveCamera();
+        AffineTransform originalTransform = g2d.getTransform();
+        boolean shouldApplyCameraTransform = activeCamera != null
+                && (editorCameraMode || gameState == GameState.PLAYING);
+        if (shouldApplyCameraTransform) {
+            activeCamera.applyTransform(g2d);
+        }
+
+        if (gameState == GameState.EDITING && showGrid && shouldApplyCameraTransform) {
+            drawGrid(g2d);
+        }
+
+        // Entidades (respeita Z por ordem da lista)
+        for (int i = 0; i < entities.size(); i++) {
+            GameObject entity = entities.get(i);
+            if (!entity.isVisible()) continue;
+            if (entity instanceof Camera) continue;
+
+            AffineTransform entityTransform = g2d.getTransform();
+            if (entity.getRotation() != 0) {
+                double centerX = entity.getX() + entity.getWidth() / 2.0;
+                double centerY = entity.getY() + entity.getHeight() / 2.0;
+                g2d.rotate(Math.toRadians(entity.getRotation()), centerX, centerY);
+            }
+            entity.render(g2d);
+            g2d.setTransform(entityTransform);
+        }
+
+        g2d.setTransform(originalTransform);
+    }
+
     /**
      * Renderiza mensagens de alerta na tela do editor
      */
