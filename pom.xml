@@ -58,6 +58,12 @@
             <artifactId>richtextfx</artifactId>
             <version>0.11.1</version>
         </dependency>
+        <!-- jdk.jsobject required by javafx.web on JDK 26+ -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>jdk-jsobject</artifactId>
+            <version>26.0.1</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -97,6 +103,10 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.ignis.editor.fx.IgnisEditorApp</mainClass>
+                    <options>
+                        <option>--upgrade-module-path</option>
+                        <option>${settings.localRepository}/org/openjfx/jdk-jsobject/26.0.1/jdk-jsobject-26.0.1-win.jar</option>
+                    </options>
                 </configuration>
             </plugin>
         </plugins>

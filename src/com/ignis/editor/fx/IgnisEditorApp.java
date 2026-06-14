@@ -118,7 +118,11 @@ public class IgnisEditorApp extends Application {
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), this::stopWorld);
         stage.setTitle("IgnisEngine — Editor (JavaFX) [migracao]");
         stage.setScene(scene);
-        stage.setOnCloseRequest(e -> stopGameLoop());
+        stage.setOnCloseRequest(e -> {
+            stopGameLoop();
+            Platform.exit();
+            System.exit(0);
+        });
         stage.show();
 
         startRenderBridge(canvas);
@@ -203,22 +207,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    // ---------------- Ferramentas (janelas Swing durante a transicao) ----------------
-    // Estrategia do plano: durante a migracao, as janelas-ferramenta sao abertas como
-    // janelas Swing independentes a partir do app JavaFX (cada uma sera reescrita em
-    // JavaFX nas iteracoes seguintes). Tudo na EDT e com protecao contra falha.
-
-    private void openSwing(String toolName, java.util.function.Supplier<javax.swing.JFrame> factory) {
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            try {
-                javax.swing.JFrame frame = factory.get();
-                if (frame != null) frame.setVisible(true);
-            } catch (Throwable t) {
-                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
-                        "Falha ao abrir " + toolName + ":\n" + t.getMessage()).showAndWait());
-            }
-        });
-    }
+    // ---------------- Ferramentas (janelas JavaFX) ----------------
 
     private boolean requireProject() {
         if (projectFolder == null) {
@@ -230,12 +219,22 @@ public class IgnisEditorApp extends Application {
     }
 
     private void openAudioEditor() {
-        openSwing("Editor de Audio", () -> new com.ignis.audioeditor.AudioEditorFrame());
+        try {
+            FxAudioEditor editor = new FxAudioEditor();
+            editor.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Audio:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private void openImageEditor() {
-        File folder = projectFolder != null ? projectFolder : IgnisProjectIO.getProjectsRootFolder();
-        openSwing("Editor de Imagens", () -> new com.ignis.imageeditor.ImageEditorFrame(folder));
+        try {
+            File folder = projectFolder != null ? projectFolder : IgnisProjectIO.getProjectsRootFolder();
+            FxImageEditor editor = new FxImageEditor(folder);
+            editor.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Imagens:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private void openAnimationEditor() {
@@ -245,22 +244,33 @@ public class IgnisEditorApp extends Application {
                     "Selecione um objeto na Hierarchy para animar.").showAndWait();
             return;
         }
-        final File sprites = new File(projectFolder, "assets/sprites");
-        final GameObject target = selected;
-        openSwing("Editor de Animacao",
-                () -> new com.ignis.editor.AnimationEditorFrame(projectFolder, sprites, target));
+        try {
+            final File sprites = new File(projectFolder, "assets/sprites");
+            FxAnimationEditor editor = new FxAnimationEditor(projectFolder, sprites, selected);
+            editor.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Animacao:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private void openNotes() {
         if (!requireProject()) return;
-        openSwing("Sistema de Notas",
-                () -> new com.ignis.notes.NoteSystemFrame(projectFolder, null));
+        try {
+            FxNotesWindow notes = new FxNotesWindow(projectFolder, null);
+            notes.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Sistema de Notas:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private void openCommunity() {
         if (!requireProject()) return;
-        openSwing("Comunidade & Marketplace",
-                () -> new com.ignis.community.CommunityFrame(projectFolder));
+        try {
+            FxCommunityWindow community = new FxCommunityWindow(projectFolder);
+            community.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Comunidade:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     // Build nativo em JavaFX (Fase 3, passo 1).
