@@ -3910,7 +3910,7 @@ public class Editor extends JFrame {
         
         // Redirect script files to internal script editor
         if (name.endsWith(".java")) {
-            String scriptName = file.getName().replace(".java", "");
+            String scriptName = file.getName().substring(0, file.getName().length() - 5);
             openScriptEditor(scriptName);
             return;
         }

@@ -32,4 +32,6 @@ public class Player extends IgnisScript {
         }
         if (input.isKeyPressed(KeyEvent.VK_D)) {
             transform.x += movementSpeed; // Move right
-        
+        }
+    }
+}

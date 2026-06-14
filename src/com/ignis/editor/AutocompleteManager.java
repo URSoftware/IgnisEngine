@@ -130,7 +130,15 @@ public class AutocompleteManager {
             });
         }
 
-        // Key interception in JTextArea
+        // Mouse click on text area hides the popup
+        textArea.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                hidePopup();
+            }
+        });
+
+        // Key interception in JTextPane
         textArea.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
@@ -154,9 +162,14 @@ public class AutocompleteManager {
                 } else if (keyCode == KeyEvent.VK_ENTER || keyCode == KeyEvent.VK_TAB) {
                     insertSelectedSuggestion();
                     e.consume();
-                } else if (keyCode == KeyEvent.VK_ESCAPE) {
+                } else if (keyCode == KeyEvent.VK_ESCAPE ||
+                           keyCode == KeyEvent.VK_LEFT || keyCode == KeyEvent.VK_RIGHT ||
+                           keyCode == KeyEvent.VK_HOME || keyCode == KeyEvent.VK_END ||
+                           keyCode == KeyEvent.VK_PAGE_UP || keyCode == KeyEvent.VK_PAGE_DOWN) {
                     hidePopup();
-                    e.consume();
+                    if (keyCode == KeyEvent.VK_ESCAPE) {
+                        e.consume();
+                    }
                 }
             }
         });
@@ -194,13 +207,15 @@ public class AutocompleteManager {
     private void checkAutocomplete() {
         if (!enabled) return;
 
+        String text = textArea.getText();
         int pos = textArea.getCaretPosition();
+        if (pos > text.length()) {
+            pos = text.length();
+        }
         if (pos <= 0) {
             hidePopup();
             return;
         }
-
-        String text = textArea.getText();
         
         // Find prefix being typed
         int start = pos - 1;
@@ -325,7 +340,7 @@ public class AutocompleteManager {
                 } catch (Exception ex2) {}
             }
 
-            if (rect != null) {
+            if (rect != null && textArea.isShowing()) {
                 Point p = textArea.getLocationOnScreen();
                 // Position popup below the cursor
                 popup.setLocation(p.x + rect.x, p.y + rect.y + rect.height + 2);
@@ -349,27 +364,28 @@ public class AutocompleteManager {
         String selected = list.getSelectedValue();
         if (selected == null) return;
 
-        int pos = textArea.getCaretPosition();
         String text = textArea.getText();
+        int pos = textArea.getCaretPosition();
+        if (pos > text.length()) {
+            pos = text.length();
+        }
         
         // Find how much prefix is typed
         int start = pos - 1;
-        while (start >= 0 && isWordChar(text.charAt(start))) {
+        while (start >= 0 && start < text.length() && isWordChar(text.charAt(start))) {
             start--;
         }
         
         String prefix = text.substring(start + 1, pos);
         
-        // Clean suggestion parameters (e.g. "setX(x)" -> "setX")
+        // Clean suggestion parameters (e.g. "setX(x)" -> "setX()")
         String insertText = selected;
         int parenIndex = selected.indexOf('(');
         boolean hasParams = false;
         if (parenIndex != -1) {
-            insertText = selected.substring(0, parenIndex + 1);
+            insertText = selected.substring(0, parenIndex + 1) + ")";
             if (selected.charAt(parenIndex + 1) != ')') {
                 hasParams = true;
-            } else {
-                insertText += ")";
             }
         }
 

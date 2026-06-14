@@ -244,6 +244,15 @@ public class EditorTextPane extends JTextPane {
         }
     }
 
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+        Component parent = getParent();
+        if (parent instanceof JViewport) {
+            return getUI().getPreferredSize(this).width <= parent.getWidth();
+        }
+        return super.getScrollableTracksViewportWidth();
+    }
+
     private void runHighlighting() {
         if (isHighlighting) return;
         isHighlighting = true;
@@ -260,6 +269,10 @@ public class EditorTextPane extends JTextPane {
         try {
             text = doc.getText(0, doc.getLength());
         } catch (BadLocationException e) {
+            return;
+        }
+
+        if (text.isEmpty()) {
             return;
         }
 
