@@ -2302,6 +2302,7 @@ public class Editor extends JFrame {
         checkBox.addActionListener(e -> {
             try {
                 field.setBoolean(script, checkBox.isSelected());
+                saveScriptVariablesToPending(script);
             } catch (Exception ex) {
                 System.err.println("Error setting field " + field.getName() + ": " + ex.getMessage());
             }
@@ -2387,6 +2388,7 @@ public class Editor extends JFrame {
                         }
                     }
                 }
+                saveScriptVariablesToPending(script);
             } catch (Exception ex) {
                 System.err.println("Error setting GameObject reference " + field.getName() + ": " + ex.getMessage());
             }
@@ -2592,7 +2594,14 @@ public class Editor extends JFrame {
         }
         
         // Apply changes on Enter or focus lost
-        ActionListener applyAction = e -> applyFieldValue(script, field, textField.getText());
+        ActionListener applyAction = e -> {
+            applyFieldValue(script, field, textField.getText());
+            if (game != null) {
+                game.requestFocusInWindow();
+            } else {
+                textField.transferFocus();
+            }
+        };
         textField.addActionListener(applyAction);
         textField.addFocusListener(new FocusAdapter() {
             @Override
@@ -2602,6 +2611,17 @@ public class Editor extends JFrame {
         });
         
         return textField;
+    }
+    
+    /**
+     * Saves script variable values to the scene's pending script variables map
+     */
+    private void saveScriptVariablesToPending(IgnisScript script) {
+        if (currentProject != null && currentProject.getCurrentScene() != null) {
+            JSONObject variables = ScriptSerializationHelper.saveScriptVariables(script);
+            String key = script.getGameObject().getId() + ":" + script.getClass().getSimpleName();
+            currentProject.getCurrentScene().getPendingScriptVariables().put(key, variables);
+        }
     }
     
     /**
@@ -2622,6 +2642,7 @@ public class Editor extends JFrame {
             } else if (type == String.class) {
                 field.set(script, text);
             }
+            saveScriptVariablesToPending(script);
         } catch (NumberFormatException ex) {
             // Invalid number format, ignore
         } catch (IllegalAccessException ex) {
