@@ -3451,16 +3451,24 @@ public class Editor extends JFrame {
             }
         });
 
+        // Abrir em IDE externa (sugere VS Code; suporta multi-selecao via Ctrl+clique)
+        JMenuItem openInIde = new JMenuItem("Abrir em IDE externa", new VectorIcon(VectorIcon.VectorIconType.TOOLS, 16));
+        openInIde.addActionListener(e -> openInExternalIde());
+        JMenuItem configIde = new JMenuItem("Configurar IDE externa…", new VectorIcon(VectorIcon.VectorIconType.SETTINGS, 16));
+        configIde.addActionListener(e -> chooseExternalIde());
+
         menu.add(newFolder);
         menu.add(newScript);
         menu.addSeparator();
         menu.add(editScript);
         menu.add(compileScript);
+        menu.add(openInIde);
         menu.addSeparator();
         menu.add(rename);
         menu.add(delete);
         menu.addSeparator();
         menu.add(refresh);
+        menu.add(configIde);
 
         return menu;
     }
@@ -3468,9 +3476,130 @@ public class Editor extends JFrame {
     private void showFileContextMenu(MouseEvent e, JPopupMenu menu) {
         TreePath path = fileTree.getPathForLocation(e.getX(), e.getY());
         if (path != null) {
-            fileTree.setSelectionPath(path);
+            // Preserva a multi-selecao (Ctrl+clique): so troca a selecao se o clique
+            // direito foi FORA dos itens ja selecionados.
+            TreePath[] selected = fileTree.getSelectionPaths();
+            boolean alreadySelected = false;
+            if (selected != null) {
+                for (TreePath p : selected) {
+                    if (p.equals(path)) { alreadySelected = true; break; }
+                }
+            }
+            if (!alreadySelected) {
+                fileTree.setSelectionPath(path);
+            }
         }
         menu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    // ---- IDE externa (abrir scripts no VS Code / outra IDE) ----
+
+    private java.util.prefs.Preferences idePrefs() {
+        return java.util.prefs.Preferences.userRoot().node("com/ignis/editor");
+    }
+
+    private String getExternalIdeCommand() {
+        String v = idePrefs().get("externalIdeCommand", "");
+        return v.isBlank() ? null : v;
+    }
+
+    private void setExternalIdeCommand(String cmd) {
+        if (cmd == null || cmd.isBlank()) {
+            idePrefs().remove("externalIdeCommand");
+        } else {
+            idePrefs().put("externalIdeCommand", cmd.trim());
+        }
+    }
+
+    /**
+     * Dialogo para escolher a IDE externa (sugere VS Code). Persiste e retorna o
+     * comando, ou null se cancelado.
+     */
+    private String chooseExternalIde() {
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        JLabel info = new JLabel("<html><div style='width:380px'>Comando ou caminho do executavel da IDE.<br>"
+                + "Sugestao: <b>code</b> (VS Code). Outros: idea, subl, gvim, ou um caminho completo (Code.exe).</div></html>");
+        String current = getExternalIdeCommand();
+        JTextField field = new JTextField(current != null ? current : "code");
+        JButton browse = new JButton("Procurar executavel…");
+        browse.addActionListener(ev -> {
+            JFileChooser fc = new JFileChooser();
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                field.setText(fc.getSelectedFile().getAbsolutePath());
+            }
+        });
+        JPanel south = new JPanel(new BorderLayout());
+        south.add(browse, BorderLayout.EAST);
+        panel.add(info, BorderLayout.NORTH);
+        panel.add(field, BorderLayout.CENTER);
+        panel.add(south, BorderLayout.SOUTH);
+
+        int r = JOptionPane.showConfirmDialog(this, panel, "Configurar IDE externa",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (r == JOptionPane.OK_OPTION) {
+            String cmd = field.getText().trim();
+            if (!cmd.isEmpty()) {
+                setExternalIdeCommand(cmd);
+                return cmd;
+            }
+        }
+        return null;
+    }
+
+    /** Abre todos os .java selecionados (Ctrl+clique) na IDE externa configurada. */
+    private void openInExternalIde() {
+        TreePath[] paths = fileTree.getSelectionPaths();
+        if (paths == null || paths.length == 0) return;
+
+        java.util.List<String> files = new java.util.ArrayList<>();
+        for (TreePath p : paths) {
+            Object comp = p.getLastPathComponent();
+            if (!(comp instanceof DefaultMutableTreeNode node)) continue;
+            Object uo = node.getUserObject();
+            if (uo instanceof File f && f.isFile() && f.getName().toLowerCase().endsWith(".java")) {
+                files.add(f.getAbsolutePath());
+            }
+        }
+        if (files.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Selecione um ou mais arquivos .java (use Ctrl+clique para varios).",
+                    "IDE externa", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String ide = getExternalIdeCommand();
+        if (ide == null) {
+            ide = chooseExternalIde();
+            if (ide == null) return;
+        }
+        launchExternalIde(ide, files);
+    }
+
+    private void launchExternalIde(String ide, java.util.List<String> files) {
+        try {
+            java.util.List<String> cmd = new java.util.ArrayList<>();
+            String os = System.getProperty("os.name").toLowerCase();
+            boolean isExe = ide.toLowerCase().endsWith(".exe");
+            if (os.contains("win") && !isExe) {
+                // 'code' no Windows e um .cmd; precisa de cmd /c para resolver no PATH
+                cmd.add("cmd");
+                cmd.add("/c");
+                cmd.add(ide);
+            } else {
+                cmd.add(ide);
+            }
+            cmd.addAll(files);
+            new ProcessBuilder(cmd).start();
+        } catch (Exception ex) {
+            int r = JOptionPane.showConfirmDialog(this,
+                    "Falha ao abrir a IDE '" + ide + "':\n" + ex.getMessage()
+                            + "\n\nQuer reconfigurar a IDE?",
+                    "Erro ao abrir IDE", JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE);
+            if (r == JOptionPane.YES_OPTION) {
+                String newIde = chooseExternalIde();
+                if (newIde != null) launchExternalIde(newIde, files);
+            }
+        }
     }
 
     /**
