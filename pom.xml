@@ -47,6 +47,11 @@
             <artifactId>javafx-swing</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-web</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
         <!-- RichTextFX for FxCodeEditor (Syntax Highlighting + Ghost Text) -->
         <dependency>
             <groupId>org.fxmisc.richtext</groupId>
