@@ -282,6 +282,13 @@ public class CommunityFrame extends JFrame {
         progressDialog.setVisible(true);
     }
 
+    // Cria uma label clara para diálogos de fundo escuro (melhor contraste).
+    private JLabel lightLabel(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(Color.WHITE);
+        return l;
+    }
+
     // Estiliza um botao de acao do cabecalho.
     private void styleActionButton(JButton b, Color bg) {
         b.setBackground(bg);
@@ -369,27 +376,27 @@ public class CommunityFrame extends JFrame {
         JPanel inputPanel = new JPanel(new GridLayout(7, 2, 8, 8));
         inputPanel.setBackground(new Color(45, 45, 45));
 
-        inputPanel.add(new JLabel("Tipo:"));
+        inputPanel.add(lightLabel("Tipo:"));
         JComboBox<String> typeCombo = new JComboBox<>(new String[]{"plugin", "workshop", "asset"});
         inputPanel.add(typeCombo);
 
-        inputPanel.add(new JLabel("Nome:"));
+        inputPanel.add(lightLabel("Nome:"));
         JTextField txtName = new JTextField();
         inputPanel.add(txtName);
 
-        inputPanel.add(new JLabel("Autor (opcional):"));
+        inputPanel.add(lightLabel("Autor (opcional):"));
         JTextField txtAuthor = new JTextField();
         inputPanel.add(txtAuthor);
 
-        inputPanel.add(new JLabel("Descricao:"));
+        inputPanel.add(lightLabel("Descricao:"));
         JTextField txtDesc = new JTextField();
         inputPanel.add(txtDesc);
 
-        inputPanel.add(new JLabel("URL do repo Git:"));
+        inputPanel.add(lightLabel("URL do repo Git:"));
         JTextField txtGit = new JTextField();
         inputPanel.add(txtGit);
 
-        inputPanel.add(new JLabel("Versao:"));
+        inputPanel.add(lightLabel("Versao:"));
         JTextField txtVer = new JTextField("1.0.0");
         inputPanel.add(txtVer);
 
