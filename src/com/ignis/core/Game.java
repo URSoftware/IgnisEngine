@@ -140,6 +140,7 @@ public class Game extends Canvas implements Runnable {
     }
 
     private GizmoDragMode currentDragMode = GizmoDragMode.NONE;
+    private GizmoDragMode hoveredGizmoMode = GizmoDragMode.NONE;
     private int dragStartX, dragStartY;
     private double objectStartX, objectStartY;
     private double objectStartRotation;
@@ -747,18 +748,33 @@ public class Game extends Canvas implements Runnable {
 
         if (selectedObject != null) {
             GizmoDragMode mode = getGizmoHitArea(mouseX, mouseY);
+            if (mode != hoveredGizmoMode) {
+                hoveredGizmoMode = mode;
+                repaint();
+            }
             switch (mode) {
                 case AXIS_X:
+                case SCALE_X:
                     setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
                     return;
                 case AXIS_Y:
+                case SCALE_Y:
                     setCursor(Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR));
                     return;
                 case CENTER:
+                case SCALE_UNIFORM:
                     setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    return;
+                case ROTATE:
+                    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                     return;
                 default:
                     break;
+            }
+        } else {
+            if (hoveredGizmoMode != GizmoDragMode.NONE) {
+                hoveredGizmoMode = GizmoDragMode.NONE;
+                repaint();
             }
         }
 
@@ -790,6 +806,11 @@ public class Game extends Canvas implements Runnable {
 
         switch (currentTool) {
             case MOVE:
+                // Check center first (precedence)
+                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
+                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
+                    return GizmoDragMode.CENTER;
+                }
                 // Check X axis (arrow to right)
                 if (mouseX >= centerX && mouseX <= centerX + gizmoSize &&
                         mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
@@ -799,11 +820,6 @@ public class Game extends Canvas implements Runnable {
                 if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
                         mouseY >= centerY && mouseY <= centerY + gizmoSize) {
                     return GizmoDragMode.AXIS_Y;
-                }
-                // Check center
-                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
-                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
-                    return GizmoDragMode.CENTER;
                 }
                 break;
 
@@ -817,6 +833,11 @@ public class Game extends Canvas implements Runnable {
 
             case SCALE:
                 int squareSize = (int)(20 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+                // Check center square first (uniform scale precedence)
+                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
+                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
+                    return GizmoDragMode.SCALE_UNIFORM;
+                }
                 // Check X axis square end (scale X)
                 if (mouseX >= centerX + gizmoSize - squareSize && mouseX <= centerX + gizmoSize + squareSize &&
                         mouseY >= centerY - squareSize && mouseY <= centerY + squareSize) {
@@ -826,11 +847,6 @@ public class Game extends Canvas implements Runnable {
                 if (mouseX >= centerX - squareSize && mouseX <= centerX + squareSize &&
                         mouseY >= centerY + gizmoSize - squareSize && mouseY <= centerY + gizmoSize + squareSize) {
                     return GizmoDragMode.SCALE_Y;
-                }
-                // Check center square (uniform scale)
-                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
-                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
-                    return GizmoDragMode.SCALE_UNIFORM;
                 }
                 break;
         }
@@ -1496,6 +1512,7 @@ public class Game extends Canvas implements Runnable {
     }
 
     /**
+    /**
      * Renders the move gizmo (X and Y arrows)
      */
     private void renderMoveGizmo(Graphics2D g2d) {
@@ -1506,42 +1523,74 @@ public class Game extends Canvas implements Runnable {
         int gizmoSize = getScaledGizmoSize();
         int arrowSize = getScaledGizmoArrowSize();
 
-        g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-        // Center square
-        g2d.setColor(new Color(255, 255, 100));
-        int centerSize = (int)(10 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
+        int centerSize = (int)(10 / zoom);
         centerSize = Math.max(4, centerSize); // Minimum visible size
-        g2d.fillRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
-        g2d.setColor(Color.BLACK);
-        g2d.drawRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
 
-        // X axis (red) - arrow to right
-        Color xColor = (currentDragMode == GizmoDragMode.AXIS_X) ? new Color(255, 100, 100) : new Color(220, 50, 50);
+        // Determine colors based on drag or hover
+        boolean xActive = (currentDragMode == GizmoDragMode.AXIS_X || hoveredGizmoMode == GizmoDragMode.AXIS_X);
+        boolean yActive = (currentDragMode == GizmoDragMode.AXIS_Y || hoveredGizmoMode == GizmoDragMode.AXIS_Y);
+        boolean cActive = (currentDragMode == GizmoDragMode.CENTER || hoveredGizmoMode == GizmoDragMode.CENTER);
+
+        Color xColor = xActive ? new Color(255, 80, 80) : new Color(220, 40, 40);
+        Color yColor = yActive ? new Color(80, 255, 80) : new Color(40, 200, 40);
+        Color cColor = cActive ? new Color(255, 255, 150) : new Color(220, 220, 50);
+
+        // --- 1. Draw Black Outline Background ---
+        g2d.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setColor(Color.BLACK);
+        
+        // X outline
+        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
+        Polygon arrowXOutline = new Polygon();
+        arrowXOutline.addPoint(centerX + gizmoSize + arrowSize + 2, centerY);
+        arrowXOutline.addPoint(centerX + gizmoSize - 3, centerY - arrowSize / 2 - 2);
+        arrowXOutline.addPoint(centerX + gizmoSize - 3, centerY + arrowSize / 2 + 2);
+        g2d.fillPolygon(arrowXOutline);
+
+        // Y outline
+        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
+        Polygon arrowYOutline = new Polygon();
+        arrowYOutline.addPoint(centerX, centerY + gizmoSize + arrowSize + 2);
+        arrowYOutline.addPoint(centerX - arrowSize / 2 - 2, centerY + gizmoSize - 3);
+        arrowYOutline.addPoint(centerX + arrowSize / 2 + 2, centerY + gizmoSize - 3);
+        g2d.fillPolygon(arrowYOutline);
+
+        // Center square outline
+        g2d.fillRect(centerX - centerSize / 2 - 2, centerY - centerSize / 2 - 2, centerSize + 4, centerSize + 4);
+
+        // --- 2. Draw Colored Foreground ---
+        g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        
+        // X Foreground
         g2d.setColor(xColor);
         g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
-        // X arrow head
         Polygon arrowX = new Polygon();
         arrowX.addPoint(centerX + gizmoSize + arrowSize, centerY);
         arrowX.addPoint(centerX + gizmoSize - 2, centerY - arrowSize / 2);
         arrowX.addPoint(centerX + gizmoSize - 2, centerY + arrowSize / 2);
         g2d.fillPolygon(arrowX);
-        g2d.setColor(Color.WHITE);
-        g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        drawWorldText(g2d, "X", centerX + gizmoSize + arrowSize + 2, centerY - 4);
 
-        // Y axis (green) - arrow pointing up (positive Y direction in world space)
-        Color yColor = (currentDragMode == GizmoDragMode.AXIS_Y) ? new Color(100, 255, 100) : new Color(50, 200, 50);
+        // Y Foreground
         g2d.setColor(yColor);
         g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
-        // Y arrow head (pointing up = positive Y)
         Polygon arrowY = new Polygon();
         arrowY.addPoint(centerX, centerY + gizmoSize + arrowSize);
         arrowY.addPoint(centerX - arrowSize / 2, centerY + gizmoSize - 2);
         arrowY.addPoint(centerX + arrowSize / 2, centerY + gizmoSize - 2);
         g2d.fillPolygon(arrowY);
+
+        // Center Foreground
+        g2d.setColor(cColor);
+        g2d.fillRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
+        g2d.setColor(Color.BLACK);
+        g2d.drawRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
+
+        // Labels
         g2d.setColor(Color.WHITE);
-        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + arrowSize + 2);
+        g2d.setFont(new Font("Dialog", Font.BOLD, 12));
+        drawWorldText(g2d, "X", centerX + gizmoSize + arrowSize + 4, centerY - 4);
+        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + arrowSize + 4);
     }
 
     /**
@@ -1554,18 +1603,29 @@ public class Game extends Canvas implements Runnable {
         // Get scaled radius
         int rotateRadius = getScaledRotateGizmoRadius();
 
-        // Rotation circle
-        Color circleColor = (currentDragMode == GizmoDragMode.ROTATE) ? new Color(100, 200, 255)
-                : new Color(50, 150, 220);
+        boolean rActive = (currentDragMode == GizmoDragMode.ROTATE || hoveredGizmoMode == GizmoDragMode.ROTATE);
+        Color circleColor = rActive ? new Color(100, 200, 255) : new Color(50, 150, 220);
+
+        // 1. Black outline circle
+        g2d.setColor(Color.BLACK);
+        g2d.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawOval(centerX - rotateRadius, centerY - rotateRadius, rotateRadius * 2, rotateRadius * 2);
+
+        // 2. Colored circle
         g2d.setColor(circleColor);
         g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2d.drawOval(centerX - rotateRadius, centerY - rotateRadius,
-                rotateRadius * 2, rotateRadius * 2);
+        g2d.drawOval(centerX - rotateRadius, centerY - rotateRadius, rotateRadius * 2, rotateRadius * 2);
 
         // Rotation indicator line (shows current rotation)
         double radians = Math.toRadians(selectedObject.getRotation());
         int indicatorX = centerX + (int) (Math.cos(radians) * rotateRadius);
         int indicatorY = centerY + (int) (Math.sin(radians) * rotateRadius);
+        
+        // Indicator outline
+        g2d.setColor(Color.BLACK);
+        g2d.setStroke(new BasicStroke(4));
+        g2d.drawLine(centerX, centerY, indicatorX, indicatorY);
+        // Indicator line
         g2d.setColor(new Color(255, 150, 50));
         g2d.setStroke(new BasicStroke(2));
         g2d.drawLine(centerX, centerY, indicatorX, indicatorY);
@@ -1573,7 +1633,9 @@ public class Game extends Canvas implements Runnable {
         // Center point
         int centerPointSize = (int)(5 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
         centerPointSize = Math.max(3, centerPointSize);
-        g2d.setColor(new Color(50, 150, 220));
+        g2d.setColor(Color.BLACK);
+        g2d.fillOval(centerX - centerPointSize - 1, centerY - centerPointSize - 1, (centerPointSize + 1) * 2, (centerPointSize + 1) * 2);
+        g2d.setColor(circleColor);
         g2d.fillOval(centerX - centerPointSize, centerY - centerPointSize, centerPointSize * 2, centerPointSize * 2);
 
         // Rotation value label
@@ -1597,45 +1659,64 @@ public class Game extends Canvas implements Runnable {
         double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
         int squareSize = (int)(20 / zoom);
         squareSize = Math.max(4, squareSize);
-
-        g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-        // Center square (uniform scale)
-        Color uColor = (currentDragMode == GizmoDragMode.SCALE_UNIFORM) ? new Color(255, 255, 150)
-                : new Color(255, 220, 50);
-        g2d.setColor(uColor);
         int centerSize = (int)(12 / zoom);
         centerSize = Math.max(6, centerSize);
+
+        boolean xActive = (currentDragMode == GizmoDragMode.SCALE_X || hoveredGizmoMode == GizmoDragMode.SCALE_X);
+        boolean yActive = (currentDragMode == GizmoDragMode.SCALE_Y || hoveredGizmoMode == GizmoDragMode.SCALE_Y);
+        boolean uActive = (currentDragMode == GizmoDragMode.SCALE_UNIFORM || hoveredGizmoMode == GizmoDragMode.SCALE_UNIFORM);
+
+        Color xColor = xActive ? new Color(255, 80, 80) : new Color(220, 40, 40);
+        Color yColor = yActive ? new Color(80, 255, 80) : new Color(40, 200, 40);
+        Color uColor = uActive ? new Color(255, 255, 150) : new Color(255, 220, 50);
+
+        // --- 1. Draw Black Outline Background ---
+        g2d.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setColor(Color.BLACK);
+        
+        // X outline
+        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
+        g2d.fillRect(centerX + gizmoSize - squareSize / 2 - 2, centerY - squareSize / 2 - 2, squareSize + 4, squareSize + 4);
+        
+        // Y outline
+        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
+        g2d.fillRect(centerX - squareSize / 2 - 2, centerY + gizmoSize - squareSize / 2 - 2, squareSize + 4, squareSize + 4);
+
+        // Center outline
+        g2d.fillRect(centerX - centerSize / 2 - 2, centerY - centerSize / 2 - 2, centerSize + 4, centerSize + 4);
+
+        // --- 2. Draw Colored Foreground ---
+        g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        
+        // X Foreground
+        g2d.setColor(xColor);
+        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
+        g2d.fillRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        g2d.setColor(Color.WHITE);
+        g2d.drawRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+
+        // Y Foreground
+        g2d.setColor(yColor);
+        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
+        g2d.fillRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
+        g2d.setColor(Color.WHITE);
+        g2d.drawRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
+
+        // Center Foreground
+        g2d.setColor(uColor);
         g2d.fillRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
         g2d.setColor(Color.BLACK);
         g2d.drawRect(centerX - centerSize / 2, centerY - centerSize / 2, centerSize, centerSize);
 
-        // X axis (red) - arrow to right with square end
-        Color xColor = (currentDragMode == GizmoDragMode.SCALE_X) ? new Color(255, 100, 100) : new Color(220, 50, 50);
-        g2d.setColor(xColor);
-        g2d.drawLine(centerX, centerY, centerX + gizmoSize, centerY);
-        // X square end
-        g2d.fillRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
+        // Labels
         g2d.setColor(Color.WHITE);
-        g2d.drawRect(centerX + gizmoSize - squareSize / 2, centerY - squareSize / 2, squareSize, squareSize);
         g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        drawWorldText(g2d, "X", centerX + gizmoSize + squareSize, centerY - 4);
-
-        // Y axis (green) - arrow pointing up (positive Y direction in world space)
-        Color yColor = (currentDragMode == GizmoDragMode.SCALE_Y) ? new Color(100, 255, 100) : new Color(50, 200, 50);
-        g2d.setColor(yColor);
-        g2d.drawLine(centerX, centerY, centerX, centerY + gizmoSize);
-        // Y square end (pointing up = positive Y)
-        g2d.fillRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
-        g2d.setColor(Color.WHITE);
-        g2d.drawRect(centerX - squareSize / 2, centerY + gizmoSize - squareSize / 2, squareSize, squareSize);
-        g2d.setFont(new Font("Dialog", Font.BOLD, 12));
-        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + squareSize + 2);
+        drawWorldText(g2d, "X", centerX + gizmoSize + squareSize + 2, centerY - 4);
+        drawWorldText(g2d, "Y", centerX - 4, centerY + gizmoSize + squareSize + 4);
 
         // Size label
-        g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Dialog", Font.PLAIN, 11));
-        drawWorldText(g2d, objW + " x " + objH, centerX + gizmoSize + squareSize, centerY - 20);
+        drawWorldText(g2d, objW + " x " + objH, centerX + gizmoSize + squareSize + 2, centerY - 20);
     }
 
     // ==================== TOOL MANAGEMENT ====================

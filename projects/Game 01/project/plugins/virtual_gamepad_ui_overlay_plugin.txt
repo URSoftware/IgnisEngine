@@ -1,0 +1,5 @@
+Name: Virtual Gamepad UI Overlay
+Author: MobileDev
+Version: 1.0.5
+Git URL: https://github.com/MobileDev/virtual-gamepad-ignis.git
+Install-Status: SUCCESSFUL_SANDBOXED

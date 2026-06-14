@@ -13,8 +13,13 @@ import java.util.List;
  */
 public class SpriteAnimation {
 
+    public enum CurveType {
+        LINEAR, EASE_IN, EASE_OUT, EASE_IN_OUT
+    }
+
     private String name;
     private boolean loop = true;
+    private CurveType curveType = CurveType.LINEAR;
     private final List<AnimationFrame> frames = new ArrayList<>();
 
     public SpriteAnimation() {
@@ -39,6 +44,14 @@ public class SpriteAnimation {
 
     public void setLoop(boolean loop) {
         this.loop = loop;
+    }
+
+    public CurveType getCurveType() {
+        return curveType;
+    }
+
+    public void setCurveType(CurveType curveType) {
+        this.curveType = curveType;
     }
 
     public List<AnimationFrame> getFrames() {
@@ -82,14 +95,29 @@ public class SpriteAnimation {
             t = Math.min(time, total);
         }
 
+        // Apply easing curve warping to progress t
+        double progress = t / total;
+        double warpedProgress = applyEasing(progress, curveType);
+        double warpedTime = warpedProgress * total;
+
         double acc = 0;
         for (AnimationFrame frame : frames) {
             acc += frame.getDuration();
-            if (t < acc) {
+            if (warpedTime < acc) {
                 return frame.getSpritePath();
             }
         }
         return frames.get(frames.size() - 1).getSpritePath();
+    }
+
+    private double applyEasing(double p, CurveType type) {
+        if (type == null) return p;
+        return switch (type) {
+            case LINEAR -> p;
+            case EASE_IN -> p * p;
+            case EASE_OUT -> p * (2.0 - p);
+            case EASE_IN_OUT -> p < 0.5 ? 2.0 * p * p : 1.0 - 2.0 * (1.0 - p) * (1.0 - p);
+        };
     }
 
     /** True when a non-looping animation has reached its end. */
@@ -101,6 +129,7 @@ public class SpriteAnimation {
         JSONObject json = new JSONObject();
         json.put("name", name);
         json.put("loop", loop);
+        json.put("curveType", curveType.name());
         JSONArray frameArray = new JSONArray();
         for (AnimationFrame frame : frames) {
             frameArray.put(frame.toJSON());
@@ -112,6 +141,14 @@ public class SpriteAnimation {
     public static SpriteAnimation fromJSON(JSONObject json) {
         SpriteAnimation animation = new SpriteAnimation(json.optString("name", "animation"));
         animation.loop = json.optBoolean("loop", true);
+        
+        String curveStr = json.optString("curveType", CurveType.LINEAR.name());
+        try {
+            animation.curveType = CurveType.valueOf(curveStr);
+        } catch (Exception e) {
+            animation.curveType = CurveType.LINEAR;
+        }
+
         JSONArray frameArray = json.optJSONArray("frames");
         if (frameArray != null) {
             for (int i = 0; i < frameArray.length(); i++) {

@@ -23,6 +23,7 @@ public class Editor extends JFrame {
     private JSplitPane leftSplit; // Split between hierarchy and file browser
     private static final String SETTINGS_FILE = "editor_layout.json";
     private boolean isLoading = false;
+    private boolean autoSaveScriptsEnabled = true;
     private DefaultListModel<GameObject> hierarchyModel;
     private JList<GameObject> hierarchyList;
     private JPopupMenu hierarchyContextMenu;
@@ -69,6 +70,9 @@ public class Editor extends JFrame {
     
     // ScriptManager to manage scripts
     private ScriptManager scriptManager;
+    
+    // Open script editors
+    private final java.util.Map<String, ScriptEditorWindow> openScriptEditors = new java.util.HashMap<>();
     
     // Timer for updating inspector during gameplay
     private javax.swing.Timer inspectorUpdateTimer;
@@ -2943,160 +2947,32 @@ public class Editor extends JFrame {
     private void openScriptEditor(String scriptName) {
         if (scriptManager == null) return;
         
-        String content = scriptManager.readScriptContent(scriptName);
-        if (content == null) {
-            JOptionPane.showMessageDialog(this,
-                "Could not read script: " + scriptName,
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
+        if (openScriptEditors.containsKey(scriptName)) {
+            ScriptEditorWindow window = openScriptEditors.get(scriptName);
+            window.toFront();
+            window.requestFocus();
             return;
         }
         
-        // Create script editor window
-        JFrame editorFrame = new JFrame("Script Editor - " + scriptName);
-        editorFrame.setSize(800, 600);
-        editorFrame.setLocationRelativeTo(this);
-        
-        JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBackground(new Color(40, 40, 40));
-        
-        // Toolbar
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        toolbar.setBackground(new Color(50, 50, 50));
-        
-        JButton saveBtn = new JButton("💾 Save");
-        saveBtn.setBackground(new Color(60, 120, 60));
-        saveBtn.setForeground(Color.WHITE);
-        saveBtn.setFocusPainted(false);
-        saveBtn.setBorderPainted(false);
-        
-        JButton compileBtn = new JButton("⚙ Compile");
-        compileBtn.setBackground(new Color(60, 100, 150));
-        compileBtn.setForeground(Color.WHITE);
-        compileBtn.setFocusPainted(false);
-        compileBtn.setBorderPainted(false);
-        
-        JButton saveAndCompileBtn = new JButton("💾⚙ Save & Compile");
-        saveAndCompileBtn.setBackground(new Color(100, 80, 150));
-        saveAndCompileBtn.setForeground(Color.WHITE);
-        saveAndCompileBtn.setFocusPainted(false);
-        saveAndCompileBtn.setBorderPainted(false);
-        
-        toolbar.add(saveBtn);
-        toolbar.add(compileBtn);
-        toolbar.add(saveAndCompileBtn);
-        
-        // Text editor
-        JTextArea textArea = new JTextArea(content);
-        textArea.setBackground(new Color(30, 30, 30));
-        textArea.setForeground(new Color(220, 220, 220));
-        textArea.setCaretColor(Color.WHITE);
-        textArea.setFont(new Font("Consolas", Font.PLAIN, 14));
-        textArea.setTabSize(4);
-        
-        // Line numbers
-        JTextArea lineNumbers = new JTextArea("1");
-        lineNumbers.setBackground(new Color(45, 45, 45));
-        lineNumbers.setForeground(new Color(120, 120, 120));
-        lineNumbers.setFont(new Font("Consolas", Font.PLAIN, 14));
-        lineNumbers.setEditable(false);
-        lineNumbers.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5));
-        
-        // Update line numbers
-        textArea.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) { updateLineNumbers(); }
-            @Override
-            public void removeUpdate(DocumentEvent e) { updateLineNumbers(); }
-            @Override
-            public void changedUpdate(DocumentEvent e) { updateLineNumbers(); }
-            
-            private void updateLineNumbers() {
-                int lines = textArea.getLineCount();
-                StringBuilder sb = new StringBuilder();
-                for (int i = 1; i <= lines; i++) {
-                    sb.append(i).append("\n");
-                }
-                lineNumbers.setText(sb.toString());
-            }
-        });
-        
-        // Inicializar números de linha
-        int lines = textArea.getLineCount();
-        StringBuilder sb = new StringBuilder();
-        for (int i = 1; i <= lines; i++) {
-            sb.append(i).append("\n");
+        ScriptEditorWindow window = new ScriptEditorWindow(this, scriptManager, scriptName);
+        openScriptEditors.put(scriptName, window);
+        window.setVisible(true);
+    }
+    
+    /**
+     * Callback when a script editor is closed
+     */
+    public void onScriptEditorClosed(String scriptName) {
+        openScriptEditors.remove(scriptName);
+    }
+    
+    /**
+     * Saves all open scripts in the editors
+     */
+    public void saveAllOpenScripts() {
+        for (ScriptEditorWindow window : new java.util.ArrayList<>(openScriptEditors.values())) {
+            window.saveScript();
         }
-        lineNumbers.setText(sb.toString());
-        
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setRowHeaderView(lineNumbers);
-        scrollPane.setBorder(null);
-        
-        // Status bar
-        JLabel statusLabel = new JLabel(" Ready");
-        statusLabel.setForeground(Color.LIGHT_GRAY);
-        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        
-        JPanel statusBar = new JPanel(new BorderLayout());
-        statusBar.setBackground(new Color(50, 50, 50));
-        statusBar.add(statusLabel, BorderLayout.WEST);
-        
-        // Actions
-        saveBtn.addActionListener(e -> {
-            if (scriptManager.saveScriptContent(scriptName, textArea.getText())) {
-                statusLabel.setText(" ✓ Script saved");
-                statusLabel.setForeground(new Color(100, 200, 100));
-            } else {
-                statusLabel.setText(" ✕ Failed to save");
-                statusLabel.setForeground(new Color(200, 100, 100));
-            }
-        });
-        
-        compileBtn.addActionListener(e -> {
-            File scriptFile = new File(scriptManager.getScriptsFolder(), scriptName + ".java");
-            if (scriptManager.compileScript(scriptFile)) {
-                statusLabel.setText(" ✓ Compilation successful");
-                statusLabel.setForeground(new Color(100, 200, 100));
-                reloadAllScriptInstances();
-            } else {
-                statusLabel.setText(" ✕ Compilation failed - check console");
-                statusLabel.setForeground(new Color(200, 100, 100));
-            }
-        });
-        
-        saveAndCompileBtn.addActionListener(e -> {
-            if (scriptManager.saveScriptContent(scriptName, textArea.getText())) {
-                File scriptFile = new File(scriptManager.getScriptsFolder(), scriptName + ".java");
-                if (scriptManager.compileScript(scriptFile)) {
-                    statusLabel.setText(" ✓ Saved and compiled successfully");
-                    statusLabel.setForeground(new Color(100, 200, 100));
-                    reloadAllScriptInstances();
-                } else {
-                    statusLabel.setText(" ✕ Saved but compilation failed - check console");
-                    statusLabel.setForeground(new Color(200, 150, 100));
-                }
-            } else {
-                statusLabel.setText(" ✕ Failed to save");
-                statusLabel.setForeground(new Color(200, 100, 100));
-            }
-        });
-        
-        // Atalhos de teclado
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK), "save");
-        textArea.getActionMap().put("save", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                saveBtn.doClick();
-            }
-        });
-        
-        mainPanel.add(toolbar, BorderLayout.NORTH);
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
-        mainPanel.add(statusBar, BorderLayout.SOUTH);
-        
-        editorFrame.add(mainPanel);
-        editorFrame.setVisible(true);
     }
     
     /**
@@ -3460,32 +3336,6 @@ public class Editor extends JFrame {
      */
     private class FileTreeCellRenderer extends DefaultTreeCellRenderer {
         
-        // Larger icon size for better drag and drop targeting
-        private static final int ICON_SIZE = 20;
-        
-        // Cached icons loaded from files
-        private ImageIcon audioFileIcon;
-        private ImageIcon prefabFileIcon;
-        
-        public FileTreeCellRenderer() {
-            // Load icons from core_assets/icons
-            try {
-                java.net.URL audioIconUrl = getClass().getResource("/com/ignis/core_assets/icons/sound_icon.ico");
-                java.net.URL prefabIconUrl = getClass().getResource("/com/ignis/core_assets/icons/util_gear.ico");
-                
-                if (audioIconUrl != null) {
-                    audioFileIcon = new ImageIcon(new ImageIcon(audioIconUrl).getImage()
-                        .getScaledInstance(ICON_SIZE, ICON_SIZE, java.awt.Image.SCALE_SMOOTH));
-                }
-                if (prefabIconUrl != null) {
-                    prefabFileIcon = new ImageIcon(new ImageIcon(prefabIconUrl).getImage()
-                        .getScaledInstance(ICON_SIZE, ICON_SIZE, java.awt.Image.SCALE_SMOOTH));
-                }
-            } catch (Exception e) {
-                System.err.println("[Editor] Failed to load file icons: " + e.getMessage());
-            }
-        }
-        
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value,
                 boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
@@ -3493,31 +3343,43 @@ public class Editor extends JFrame {
             super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus);
 
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
-            File file = (File) node.getUserObject();
+            Object userObj = node.getUserObject();
 
+            if (!(userObj instanceof File)) {
+                // Graceful fallback for non-file nodes (like the root "project")
+                setIcon(new VectorIcon(VectorIcon.VectorIconType.FOLDER, 16));
+                setText(userObj != null ? userObj.toString() : "");
+                setBackgroundNonSelectionColor(new Color(60, 60, 60));
+                setBackgroundSelectionColor(new Color(0, 120, 215));
+                setTextNonSelectionColor(Color.WHITE);
+                setTextSelectionColor(Color.WHITE);
+                return this;
+            }
+
+            File file = (File) userObj;
             String displayName = file.getName().isEmpty() ? file.getPath() : file.getName();
             setText(displayName);
 
-            // Set icon based on file type
+            // Set icon based on file type using VectorIcon
             if (file.isDirectory()) {
-                setIcon(expanded ? createFolderOpenIcon() : createFolderIcon());
+                setIcon(new VectorIcon(VectorIcon.VectorIconType.FOLDER, 16));
             } else {
                 String name = file.getName().toLowerCase();
                 if (name.endsWith(".prefab.json")) {
-                    setIcon(prefabFileIcon != null ? prefabFileIcon : createPrefabFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.PREFAB, 16));
                 } else if (name.endsWith(".java")) {
-                    setIcon(createJavaFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.SCRIPT, 16));
                 } else if (name.endsWith(".ignis")) {
-                    setIcon(createIgnisFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.SCENE, 16));
                 } else if (name.endsWith(".json")) {
-                    setIcon(createJsonFileIcon());
-                } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".gif")) {
-                    setIcon(createImageFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.FILE, 16));
+                } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".gif") || name.endsWith(".bmp") || name.endsWith(".jpeg")) {
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.IMAGE, 16));
                 } else if (name.endsWith(".wav") || name.endsWith(".mp3") || name.endsWith(".aiff") || 
                            name.endsWith(".au") || name.endsWith(".ogg") || name.endsWith(".flac")) {
-                    setIcon(audioFileIcon != null ? audioFileIcon : createAudioFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.AUDIO, 16));
                 } else {
-                    setIcon(createFileIcon());
+                    setIcon(new VectorIcon(VectorIcon.VectorIconType.FILE, 16));
                 }
             }
 
@@ -3528,297 +3390,6 @@ public class Editor extends JFrame {
 
             return this;
         }
-
-        private Icon createFolderIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(255, 200, 80));
-                    // Folder body (scaled for 20px)
-                    g2d.fillRect(x, y + 5, 18, 12);
-                    // Folder tab
-                    g2d.fillRect(x, y + 3, 8, 4);
-                    g2d.setColor(new Color(200, 150, 50));
-                    g2d.drawRect(x, y + 5, 18, 12);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createFolderOpenIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(255, 220, 100));
-                    // Folder body (open, scaled for 20px)
-                    int[] xPoints = { x, x + 17, x + 20, x + 3 };
-                    int[] yPoints = { y + 7, y + 7, y + 17, y + 17 };
-                    g2d.fillPolygon(xPoints, yPoints, 4);
-                    // Folder tab
-                    g2d.setColor(new Color(255, 200, 80));
-                    g2d.fillRect(x, y + 3, 8, 6);
-                    g2d.setColor(new Color(200, 150, 50));
-                    g2d.drawPolygon(xPoints, yPoints, 4);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 3, y, 13, 18);
-                    g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 3, y, 13, 18);
-                    // Corner fold
-                    g2d.drawLine(x + 10, y, x + 16, y + 5);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createJavaFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 3, y, 13, 18);
-                    g2d.setColor(new Color(255, 120, 50));
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 11));
-                    g2d.drawString("J", x + 6, y + 14);
-                    g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 3, y, 13, 18);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createIgnisFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    // Fire-colored background
-                    g2d.setColor(new Color(255, 100, 50));
-                    g2d.fillRect(x + 3, y, 13, 18);
-                    // Flame
-                    g2d.setColor(new Color(255, 200, 50));
-                    int[] fx = { x + 9, x + 5, x + 9, x + 13 };
-                    int[] fy = { y + 3, y + 13, y + 9, y + 13 };
-                    g2d.fillPolygon(fx, fy, 4);
-                    g2d.setColor(new Color(200, 50, 0));
-                    g2d.drawRect(x + 3, y, 13, 18);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createJsonFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 3, y, 13, 18);
-                    g2d.setColor(new Color(100, 150, 200));
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 10));
-                    g2d.drawString("{}", x + 4, y + 13);
-                    g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 3, y, 13, 18);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-        
-        private Icon createPrefabFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    
-                    // Box background
-                    g2d.setColor(new Color(120, 80, 200));
-                    g2d.fillRoundRect(x + 1, y + 1, 17, 17, 4, 4);
-                    
-                    // 3D box effect - top
-                    g2d.setColor(new Color(150, 110, 230));
-                    int[] topX = {x + 1, x + 9, x + 18, x + 9};
-                    int[] topY = {y + 5, y + 1, y + 5, y + 9};
-                    g2d.fillPolygon(topX, topY, 4);
-                    
-                    // Border
-                    g2d.setColor(new Color(80, 50, 150));
-                    g2d.drawRoundRect(x + 1, y + 1, 17, 17, 4, 4);
-                    
-                    // "P" letter
-                    g2d.setColor(Color.WHITE);
-                    g2d.setFont(new Font("Dialog", Font.BOLD, 11));
-                    g2d.drawString("P", x + 6, y + 14);
-                    
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-
-        private Icon createImageFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.fillRect(x + 3, y, 13, 18);
-                    // Mountain/image symbol
-                    g2d.setColor(new Color(100, 180, 100));
-                    int[] mx = { x + 4, x + 9, x + 15 };
-                    int[] my = { y + 14, y + 6, y + 14 };
-                    g2d.fillPolygon(mx, my, 3);
-                    // Sun
-                    g2d.setColor(new Color(255, 200, 50));
-                    g2d.fillOval(x + 10, y + 3, 4, 4);
-                    g2d.setColor(new Color(150, 150, 150));
-                    g2d.drawRect(x + 3, y, 13, 18);
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
-        
-        private Icon createAudioFileIcon() {
-            return new Icon() {
-                @Override
-                public void paintIcon(Component c, Graphics g, int x, int y) {
-                    Graphics2D g2d = (Graphics2D) g.create();
-                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    
-                    // Background
-                    g2d.setColor(new Color(70, 70, 70));
-                    g2d.fillRoundRect(x, y, ICON_SIZE, ICON_SIZE, 4, 4);
-                    
-                    // Draw two eighth notes (colcheias) connected by a beam
-                    g2d.setColor(new Color(255, 150, 50)); // Orange/gold color for music
-                    g2d.setStroke(new BasicStroke(2f));
-                    
-                    // Left note stem
-                    g2d.drawLine(x + 5, y + 5, x + 5, y + 14);
-                    // Right note stem
-                    g2d.drawLine(x + 14, y + 5, x + 14, y + 12);
-                    
-                    // Beam connecting the two stems (at top)
-                    g2d.setStroke(new BasicStroke(3f));
-                    g2d.drawLine(x + 5, y + 5, x + 14, y + 5);
-                    
-                    // Left note head (filled ellipse)
-                    g2d.fillOval(x + 2, y + 12, 5, 4);
-                    // Right note head (filled ellipse)
-                    g2d.fillOval(x + 11, y + 10, 5, 4);
-                    
-                    g2d.dispose();
-                }
-
-                @Override
-                public int getIconWidth() {
-                    return ICON_SIZE;
-                }
-
-                @Override
-                public int getIconHeight() {
-                    return ICON_SIZE;
-                }
-            };
-        }
     }
 
     /**
@@ -3827,23 +3398,23 @@ public class Editor extends JFrame {
     private JPopupMenu createFileContextMenu() {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem newFolder = new JMenuItem("📁 New Folder");
+        JMenuItem newFolder = new JMenuItem("New Folder", new VectorIcon(VectorIcon.VectorIconType.FOLDER, 16));
         newFolder.addActionListener(e -> createNewFolder());
         
-        JMenuItem newScript = new JMenuItem("📜 New Script");
+        JMenuItem newScript = new JMenuItem("New Script", new VectorIcon(VectorIcon.VectorIconType.SCRIPT, 16));
         newScript.addActionListener(e -> createNewScript());
 
-        JMenuItem rename = new JMenuItem("✏ Rename");
+        JMenuItem rename = new JMenuItem("Rename", new VectorIcon(VectorIcon.VectorIconType.SETTINGS, 16));
         rename.addActionListener(e -> renameSelectedFile());
 
-        JMenuItem delete = new JMenuItem("🗑 Delete");
+        JMenuItem delete = new JMenuItem("Delete", new VectorIcon(VectorIcon.VectorIconType.STOP, 16));
         delete.addActionListener(e -> deleteSelectedFile());
 
-        JMenuItem refresh = new JMenuItem("🔄 Refresh");
+        JMenuItem refresh = new JMenuItem("Refresh", new VectorIcon(VectorIcon.VectorIconType.REFRESH, 16));
         refresh.addActionListener(e -> refreshFileTree());
         
         // Option to edit script (only appears for .java files)
-        JMenuItem editScript = new JMenuItem("📝 Edit Script");
+        JMenuItem editScript = new JMenuItem("Edit Script", new VectorIcon(VectorIcon.VectorIconType.SCRIPT, 16));
         editScript.addActionListener(e -> {
             TreePath path = fileTree.getSelectionPath();
             if (path != null) {
@@ -3857,7 +3428,7 @@ public class Editor extends JFrame {
         });
         
         // Option to compile script
-        JMenuItem compileScript = new JMenuItem("⚙ Compile Script");
+        JMenuItem compileScript = new JMenuItem("Compile Script", new VectorIcon(VectorIcon.VectorIconType.COMPILE, 16));
         compileScript.addActionListener(e -> {
             TreePath path = fileTree.getSelectionPath();
             if (path != null) {
@@ -4335,6 +3906,21 @@ public class Editor extends JFrame {
     }
 
     private void openFile(File file) {
+        String name = file.getName().toLowerCase();
+        
+        // Redirect script files to internal script editor
+        if (name.endsWith(".java")) {
+            String scriptName = file.getName().replace(".java", "");
+            openScriptEditor(scriptName);
+            return;
+        }
+        
+        // Redirect markdown files to internal markdown viewer
+        if (name.endsWith(".md") || name.endsWith(".markdown")) {
+            openMarkdownViewer(file);
+            return;
+        }
+
         // Check if it's a prefab file - offer to instantiate
         if (file.getName().endsWith(".prefab.json")) {
             String prefabName = file.getName().replace(".prefab.json", "");
@@ -4363,6 +3949,13 @@ public class Editor extends JFrame {
             JOptionPane.showMessageDialog(this, "Cannot open file: " + e.getMessage(), "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void openMarkdownViewer(File file) {
+        SwingUtilities.invokeLater(() -> {
+            MarkdownViewerFrame frame = new MarkdownViewerFrame(this, file);
+            frame.setVisible(true);
+        });
     }
 
     /**
@@ -5100,7 +4693,8 @@ public class Editor extends JFrame {
         Font buttonFont = new Font("Dialog", Font.BOLD, 14);
 
         // Play button
-        playButton = new JButton("▶");
+        playButton = new JButton();
+        playButton.setIcon(new VectorIcon(VectorIcon.VectorIconType.PLAY, 14, Color.WHITE));
         playButton.setPreferredSize(buttonSize);
         playButton.setFont(buttonFont);
         playButton.setToolTipText("Start world simulation");
@@ -5120,7 +4714,8 @@ public class Editor extends JFrame {
         playButton.addActionListener(e -> onPlayWorld());
 
         // Pause button
-        pauseButton = new JButton("⏸");
+        pauseButton = new JButton();
+        pauseButton.setIcon(new VectorIcon(VectorIcon.VectorIconType.PAUSE, 14, Color.WHITE));
         pauseButton.setPreferredSize(buttonSize);
         pauseButton.setFont(buttonFont);
         pauseButton.setToolTipText("Pause world simulation");
@@ -5141,7 +4736,8 @@ public class Editor extends JFrame {
         pauseButton.addActionListener(e -> onPauseWorld());
 
         // Stop button
-        stopButton = new JButton("⏹");
+        stopButton = new JButton();
+        stopButton.setIcon(new VectorIcon(VectorIcon.VectorIconType.STOP, 14, Color.WHITE));
         stopButton.setPreferredSize(buttonSize);
         stopButton.setFont(buttonFont);
         stopButton.setToolTipText("Stop and reset world simulation");
@@ -5312,6 +4908,8 @@ public class Editor extends JFrame {
             // Resume from pause
             game.resumeWorld();
         } else {
+            // Save all open scripts before play mode
+            saveAllOpenScripts();
             // Recompilar todos os scripts antes de iniciar
             if (scriptManager != null) {
                 System.out.println("Recompiling all scripts...");
@@ -5335,7 +4933,7 @@ public class Editor extends JFrame {
     /**
      * Reloads all script instances in all game objects to use newly compiled classes
      */
-    private void reloadAllScriptInstances() {
+    void reloadAllScriptInstances() {
         if (scriptManager == null) return;
         
         Scene currentScene = (currentProject != null) ? currentProject.getCurrentScene() : null;
@@ -5464,30 +5062,30 @@ public class Editor extends JFrame {
         JMenu fileMenu = new JMenu("File");
 
         // New Project
-        JMenuItem newProjectItem = new JMenuItem("New Project");
+        JMenuItem newProjectItem = new JMenuItem("New Project", new VectorIcon(VectorIcon.VectorIconType.NEW_PROJECT, 16));
         newProjectItem.addActionListener(e -> newProject());
         fileMenu.add(newProjectItem);
 
         // Open Project
-        JMenuItem openProjectItem = new JMenuItem("Open Project");
+        JMenuItem openProjectItem = new JMenuItem("Open Project", new VectorIcon(VectorIcon.VectorIconType.OPEN_PROJECT, 16));
         openProjectItem.addActionListener(e -> openProject());
         fileMenu.add(openProjectItem);
 
         // Save Project
-        JMenuItem saveProjectItem = new JMenuItem("Save Project");
+        JMenuItem saveProjectItem = new JMenuItem("Save Project", new VectorIcon(VectorIcon.VectorIconType.SAVE, 16));
         saveProjectItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         saveProjectItem.addActionListener(e -> saveProject());
         fileMenu.add(saveProjectItem);
 
         // Save Project As
-        JMenuItem saveAsItem = new JMenuItem("Save Project As...");
+        JMenuItem saveAsItem = new JMenuItem("Save Project As...", new VectorIcon(VectorIcon.VectorIconType.SAVE, 16));
         saveAsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         saveAsItem.addActionListener(e -> saveProjectAs());
         fileMenu.add(saveAsItem);
 
         fileMenu.addSeparator();
 
-        JMenuItem exitItem = new JMenuItem("Exit");
+        JMenuItem exitItem = new JMenuItem("Exit", new VectorIcon(VectorIcon.VectorIconType.STOP, 16));
         exitItem.addActionListener(e -> {
             dispose();
             System.exit(0);
@@ -5499,7 +5097,7 @@ public class Editor extends JFrame {
         // ==================== BUILD MENU ====================
         JMenu buildMenu = new JMenu("Build");
 
-        JMenuItem buildProjectItem = new JMenuItem("Build Project...");
+        JMenuItem buildProjectItem = new JMenuItem("Build Project...", new VectorIcon(VectorIcon.VectorIconType.BUILD, 16));
         buildProjectItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         buildProjectItem.addActionListener(e -> openBuildDialog());
         buildMenu.add(buildProjectItem);
@@ -5509,27 +5107,27 @@ public class Editor extends JFrame {
         // ==================== TOOLS MENU ====================
         JMenu toolsMenu = new JMenu("Tools");
 
-        JMenuItem imageEditorItem = new JMenuItem("Image Editor");
+        JMenuItem imageEditorItem = new JMenuItem("Image Editor", new VectorIcon(VectorIcon.VectorIconType.IMAGE, 16));
         imageEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         imageEditorItem.addActionListener(e -> openImageEditor());
         toolsMenu.add(imageEditorItem);
 
-        JMenuItem animationEditorItem = new JMenuItem("Animation Editor");
+        JMenuItem animationEditorItem = new JMenuItem("Animation Editor", new VectorIcon(VectorIcon.VectorIconType.ANIMATION, 16));
         animationEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         animationEditorItem.addActionListener(e -> openAnimationEditor());
         toolsMenu.add(animationEditorItem);
 
-        JMenuItem audioEditorItem = new JMenuItem("Audio Editor (DAW)");
+        JMenuItem audioEditorItem = new JMenuItem("Audio Editor (DAW)", new VectorIcon(VectorIcon.VectorIconType.AUDIO, 16));
         audioEditorItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         audioEditorItem.addActionListener(e -> openAudioEditor());
         toolsMenu.add(audioEditorItem);
 
-        JMenuItem noteSystemItem = new JMenuItem("Note System (Notion)");
+        JMenuItem noteSystemItem = new JMenuItem("Note System (Notion)", new VectorIcon(VectorIcon.VectorIconType.FILE, 16));
         noteSystemItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         noteSystemItem.addActionListener(e -> openNoteSystem());
         toolsMenu.add(noteSystemItem);
 
-        JMenuItem communityItem = new JMenuItem("Community & Marketplace");
+        JMenuItem communityItem = new JMenuItem("Community & Marketplace", new VectorIcon(VectorIcon.VectorIconType.ASSETS, 16));
         communityItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         communityItem.addActionListener(e -> openCommunityMarketplace());
         toolsMenu.add(communityItem);
@@ -5628,6 +5226,15 @@ public class Editor extends JFrame {
         viewMenu.add(showCollidersItem);
         
         menuBar.add(viewMenu);
+
+        // ==================== SETTINGS MENU ====================
+        JMenu settingsMenu = new JMenu("Settings");
+        JCheckBoxMenuItem autoSaveScriptsItem = new JCheckBoxMenuItem("Auto Save Scripts", autoSaveScriptsEnabled);
+        autoSaveScriptsItem.addActionListener(e -> {
+            setAutoSaveScriptsEnabled(autoSaveScriptsItem.isSelected());
+        });
+        settingsMenu.add(autoSaveScriptsItem);
+        menuBar.add(settingsMenu);
         
         setJMenuBar(menuBar);
     }
@@ -5919,6 +5526,7 @@ public class Editor extends JFrame {
             JSONObject layout = new JSONObject(json.toString());
             mainSplit.setDividerLocation(layout.getInt("hierarchyWidth"));
             rightSplit.setDividerLocation(layout.getInt("inspectorWidth"));
+            autoSaveScriptsEnabled = layout.optBoolean("autoSaveScripts", true);
         } catch (Exception e) {
             // On error, use default values
             mainSplit.setDividerLocation(250);
@@ -5944,6 +5552,7 @@ public class Editor extends JFrame {
             JSONObject layout = new JSONObject();
             layout.put("hierarchyWidth", mainSplit.getDividerLocation());
             layout.put("inspectorWidth", rightSplit.getDividerLocation());
+            layout.put("autoSaveScripts", autoSaveScriptsEnabled);
 
             FileWriter writer = new FileWriter(SETTINGS_FILE);
             writer.write(layout.toString(2));
@@ -5951,6 +5560,15 @@ public class Editor extends JFrame {
         } catch (Exception e) {
             // Silent failure on save
         }
+    }
+
+    public boolean isAutoSaveScriptsEnabled() {
+        return autoSaveScriptsEnabled;
+    }
+
+    public void setAutoSaveScriptsEnabled(boolean enabled) {
+        this.autoSaveScriptsEnabled = enabled;
+        saveLayout();
     }
 
     public static void main(String[] args) {

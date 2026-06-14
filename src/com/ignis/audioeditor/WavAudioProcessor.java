@@ -28,33 +28,116 @@ public final class WavAudioProcessor {
 
     /**
      * Reads a WAV file and returns its format and PCM data.
+     * Guaranteed to convert to standard 44100Hz 16-bit Stereo PCM Little Endian.
      */
     public static WavData readWav(File file) throws Exception {
         try (AudioInputStream ais = AudioSystem.getAudioInputStream(file)) {
             AudioFormat format = ais.getFormat();
-            
-            // If format is not PCM 16-bit signed, we try to convert it
-            if (format.getEncoding() != AudioFormat.Encoding.PCM_SIGNED || format.getSampleSizeInBits() != 16) {
-                AudioFormat targetFormat = new AudioFormat(
-                    AudioFormat.Encoding.PCM_SIGNED,
-                    format.getSampleRate(),
-                    16,
-                    format.getChannels(),
-                    format.getChannels() * 2,
-                    format.getSampleRate(),
-                    false // little endian
-                );
-                try (AudioInputStream converted = AudioSystem.getAudioInputStream(targetFormat, ais)) {
-                    byte[] pcmData = converted.readAllBytes();
-                    double duration = (double) pcmData.length / (targetFormat.getFrameSize() * targetFormat.getSampleRate());
-                    return new WavData(targetFormat, pcmData, duration);
+            AudioFormat targetFormat = new AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                44100.0f,
+                16,
+                2,
+                4,
+                44100.0f,
+                false
+            );
+
+            // 1. Try native AudioSystem conversion first
+            try {
+                if (AudioSystem.isConversionSupported(targetFormat, format)) {
+                    try (AudioInputStream converted = AudioSystem.getAudioInputStream(targetFormat, ais)) {
+                        byte[] pcmData = converted.readAllBytes();
+                        double duration = (double) pcmData.length / targetFormat.getFrameSize() / targetFormat.getSampleRate();
+                        return new WavData(targetFormat, pcmData, duration);
+                    }
+                }
+            } catch (Exception e) {
+                // Fallback to manual converter/resampler
+            }
+
+            // 2. Manual Resampling/Conversion Fallback
+            // First convert to PCM signed 16-bit, keeping original sample rate and channels
+            AudioFormat pcm16Format = new AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                format.getSampleRate(),
+                16,
+                format.getChannels(),
+                format.getChannels() * 2,
+                format.getSampleRate(),
+                false
+            );
+
+            byte[] srcBytes;
+            if (AudioSystem.isConversionSupported(pcm16Format, format)) {
+                try (AudioInputStream converted = AudioSystem.getAudioInputStream(pcm16Format, ais)) {
+                    srcBytes = converted.readAllBytes();
+                }
+            } else {
+                srcBytes = ais.readAllBytes();
+            }
+
+            byte[] standardBytes = resampleTo44100Stereo16Bit(srcBytes, pcm16Format);
+            double duration = (double) standardBytes.length / targetFormat.getFrameSize() / targetFormat.getSampleRate();
+            return new WavData(targetFormat, standardBytes, duration);
+        }
+    }
+
+    private static byte[] resampleTo44100Stereo16Bit(byte[] srcBytes, AudioFormat srcFormat) {
+        float srcRate = srcFormat.getSampleRate();
+        int srcChannels = srcFormat.getChannels();
+        boolean isBigEndian = srcFormat.isBigEndian();
+
+        int srcSampleCount = srcBytes.length / (srcChannels * 2);
+        if (srcSampleCount == 0) return new byte[0];
+
+        short[][] srcSamples = new short[srcChannels][srcSampleCount];
+        ByteBuffer wrap = ByteBuffer.wrap(srcBytes).order(isBigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < srcSampleCount; i++) {
+            for (int c = 0; c < srcChannels; c++) {
+                if (wrap.remaining() >= 2) {
+                    srcSamples[c][i] = wrap.getShort();
                 }
             }
-            
-            byte[] pcmData = ais.readAllBytes();
-            double duration = (double) pcmData.length / (format.getFrameSize() * format.getSampleRate());
-            return new WavData(format, pcmData, duration);
         }
+
+        float ratio = 44100.0f / srcRate;
+        int dstSampleCount = Math.round(srcSampleCount * ratio);
+        if (dstSampleCount <= 0) return new byte[0];
+
+        short[][] dstSamples = new short[2][dstSampleCount];
+
+        for (int i = 0; i < dstSampleCount; i++) {
+            float srcPos = i / ratio;
+            int idx1 = (int) srcPos;
+            int idx2 = Math.min(srcSampleCount - 1, idx1 + 1);
+            float frac = srcPos - idx1;
+
+            if (idx1 >= srcSampleCount) {
+                idx1 = srcSampleCount - 1;
+                idx2 = srcSampleCount - 1;
+                frac = 0;
+            }
+
+            float val0 = (1 - frac) * srcSamples[0][idx1] + frac * srcSamples[0][idx2];
+            dstSamples[0][i] = (short) Math.max(-32768, Math.min(32767, val0));
+
+            float val1;
+            if (srcChannels > 1) {
+                val1 = (1 - frac) * srcSamples[1][idx1] + frac * srcSamples[1][idx2];
+            } else {
+                val1 = val0;
+            }
+            dstSamples[1][i] = (short) Math.max(-32768, Math.min(32767, val1));
+        }
+
+        byte[] dstBytes = new byte[dstSampleCount * 4];
+        ByteBuffer outBuffer = ByteBuffer.wrap(dstBytes).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < dstSampleCount; i++) {
+            outBuffer.putShort(dstSamples[0][i]);
+            outBuffer.putShort(dstSamples[1][i]);
+        }
+        return dstBytes;
     }
 
     /**

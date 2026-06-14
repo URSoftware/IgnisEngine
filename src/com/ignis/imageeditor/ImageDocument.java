@@ -20,6 +20,7 @@ public class ImageDocument {
         private BufferedImage image;
         private boolean visible = true;
         private float opacity = 1.0f;
+        private boolean locked = false;
 
         public Layer(String name, int width, int height) {
             this.name = name;
@@ -52,6 +53,14 @@ public class ImageDocument {
 
         public void setOpacity(float opacity) {
             this.opacity = Math.max(0f, Math.min(1f, opacity));
+        }
+
+        public boolean isLocked() {
+            return locked;
+        }
+
+        public void setLocked(boolean locked) {
+            this.locked = locked;
         }
 
         /** Deep copy of the layer's pixels (used by the undo stack). */

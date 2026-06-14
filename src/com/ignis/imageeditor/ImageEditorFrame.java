@@ -1,42 +1,19 @@
 package com.ignis.imageeditor;
 
 import javax.imageio.ImageIO;
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.ButtonGroup;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.DefaultListModel;
-import javax.swing.JButton;
-import javax.swing.JColorChooser;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
-import javax.swing.JToggleButton;
-import javax.swing.JToolBar;
-import javax.swing.KeyStroke;
-import javax.swing.ListSelectionModel;
-import javax.swing.SpinnerNumberModel;
+import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Point;
+import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Integrated image editor window (roadmap item 3).
@@ -50,6 +27,12 @@ public class ImageEditorFrame extends JFrame {
     private final PaintCanvas canvas;
     private final DefaultListModel<ImageDocument.Layer> layerModel = new DefaultListModel<>();
     private final JList<ImageDocument.Layer> layerList = new JList<>(layerModel);
+    
+    // Visual History UI elements
+    private final DefaultListModel<String> historyModel = new DefaultListModel<>();
+    private final JList<String> historyList = new JList<>(historyModel);
+    private boolean isUpdatingHistorySelection = false;
+
     private final JLabel colorPreview = new JLabel("   ");
     private final JLabel statusLabel = new JLabel(" Ready");
 
@@ -58,7 +41,10 @@ public class ImageEditorFrame extends JFrame {
     private File currentFile;
 
     private JComboBox<String> zoomCombo;
-    private static final double[] ZOOM_LEVELS = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0};
+    private static final double[] ZOOM_LEVELS = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
+
+    // Tool buttons reference for shortcuts selection
+    private final Map<PaintCanvas.ToolType, JToggleButton> toolButtons = new HashMap<>();
 
     public ImageEditorFrame(File exportFolder) {
         super("Ignis Image Editor");
@@ -80,6 +66,11 @@ public class ImageEditorFrame extends JFrame {
             @Override
             public void onMouseMoved(Point imagePos) {
                 updateStatus(imagePos);
+            }
+
+            @Override
+            public void onHistoryUpdated() {
+                refreshHistory();
             }
         });
 
@@ -107,7 +98,12 @@ public class ImageEditorFrame extends JFrame {
 
         add(canvasScroll, BorderLayout.CENTER);
 
-        add(buildLayersPanel(), BorderLayout.EAST);
+        // Sidebar containing Layers and Visual History
+        JPanel sidebar = new JPanel(new GridLayout(2, 1, 5, 5));
+        sidebar.setPreferredSize(new Dimension(220, 0));
+        sidebar.add(buildLayersPanel());
+        sidebar.add(buildHistoryPanel());
+        add(sidebar, BorderLayout.EAST);
 
         JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         statusPanel.setBorder(BorderFactory.createEtchedBorder());
@@ -117,10 +113,13 @@ public class ImageEditorFrame extends JFrame {
         add(statusPanel, BorderLayout.SOUTH);
 
         refreshLayers();
+        refreshHistory();
         updateStatus(null);
+        setupKeyboardShortcuts();
+        
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setSize(1000, 700);
-        setLocationByPlatform(true);
+        setSize(1100, 750);
+        setLocationRelativeTo(null);
     }
 
     // ==================== MENU ====================
@@ -171,11 +170,14 @@ public class ImageEditorFrame extends JFrame {
 
         ButtonGroup group = new ButtonGroup();
         addTool(toolbar, group, "Pencil", PaintCanvas.ToolType.PENCIL, true);
+        addTool(toolbar, group, "Brush", PaintCanvas.ToolType.BRUSH, false);
         addTool(toolbar, group, "Eraser", PaintCanvas.ToolType.ERASER, false);
         addTool(toolbar, group, "Line", PaintCanvas.ToolType.LINE, false);
         addTool(toolbar, group, "Rect", PaintCanvas.ToolType.RECTANGLE, false);
         addTool(toolbar, group, "Ellipse", PaintCanvas.ToolType.ELLIPSE, false);
         addTool(toolbar, group, "Fill", PaintCanvas.ToolType.FILL, false);
+        addTool(toolbar, group, "Selection", PaintCanvas.ToolType.SELECTION, false);
+        addTool(toolbar, group, "Move", PaintCanvas.ToolType.MOVE, false);
         addTool(toolbar, group, "Picker", PaintCanvas.ToolType.EYEDROPPER, false);
 
         toolbar.addSeparator();
@@ -214,7 +216,7 @@ public class ImageEditorFrame extends JFrame {
         // Zoom
         toolbar.add(new JLabel(" Zoom: "));
         zoomCombo = new JComboBox<>(
-                new String[]{"25%", "50%", "100%", "200%", "400%", "800%"});
+                new String[]{"25%", "50%", "100%", "200%", "400%", "800%", "1600%", "3200%"});
         zoomCombo.setSelectedItem("100%");
         zoomCombo.setMaximumSize(new Dimension(90, 26));
         zoomCombo.addActionListener(e -> {
@@ -226,6 +228,30 @@ public class ImageEditorFrame extends JFrame {
         });
         toolbar.add(zoomCombo);
 
+        toolbar.addSeparator();
+
+        // Grid Size Combobox
+        toolbar.add(new JLabel(" Grid: "));
+        JComboBox<String> gridCombo = new JComboBox<>(new String[]{"None", "Pixel (1x1)", "8x8", "16x16", "32x32"});
+        gridCombo.setSelectedItem("Pixel (1x1)");
+        gridCombo.setMaximumSize(new Dimension(100, 26));
+        gridCombo.addActionListener(e -> {
+            String val = (String) gridCombo.getSelectedItem();
+            if ("None".equals(val)) canvas.setGridSize(0);
+            else if ("Pixel (1x1)".equals(val)) canvas.setGridSize(1);
+            else if ("8x8".equals(val)) canvas.setGridSize(8);
+            else if ("16x16".equals(val)) canvas.setGridSize(16);
+            else if ("32x32".equals(val)) canvas.setGridSize(32);
+        });
+        toolbar.add(gridCombo);
+
+        toolbar.addSeparator();
+
+        // Stabilizer Checkbox
+        JCheckBox stabilizerBox = new JCheckBox("Stabilizer", true);
+        stabilizerBox.addActionListener(e -> canvas.setUseStabilizer(stabilizerBox.isSelected()));
+        toolbar.add(stabilizerBox);
+
         toolbar.add(Box.createHorizontalGlue());
         return toolbar;
     }
@@ -236,14 +262,52 @@ public class ImageEditorFrame extends JFrame {
         button.addActionListener(e -> canvas.setTool(type));
         group.add(button);
         toolbar.add(button);
+        toolButtons.put(type, button);
+    }
+
+    private void selectTool(PaintCanvas.ToolType toolType) {
+        canvas.setTool(toolType);
+        JToggleButton btn = toolButtons.get(toolType);
+        if (btn != null) {
+            btn.setSelected(true);
+        }
+    }
+
+    private void setupKeyboardShortcuts() {
+        JPanel content = (JPanel) getContentPane();
+        
+        // Register shortcuts for tools
+        registerShortcut(content, KeyEvent.VK_B, 0, "selectBrush", e -> selectTool(PaintCanvas.ToolType.BRUSH));
+        registerShortcut(content, KeyEvent.VK_P, 0, "selectPencil", e -> selectTool(PaintCanvas.ToolType.PENCIL));
+        registerShortcut(content, KeyEvent.VK_E, 0, "selectEraser", e -> selectTool(PaintCanvas.ToolType.ERASER));
+        registerShortcut(content, KeyEvent.VK_S, 0, "selectSelection", e -> selectTool(PaintCanvas.ToolType.SELECTION));
+        registerShortcut(content, KeyEvent.VK_M, 0, "selectMove", e -> selectTool(PaintCanvas.ToolType.MOVE));
+        registerShortcut(content, KeyEvent.VK_G, 0, "selectFill", e -> selectTool(PaintCanvas.ToolType.FILL));
+        registerShortcut(content, KeyEvent.VK_I, 0, "selectEyedropper", e -> selectTool(PaintCanvas.ToolType.EYEDROPPER));
+        registerShortcut(content, KeyEvent.VK_L, 0, "selectLine", e -> selectTool(PaintCanvas.ToolType.LINE));
+        registerShortcut(content, KeyEvent.VK_R, 0, "selectRect", e -> selectTool(PaintCanvas.ToolType.RECTANGLE));
+        registerShortcut(content, KeyEvent.VK_O, 0, "selectEllipse", e -> selectTool(PaintCanvas.ToolType.ELLIPSE));
+
+        // Ctrl + Z / Ctrl + Y
+        registerShortcut(content, KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK, "undoAction", e -> canvas.undo());
+        registerShortcut(content, KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK, "redoAction", e -> canvas.redo());
+    }
+
+    private void registerShortcut(JComponent comp, int keyCode, int modifiers, String name, java.awt.event.ActionListener action) {
+        comp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, modifiers), name);
+        comp.getActionMap().put(name, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                action.actionPerformed(e);
+            }
+        });
     }
 
     // ==================== LAYERS PANEL ====================
 
     private JComponent buildLayersPanel() {
         JPanel panel = new JPanel(new BorderLayout(4, 4));
-        panel.setBorder(BorderFactory.createTitledBorder("Layers"));
-        panel.setPreferredSize(new Dimension(190, 0));
+        panel.setBorder(BorderFactory.createTitledBorder("Layers (Double click to rename)"));
 
         layerList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         layerList.setCellRenderer(new DefaultListCellRenderer() {
@@ -252,16 +316,37 @@ public class ImageEditorFrame extends JFrame {
                                                           boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 ImageDocument.Layer layer = (ImageDocument.Layer) value;
-                setText((layer.isVisible() ? "[v] " : "[ ] ") + layer.getName());
+                String prefix = (layer.isVisible() ? "[v] " : "[ ] ") + (layer.isLocked() ? "[Locked] " : "");
+                setText(prefix + layer.getName());
                 return this;
             }
         });
+        
         layerList.addListSelectionListener(e -> {
             int viewIndex = layerList.getSelectedIndex();
             if (viewIndex >= 0) {
                 canvas.getDocument().setActiveLayerIndex(toModelIndex(viewIndex));
             }
         });
+
+        // Double click to rename layer
+        layerList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int index = layerList.locationToIndex(e.getPoint());
+                    if (index >= 0) {
+                        ImageDocument.Layer layer = layerModel.getElementAt(index);
+                        String newName = JOptionPane.showInputDialog(ImageEditorFrame.this, "Rename Layer:", layer.getName());
+                        if (newName != null && !newName.trim().isEmpty()) {
+                            layer.setName(newName.trim());
+                            layerList.repaint();
+                        }
+                    }
+                }
+            }
+        });
+
         panel.add(new JScrollPane(layerList), BorderLayout.CENTER);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
@@ -290,8 +375,67 @@ public class ImageEditorFrame extends JFrame {
                 canvas.repaint();
             }
         }));
+        buttons.add(smallButton("Lock", "Lock Layer", e -> {
+            int index = selectedModelIndex();
+            if (index >= 0) {
+                ImageDocument.Layer layer = canvas.getDocument().getLayers().get(index);
+                layer.setLocked(!layer.isLocked());
+                layerList.repaint();
+            }
+        }));
+
         panel.add(buttons, BorderLayout.SOUTH);
         return panel;
+    }
+
+    // ==================== VISUAL HISTORY PANEL ====================
+
+    private JComponent buildHistoryPanel() {
+        JPanel panel = new JPanel(new BorderLayout(4, 4));
+        panel.setBorder(BorderFactory.createTitledBorder("Visual History"));
+
+        historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        historyList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting() || isUpdatingHistorySelection) return;
+            int selected = historyList.getSelectedIndex();
+            if (selected < 0) return;
+
+            isUpdatingHistorySelection = true;
+            int currentIdx = canvas.getUndoStack().size();
+            if (selected < currentIdx) {
+                int steps = currentIdx - selected;
+                canvas.revertToHistoryStep(steps);
+            } else if (selected > currentIdx) {
+                int steps = selected - currentIdx;
+                for (int i = 0; i < steps; i++) {
+                    canvas.redo();
+                }
+            }
+            isUpdatingHistorySelection = false;
+        });
+
+        panel.add(new JScrollPane(historyList), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void refreshHistory() {
+        isUpdatingHistorySelection = true;
+        historyModel.clear();
+        List<PaintCanvas.UndoEntry> undoStack = canvas.getUndoStack();
+        
+        // Show in chronological order: oldest on top, newest at bottom, followed by current state, followed by redo states
+        for (int i = undoStack.size() - 1; i >= 0; i--) {
+            historyModel.addElement(undoStack.get(i).actionName);
+        }
+        historyModel.addElement("[Current State]");
+        
+        List<PaintCanvas.UndoEntry> redoStack = canvas.getRedoStack();
+        for (int i = 0; i < redoStack.size(); i++) {
+            historyModel.addElement("(" + redoStack.get(i).actionName + ")");
+        }
+        
+        historyList.setSelectedIndex(undoStack.size());
+        isUpdatingHistorySelection = false;
     }
 
     private JButton smallButton(String text, String tooltip, java.awt.event.ActionListener action) {
@@ -340,6 +484,7 @@ public class ImageEditorFrame extends JFrame {
                     (Integer) widthSpinner.getValue(), (Integer) heightSpinner.getValue()));
             currentFile = null;
             refreshLayers();
+            refreshHistory();
         }
     }
 
@@ -354,6 +499,7 @@ public class ImageEditorFrame extends JFrame {
                 canvas.setDocument(ImageDocument.fromImage(image));
                 currentFile = chooser.getSelectedFile();
                 refreshLayers();
+                refreshHistory();
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Could not open image: " + ex.getMessage(),
                         "Open Image", JOptionPane.ERROR_MESSAGE);

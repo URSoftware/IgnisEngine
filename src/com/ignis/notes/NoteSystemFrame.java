@@ -5,6 +5,8 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
 import javax.swing.text.*;
@@ -133,17 +135,20 @@ public class NoteSystemFrame extends JFrame {
                 BorderFactory.createEmptyBorder(4, 8, 4, 8)));
         titlePanel.add(titleField, BorderLayout.CENTER);
 
-        // Save & AI buttons
+        // Save, Export & AI buttons
         JPanel editorButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         editorButtons.setBackground(new Color(35, 35, 35));
 
         JButton btnSave = new JButton("💾 Save");
+        JButton btnExport = new JButton("📥 Export HTML");
         JButton btnAskAI = new JButton("✨ Ask AI Assistant");
         
         styleBtn(btnSave, new Color(46, 139, 87));
+        styleBtn(btnExport, new Color(100, 100, 100));
         styleBtn(btnAskAI, new Color(123, 104, 238));
 
         editorButtons.add(btnSave);
+        editorButtons.add(btnExport);
         editorButtons.add(btnAskAI);
         titlePanel.add(editorButtons, BorderLayout.EAST);
 
@@ -164,6 +169,88 @@ public class NoteSystemFrame extends JFrame {
         StyleSheet stylesheet = doc.getStyleSheet();
         stylesheet.addRule("body { font-family: Arial, sans-serif; font-size: 13px; color: #ffffff; background-color: #1e1e1e; }");
         stylesheet.addRule("p { margin-top: 4px; margin-bottom: 4px; }");
+        stylesheet.addRule("ul { list-style-type: disc; margin-left: 25px; margin-top: 4px; margin-bottom: 4px; }");
+        stylesheet.addRule("ol { list-style-type: decimal; margin-left: 25px; margin-top: 4px; margin-bottom: 4px; }");
+        stylesheet.addRule("li { margin-top: 2px; margin-bottom: 2px; }");
+
+        // Action when pressing Enter: smarter list behavior
+        Action defaultEnterAction = editorArea.getActionMap().get(DefaultEditorKit.insertBreakAction);
+        editorArea.getActionMap().put(DefaultEditorKit.insertBreakAction, new TextAction(DefaultEditorKit.insertBreakAction) {
+            @Override
+            public void actionPerformed(ActionEvent ev) {
+                JTextPane pane = (JTextPane) getTextComponent(ev);
+                if (pane == null) return;
+                try {
+                    int pos = pane.getCaretPosition();
+                    HTMLDocument htmlDoc = (HTMLDocument) pane.getDocument();
+                    Element elem = htmlDoc.getCharacterElement(pos);
+                    Element li = null;
+                    Element temp = elem;
+                    while (temp != null) {
+                        if (temp.getName().equalsIgnoreCase("li")) {
+                            li = temp;
+                            break;
+                        }
+                        temp = temp.getParentElement();
+                    }
+                    if (li != null) {
+                        int start = li.getStartOffset();
+                        int end = li.getEndOffset();
+                        String content = htmlDoc.getText(start, end - start).replace("\r", "").replace("\n", "").trim();
+                        if (content.isEmpty() || content.equalsIgnoreCase("Item")) {
+                            // Empty list item: exit list
+                            pane.select(start, end);
+                            pane.replaceSelection("");
+                            Element listParent = li.getParentElement();
+                            int listEnd = listParent.getEndOffset();
+                            pane.setCaretPosition(Math.min(listEnd, pane.getDocument().getLength()));
+                            HTMLEditorKit kit = (HTMLEditorKit) pane.getEditorKit();
+                            kit.insertHTML(htmlDoc, pane.getCaretPosition(), "<p>&nbsp;</p>", 0, 0, HTML.Tag.P);
+                        } else {
+                            // Continue list
+                            HTMLEditorKit kit = (HTMLEditorKit) pane.getEditorKit();
+                            kit.insertHTML(htmlDoc, pos, "<li></li>", 0, 0, HTML.Tag.LI);
+                            pane.setCaretPosition(pos + 1);
+                        }
+                    } else {
+                        defaultEnterAction.actionPerformed(ev);
+                    }
+                } catch (Exception ex) {
+                    defaultEnterAction.actionPerformed(ev);
+                }
+            }
+        });
+
+        // KeyListener for automatic list conversions (typing "- " or "1. ")
+        editorArea.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyTyped(java.awt.event.KeyEvent ev) {
+                if (ev.getKeyChar() == ' ') {
+                    int pos = editorArea.getCaretPosition();
+                    try {
+                        HTMLDocument htmlDoc = (HTMLDocument) editorArea.getDocument();
+                        Element paragraph = htmlDoc.getParagraphElement(pos);
+                        int start = paragraph.getStartOffset();
+                        String text = htmlDoc.getText(start, pos - start);
+                        if (text.equals("-")) {
+                            editorArea.select(start, pos);
+                            editorArea.replaceSelection("");
+                            insertList(false);
+                            ev.consume();
+                        } else if (text.equals("1.")) {
+                            editorArea.select(start, pos);
+                            editorArea.replaceSelection("");
+                            insertList(true);
+                            ev.consume();
+                        }
+                    } catch (Exception ex) {
+                        // Ignore
+                    }
+                }
+            }
+        });
+
+        btnExport.addActionListener(e -> exportActivePageToHtml());
 
         // Format Toolbar
         JToolBar formatToolbar = new JToolBar();
@@ -470,5 +557,49 @@ public class NoteSystemFrame extends JFrame {
         }
         html.append("</body></html>");
         return html.toString();
+    }
+
+    private void exportActivePageToHtml() {
+        if (activePage == null) {
+            JOptionPane.showMessageDialog(this, "No page active to export.", "Export", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Note to HTML");
+        chooser.setSelectedFile(new File(activePage.title.replace(' ', '_').toLowerCase() + ".html"));
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("HTML Files (*.html)", "html"));
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File dest = chooser.getSelectedFile();
+            try {
+                String rawContent = editorArea.getText();
+                String htmlText;
+                if (rawContent.toLowerCase().contains("<html>")) {
+                    // Inject styling inside head if missing
+                    if (!rawContent.toLowerCase().contains("<style>")) {
+                        htmlText = rawContent.replace("</head>", "<style>" +
+                            "body { font-family: Arial, sans-serif; font-size: 14px; color: #ffffff; background-color: #1e1e1e; padding: 20px; }" +
+                            "ul { list-style-type: disc; margin-left: 25px; }" +
+                            "ol { list-style-type: decimal; margin-left: 25px; }" +
+                            "li { margin-top: 4px; }" +
+                            "p { margin: 8px 0; }" +
+                            "</style></head>");
+                    } else {
+                        htmlText = rawContent;
+                    }
+                } else {
+                    htmlText = "<html><head><style>" +
+                        "body { font-family: Arial, sans-serif; font-size: 14px; color: #ffffff; background-color: #1e1e1e; padding: 20px; }" +
+                        "ul { list-style-type: disc; margin-left: 25px; }" +
+                        "ol { list-style-type: decimal; margin-left: 25px; }" +
+                        "li { margin-top: 4px; }" +
+                        "p { margin: 8px 0; }" +
+                        "</style></head><body>" + rawContent + "</body></html>";
+                }
+                Files.write(dest.toPath(), htmlText.getBytes(StandardCharsets.UTF_8));
+                JOptionPane.showMessageDialog(this, "Exported successfully to " + dest.getName(), "Export Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
     }
 }
