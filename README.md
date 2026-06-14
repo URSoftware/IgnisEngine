@@ -15,6 +15,18 @@ IgnisEngine é uma engine gráfica 2D desenvolvida em Java puro, focada em rende
 
 ---
 
+## Branches
+
+| Branch | Estado | Descrição |
+|--------|--------|-----------|
+| **`main`** | 🚧 em desenvolvimento | Migração da interface **Swing → JavaFX** (grande nova feature). Núcleo da engine e marketplace mantidos. |
+| **`Legado`** | ✅ estável | Versão atual com interface **Java Swing** + integração do **marketplace**. Snapshot funcional preservado. |
+
+A migração do editor para JavaFX acontece na `main`. A versão Swing estável fica na
+`Legado` para referência/compatibilidade. Plano técnico: [`doc/JAVAFX_MIGRATION_PLAN.md`](doc/JAVAFX_MIGRATION_PLAN.md).
+
+---
+
 ## Estrutura do Projeto
 
 ```

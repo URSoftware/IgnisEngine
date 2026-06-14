@@ -1,7 +1,12 @@
 # Plano de Migração da Interface do Editor: Swing/AWT → JavaFX
 
-> Status: planejado · Java alvo: 17 LTS · JavaFX alvo: 17 LTS
-> Documento de planejamento. Nenhuma migração foi executada ainda.
+> Status: terreno preparado · Java alvo: 17 LTS · JavaFX alvo: 17 LTS
+
+## Estratégia de branches
+
+- **`Legado`**: versão estável atual (Swing/AWT) + marketplace. Preservada para referência e compatibilidade. Não recebe a migração.
+- **`main`**: linha de desenvolvimento da migração para JavaFX. O núcleo da engine (`core/`) e a integração do marketplace permanecem.
+- A migração é incremental (ver fases abaixo); cada fase é mergeável na `main`. Se preciso reverter, a `Legado` é o ponto de retorno seguro.
 
 ## 1. Objetivo
 
