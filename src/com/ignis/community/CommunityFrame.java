@@ -4,60 +4,23 @@ import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
+
+import com.ignis.marketplace.MarketplaceClient;
+import com.ignis.marketplace.MarketplaceItem;
 
 /**
  * Community, Workshop, and Plugin Marketplace Frame.
  * Implements Items 8, 9, and 10 of the IgnisEngine roadmap: Steam Workshop-style
- * community publishing, plugin/asset marketplace, installation in 1-click, and Vercel mock client integration.
+ * community publishing, plugin/asset marketplace, installation in 1-click, and online
+ * Vercel/Neon catalog integration (see {@link com.ignis.marketplace.MarketplaceClient}).
  */
 public class CommunityFrame extends JFrame {
 
     private final File projectPluginsFolder;
     private final File projectAssetsFolder;
     private final JLabel statusLabel;
-    
-    // --- Mock Data Models for Marketplace items ---
-    public static class MarketplaceItem {
-        String type; // "asset" or "plugin" or "workshop"
-        String name;
-        String author;
-        String description;
-        String version;
-        String gitUrl;
-        String coverImageText;
-        String dependencies;
-
-        public MarketplaceItem(String type, String name, String author, String description, String version, String gitUrl, String coverImageText, String dependencies) {
-            this.type = type;
-            this.name = name;
-            this.author = author;
-            this.description = description;
-            this.version = version;
-            this.gitUrl = gitUrl;
-            this.coverImageText = coverImageText;
-            this.dependencies = dependencies;
-        }
-    }
-
-    // --- Vercel Server Mock Mockup ---
-    public static class VercelServerMock {
-        public static List<MarketplaceItem> fetchCatalog() {
-            List<MarketplaceItem> items = new ArrayList<>();
-            // Workshop items
-            items.add(new MarketplaceItem("workshop", "Pixel Fantasy Trees Pack", "Arthur_Art", "Beautiful hand-drawn 2D sprite pack containing 16 unique fantasy trees.", "1.2.0", "https://github.com/ArthurArt/fantasy-trees-pack.git", "🌳 Sprite Pack", "None"));
-            items.add(new MarketplaceItem("workshop", "Retro Sound FX Library", "ChiptuneHero", "Collection of 40 chiptune sound effects (.wav) for retro retro games.", "1.0.0", "https://github.com/ChiptuneHero/retro-sfx-lib.git", "🔊 SFX Library", "None"));
-            
-            // Plugins items
-            items.add(new MarketplaceItem("plugin", "Advanced Physics 2D", "PhysTech", "Decoupled rigidbodies and collision solver plugin with friction and bounce.", "2.1.0", "https://github.com/PhysTech/advanced-physics-2d.git", "⚛️ Physics Engine", "Core-Physics >= 1.0"));
-            items.add(new MarketplaceItem("plugin", "Virtual Gamepad UI Overlay", "MobileDev", "Adds a mobile-friendly virtual joystick overlay to screen automatically.", "1.0.5", "https://github.com/MobileDev/virtual-gamepad-ignis.git", "🎮 Mobile Gamepad", "UI-Canvas >= 2.0"));
-            
-            // Assets items
-            items.add(new MarketplaceItem("asset", "Cyberpunk Tilemap 32x32", "NeonPixel", "32x32 tileset containing city backgrounds, neon lights, and pavements.", "1.1.0", "https://github.com/NeonPixel/cyberpunk-tilemap.git", "🌃 Neon Tileset", "None"));
-            return items;
-        }
-    }
+    private final MarketplaceClient marketplace = MarketplaceClient.getInstance();
 
     public CommunityFrame(File projectFolder) {
         super("Ignis Community Hub & Marketplace");
@@ -103,7 +66,7 @@ public class CommunityFrame extends JFrame {
         tabbedPane.setBackground(new Color(35, 35, 35));
         tabbedPane.setForeground(Color.LIGHT_GRAY);
 
-        List<MarketplaceItem> catalog = VercelServerMock.fetchCatalog();
+        List<MarketplaceItem> catalog = marketplace.fetchCatalog();
 
         // Organize into tabs
         tabbedPane.addTab("🔌 Plugins Marketplace", createCatalogPanel(catalog, "plugin"));
@@ -116,7 +79,9 @@ public class CommunityFrame extends JFrame {
         JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 4));
         statusBar.setBackground(new Color(40, 40, 40));
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 60)));
-        statusLabel = new JLabel("Online catalog loaded successfully from Vercel.");
+        statusLabel = new JLabel(marketplace.isLastFetchOnline()
+                ? "Online catalog loaded from " + marketplace.getBaseUrl()
+                : "Offline: showing built-in catalog (marketplace API unreachable).");
         statusLabel.setForeground(Color.LIGHT_GRAY);
         statusBar.add(statusLabel);
         add(statusBar, BorderLayout.SOUTH);
@@ -266,6 +231,9 @@ public class CommunityFrame extends JFrame {
                         "Git URL: " + item.gitUrl + "\n" +
                         "Install-Status: SUCCESSFUL_SANDBOXED\n");
 
+                // Best-effort: avisa o backend para contabilizar o download.
+                marketplace.notifyInstall(item.id);
+
                 Thread.sleep(200);
 
                 SwingUtilities.invokeLater(() -> {
@@ -343,15 +311,23 @@ public class CommunityFrame extends JFrame {
                 return;
             }
 
-            statusLabel.setText("Publishing package " + name + " to Vercel index...");
+            String type = (String) typeCombo.getSelectedItem();
+            String desc = txtDesc.getText().trim();
+            String version = txtVer.getText().trim().isEmpty() ? "1.0.0" : txtVer.getText().trim();
+
+            statusLabel.setText("Publishing package " + name + " to marketplace index...");
+            MarketplaceItem item = new MarketplaceItem(type, name, author, desc, version, git, "", "None");
             new Thread(() -> {
-                try {
-                    Thread.sleep(1200); // Simulate network latency to Vercel
-                    SwingUtilities.invokeLater(() -> {
-                        statusLabel.setText("✓ " + name + " successfully published and indexed on Vercel.");
+                boolean ok = marketplace.publish(item);
+                SwingUtilities.invokeLater(() -> {
+                    if (ok) {
+                        statusLabel.setText("✓ " + name + " published and indexed on " + marketplace.getBaseUrl() + ".");
                         JOptionPane.showMessageDialog(this, name + " published successfully!\nYour repository is now searchable in the Marketplace.", "Publish Successful", JOptionPane.INFORMATION_MESSAGE);
-                    });
-                } catch (Exception ex) {}
+                    } else {
+                        statusLabel.setText("❌ Could not publish " + name + " (marketplace API offline).");
+                        JOptionPane.showMessageDialog(this, "Could not reach the marketplace API.\nCheck your internet connection or the IGNIS_MARKETPLACE_URL setting.", "Publish Failed", JOptionPane.WARNING_MESSAGE);
+                    }
+                });
             }).start();
         }
     }
