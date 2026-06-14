@@ -1,6 +1,6 @@
 # Plano de Migração da Interface do Editor: Swing/AWT → JavaFX
 
-> Status: **F0 + F1 + F2 implementadas na `main`** (infra · casca/ponte · projeto+seleção+Inspector) · Java 17 · JavaFX 17 · 2026-06-14
+> Status: **F0 + F1 + F2 + F3 (interop) na `main`** · infra · casca/ponte · projeto+seleção+Inspector · janelas-ferramenta acessíveis · Java 17 · JavaFX 17 · 2026-06-14
 > Complementa [ARCHITECTURE.md](ARCHITECTURE.md) e [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md).
 >
 > **Como rodar:** editor JavaFX (em migração) → `mvnw javafx:run` · editor Swing clássico → `mvnw exec:java`.
@@ -126,7 +126,7 @@ Justificativa: o render acoplado ao AWT e o `Editor.java` monolítico tornam o b
 - ✅ **F0 — Infra/build (feito):** deps JavaFX 17 (`javafx-controls`, `javafx-graphics`, `javafx-swing`) + `javafx-maven-plugin`; pacote `com.ignis.editor.fx` (Swing intacto). Compila (`mvnw compile`).
 - ✅ **F1 — Casca + ponte (feito):** `IgnisEditorApp` (`Application`/`BorderPane`/`MenuBar`/`SplitPane`); ponte de render num `Canvas` FX central (`Game.renderWorldTo` → `SwingFXUtils` → `Canvas` via `AnimationTimer`); Hierarchy já nativa (`TreeView`); Inspector placeholder. Pendente: validar FPS em uso real e ligar o viewport a um projeto/cena carregado (hoje cena de amostra).
 - ✅ **F2 — Painéis nativos (feito):** abrir projeto `.ignis` real no viewport (FileChooser → `IgnisProjectIO.load`); Hierarchy `TreeView` com seleção que desenha contorno no viewport (`Game.renderWorldTo` com objeto selecionado); Inspector `GridPane` editável (nome/x/y/largura/altura/rotação/visível) escrevendo no `GameObject` em tempo real. Pendente: ToolBar, atalhos, e Play/Stop no viewport JavaFX.
-- **F3 — Janelas-ferramenta:** migrar uma a uma (BuildDialog → Community → Notes → Animation → ImageEditor/PaintCanvas → AudioEditor → editor de código com RichTextFX).
+- 🔄 **F3 — Janelas-ferramenta (em andamento):** ✅ interop pronto — menu **Ferramentas** do app JavaFX abre as janelas Swing existentes (Áudio/Imagem/Animação/Notas/Comunidade/Build) como janelas independentes, na EDT e com proteção contra falha (estratégia de convivência do plano). **Pendente:** reescrever cada uma nativamente em JavaFX, uma a uma (BuildDialog → Community → Notes → Animation → ImageEditor/PaintCanvas → AudioEditor → editor de código com RichTextFX), + ToolBar/atalhos e Play/Stop no viewport.
 - **F4 — Tema e limpeza:** CSS escuro (substitui cores hardcoded), layout persistido (SplitPane/Stage), remover `javafx-swing`. `runtime/GameRuntime` pode permanecer AWT (menor footprint) — decidir.
 
 ## 10. Pré-requisitos (antes de iniciar código JavaFX)
