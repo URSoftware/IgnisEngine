@@ -229,6 +229,7 @@ public class Editor extends JFrame {
         while (undoStack.size() > MAX_UNDO_HISTORY) {
             undoStack.removeLast();
         }
+        autoSaveProject();
     }
     
     /**
@@ -243,6 +244,7 @@ public class Editor extends JFrame {
         UndoAction action = undoStack.pop();
         action.undo();
         System.out.println("Desfeito: " + action.getDescription());
+        autoSaveProject();
     }
     
     /**
@@ -1165,6 +1167,7 @@ public class Editor extends JFrame {
             if (selected != null) {
                 selected.setVisible(visibilityCheckbox.isSelected());
                 game.repaint();
+                autoSaveProject();
             }
         });
         visibilityPanel.add(visibilityCheckbox);
@@ -1189,6 +1192,7 @@ public class Editor extends JFrame {
             if (selected != null) {
                 setShapeColor(selected, color);
                 game.repaint();
+                autoSaveProject();
             }
         });
         shapeColorSection.add(shapeColorPanel);
@@ -1201,7 +1205,10 @@ public class Editor extends JFrame {
             GameObject selected = game.getSelectedObject();
             if (selected != null) {
                 selected.setNameColor(color);
+                inspectorNameField.setForeground(color);
                 updateHierarchy();
+                game.repaint();
+                autoSaveProject();
             }
         });
         content.add(nameColorPanel);
@@ -1387,6 +1394,7 @@ public class Editor extends JFrame {
                 selected.setColliderType(type);
                 updateInspectorCollider(selected);
                 game.repaint();
+                autoSaveProject();
             }
         });
         JPanel colliderTypeWrapper = new JPanel(new BorderLayout());
@@ -1415,6 +1423,7 @@ public class Editor extends JFrame {
                     IgnisSampleCollisions.CollisionMode.TRIGGER;
                 selected.setCollisionMode(mode);
                 game.repaint();
+                autoSaveProject();
             }
         });
         JPanel collisionModeWrapper = new JPanel(new BorderLayout());
@@ -1436,6 +1445,7 @@ public class Editor extends JFrame {
             GameObject selected = game.getSelectedObject();
             if (selected != null && !isUpdatingInspector) {
                 selected.setUseCCD(ccdCheckbox.isSelected());
+                autoSaveProject();
             }
         });
         content.add(ccdCheckbox);
@@ -1863,12 +1873,18 @@ public class Editor extends JFrame {
             if (nameColorButton != null) {
                 nameColorButton.setBackground(obj.getNameColor());
             }
+            if (inspectorNameField != null) {
+                inspectorNameField.setForeground(obj.getNameColor());
+            }
         } else {
             if (shapeColorSection != null) {
                 shapeColorSection.setVisible(false);
             }
             if (nameColorButton != null) {
                 nameColorButton.setBackground(Color.WHITE);
+            }
+            if (inspectorNameField != null) {
+                inspectorNameField.setForeground(Color.WHITE);
             }
         }
     }
@@ -1996,6 +2012,7 @@ public class Editor extends JFrame {
             try {
                 onChange.accept(field.getText().trim());
                 game.repaint();
+                autoSaveProject();
             } catch (NumberFormatException ex) {
                 // Ignore invalid input
             }
@@ -2007,6 +2024,7 @@ public class Editor extends JFrame {
                 try {
                     onChange.accept(field.getText().trim());
                     game.repaint();
+                    autoSaveProject();
                 } catch (NumberFormatException ex) {
                     // Ignore invalid input
                 }
@@ -2145,6 +2163,7 @@ public class Editor extends JFrame {
             if (confirm == JOptionPane.YES_OPTION) {
                 obj.removeScriptByName(scriptName);
                 updateInspectorScripts(obj);
+                autoSaveProject();
             }
         });
         
@@ -2621,6 +2640,7 @@ public class Editor extends JFrame {
             JSONObject variables = ScriptSerializationHelper.saveScriptVariables(script);
             String key = script.getGameObject().getId() + ":" + script.getClass().getSimpleName();
             currentProject.getCurrentScene().getPendingScriptVariables().put(key, variables);
+            autoSaveProject();
         }
     }
     
@@ -2863,6 +2883,7 @@ public class Editor extends JFrame {
                     }
                 }
                 updateInspectorScripts(obj);
+                autoSaveProject();
             } else {
                 JOptionPane.showMessageDialog(this,
                     "Script already attached to this object!",
@@ -3126,6 +3147,7 @@ public class Editor extends JFrame {
             updateInspector(selected);
 
             System.out.println("Imported image for " + selected.getName() + ": " + imagePath);
+            autoSaveProject();
         }
     }
 
@@ -3218,6 +3240,7 @@ public class Editor extends JFrame {
             obj.setSpritePath(null);
             updateInspector(obj);
             System.out.println("Removed image from " + obj.getName());
+            autoSaveProject();
         }
     }
 
@@ -5822,6 +5845,33 @@ public class Editor extends JFrame {
                     "Error saving project: " + ex.getMessage(),
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Executes the project save silently (without user popups)
+     */
+    private void autoSaveProject() {
+        if (currentProject == null || currentProject.getProjectFile() == null) {
+            return;
+        }
+        try {
+            // Sync Game entities with the Scene
+            Scene scene = currentProject.getCurrentScene();
+            if (scene != null) {
+                scene.getEntities().clear();
+                for (GameObject entity : game.getEntities()) {
+                    scene.addEntity(entity);
+                }
+
+                // Save silently
+                IgnisProjectIO.save(currentProject, currentProject.getProjectFile());
+
+                // Update file browser silently
+                updateProjectRoot();
+            }
+        } catch (IOException ex) {
+            System.err.println("Error autosaving project: " + ex.getMessage());
         }
     }
 

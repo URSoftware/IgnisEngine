@@ -103,7 +103,7 @@ public class Game extends Canvas implements Runnable {
     // Base gizmo settings (will be scaled based on zoom)
     private static final int BASE_GIZMO_SIZE = 60;
     private static final int BASE_GIZMO_ARROW_SIZE = 12;
-    private static final int BASE_GIZMO_HIT_AREA = 15;
+    private static final int BASE_GIZMO_HIT_AREA = 30;
     private static final int BASE_ROTATE_GIZMO_RADIUS = 50;
     
     /**
@@ -786,7 +786,7 @@ public class Game extends Canvas implements Runnable {
         int gizmoSize = getScaledGizmoSize();
         int hitArea = getScaledGizmoHitArea();
         int rotateRadius = getScaledRotateGizmoRadius();
-        int scaledHitTolerance = (int)(10 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        int scaledHitTolerance = (int)(25 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
 
         switch (currentTool) {
             case MOVE:
@@ -816,7 +816,7 @@ public class Game extends Canvas implements Runnable {
                 break;
 
             case SCALE:
-                int squareSize = (int)(8 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+                int squareSize = (int)(20 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
                 // Check X axis square end (scale X)
                 if (mouseX >= centerX + gizmoSize - squareSize && mouseX <= centerX + gizmoSize + squareSize &&
                         mouseY >= centerY - squareSize && mouseY <= centerY + squareSize) {
@@ -1086,7 +1086,7 @@ public class Game extends Canvas implements Runnable {
         render();
     }
 
-    public void render() {
+    public synchronized void render() {
         if (!this.isDisplayable()) {
             return;
         }
@@ -1330,33 +1330,29 @@ public class Game extends Canvas implements Runnable {
      * Draws the world origin (0,0) indicator
      */
     private void drawWorldOrigin(Graphics2D g2d) {
+        if (!showGrid) {
+            return;
+        }
         int crossSize = 20;
-        int axisLength = 35;
         
-        // Draw main crosshair at world origin (white, semi-transparent)
-        g2d.setColor(new Color(255, 255, 255, 120));
-        g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        // Save current stroke
+        java.awt.Stroke oldStroke = g2d.getStroke();
+        
+        // Draw main crosshair at world origin (gray, dashed/semi-transparent)
+        g2d.setColor(new Color(100, 100, 100, 100));
+        float[] dashPattern = {4.0f, 4.0f};
+        BasicStroke dashedStroke = new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dashPattern, 0.0f);
+        g2d.setStroke(dashedStroke);
+        
         g2d.drawLine(-crossSize, 0, crossSize, 0);
         g2d.drawLine(0, -crossSize, 0, crossSize);
         
-        // Draw X axis (red, pointing right)
-        g2d.setColor(new Color(255, 80, 80, 180));
-        g2d.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2d.drawLine(0, 0, axisLength, 0);
-        // X axis arrow
-        g2d.drawLine(axisLength, 0, axisLength - 6, -4);
-        g2d.drawLine(axisLength, 0, axisLength - 6, 4);
-        
-        // Draw Y axis (green, pointing up - positive Y is up in world coordinates)
-        g2d.setColor(new Color(80, 255, 80, 180));
-        g2d.drawLine(0, 0, 0, axisLength);
-        // Y axis arrow (pointing up in world space = positive Y)
-        g2d.drawLine(0, axisLength, -4, axisLength - 6);
-        g2d.drawLine(0, axisLength, 4, axisLength - 6);
+        // Restore stroke
+        g2d.setStroke(oldStroke);
         
         // Origin label
-        g2d.setColor(new Color(255, 255, 255, 200));
-        g2d.setFont(new Font("Arial", Font.BOLD, 11));
+        g2d.setColor(new Color(100, 100, 100, 150));
+        g2d.setFont(new Font("Arial", Font.BOLD, 10));
         drawWorldText(g2d, "(0,0)", 6, 6);
     }
     
@@ -1455,7 +1451,7 @@ public class Game extends Canvas implements Runnable {
         }
 
         // Selection border
-        g2d.setColor(new Color(0, 150, 255));
+        g2d.setColor(selectedObject.getNameColor() != null ? selectedObject.getNameColor() : new Color(0, 150, 255));
         g2d.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
                 1.0f, new float[] { 5.0f, 5.0f }, 0.0f));
         g2d.drawRect(x - 2, y - 2, w + 4, h + 4);
@@ -1599,7 +1595,7 @@ public class Game extends Canvas implements Runnable {
         // Get scaled gizmo dimensions
         int gizmoSize = getScaledGizmoSize();
         double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
-        int squareSize = (int)(8 / zoom);
+        int squareSize = (int)(20 / zoom);
         squareSize = Math.max(4, squareSize);
 
         g2d.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

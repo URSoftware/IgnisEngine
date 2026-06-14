@@ -7,6 +7,8 @@ import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import javax.swing.text.*;
+import javax.swing.text.html.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import org.json.JSONObject;
@@ -26,7 +28,7 @@ public class NoteSystemFrame extends JFrame {
     private final DefaultTreeModel treeModel;
     private final DefaultMutableTreeNode rootNode;
     
-    private final JTextArea editorArea;
+    private final JTextPane editorArea;
     private final JTextField titleField;
     private final JLabel statusLabel;
     
@@ -145,17 +147,106 @@ public class NoteSystemFrame extends JFrame {
         editorButtons.add(btnAskAI);
         titlePanel.add(editorButtons, BorderLayout.EAST);
 
-        editorPanel.add(titlePanel, BorderLayout.NORTH);
+        // Put titlePanel and formatToolbar in northPanel
+        JPanel northPanel = new JPanel(new BorderLayout());
+        northPanel.add(titlePanel, BorderLayout.NORTH);
 
         // Editor text area
-        editorArea = new JTextArea();
+        editorArea = new JTextPane();
+        editorArea.setContentType("text/html");
         editorArea.setBackground(new Color(30, 30, 30));
         editorArea.setForeground(Color.WHITE);
         editorArea.setCaretColor(Color.WHITE);
-        editorArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        editorArea.setLineWrap(true);
-        editorArea.setWrapStyleWord(true);
         editorArea.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        // Configure default styles for HTML in JTextPane
+        HTMLDocument doc = (HTMLDocument) editorArea.getDocument();
+        StyleSheet stylesheet = doc.getStyleSheet();
+        stylesheet.addRule("body { font-family: Arial, sans-serif; font-size: 13px; color: #ffffff; background-color: #1e1e1e; }");
+        stylesheet.addRule("p { margin-top: 4px; margin-bottom: 4px; }");
+
+        // Format Toolbar
+        JToolBar formatToolbar = new JToolBar();
+        formatToolbar.setBackground(new Color(40, 40, 40));
+        formatToolbar.setFloatable(false);
+        formatToolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)));
+
+        JButton btnBold = new JButton("B");
+        btnBold.setFont(new Font("Arial", Font.BOLD, 12));
+        styleToolbarButton(btnBold);
+        btnBold.addActionListener(e -> new StyledEditorKit.BoldAction().actionPerformed(e));
+
+        JButton btnItalic = new JButton("I");
+        btnItalic.setFont(new Font("Arial", Font.ITALIC, 12));
+        styleToolbarButton(btnItalic);
+        btnItalic.addActionListener(e -> new StyledEditorKit.ItalicAction().actionPerformed(e));
+
+        JButton btnUnderline = new JButton("U");
+        btnUnderline.setFont(new Font("Arial", Font.PLAIN, 12));
+        styleToolbarButton(btnUnderline);
+        btnUnderline.addActionListener(e -> new StyledEditorKit.UnderlineAction().actionPerformed(e));
+
+        JButton btnStrike = new JButton("S");
+        btnStrike.setFont(new Font("Arial", Font.PLAIN, 12));
+        styleToolbarButton(btnStrike);
+        btnStrike.addActionListener(e -> {
+            SimpleAttributeSet attr = new SimpleAttributeSet();
+            boolean isStrikethrough = false;
+            int start = editorArea.getSelectionStart();
+            int end = editorArea.getSelectionEnd();
+            if (start != end) {
+                StyledDocument sdoc = editorArea.getStyledDocument();
+                AttributeSet currentAttr = sdoc.getCharacterElement(start).getAttributes();
+                isStrikethrough = StyleConstants.isStrikeThrough(currentAttr);
+            }
+            StyleConstants.setStrikeThrough(attr, !isStrikethrough);
+            editorArea.setCharacterAttributes(attr, false);
+        });
+
+        String[] families = {"Arial", "Times New Roman", "Courier New", "Comic Sans MS"};
+        JComboBox<String> comboFamily = new JComboBox<>(families);
+        comboFamily.setBackground(new Color(55, 55, 55));
+        comboFamily.setForeground(Color.WHITE);
+        comboFamily.setMaximumSize(new Dimension(120, 24));
+        comboFamily.addActionListener(e -> {
+            String family = (String) comboFamily.getSelectedItem();
+            new StyledEditorKit.FontFamilyAction("FontFamily", family).actionPerformed(e);
+        });
+
+        String[] sizes = {"12", "14", "16", "18", "24", "32"};
+        JComboBox<String> comboSize = new JComboBox<>(sizes);
+        comboSize.setBackground(new Color(55, 55, 55));
+        comboSize.setForeground(Color.WHITE);
+        comboSize.setMaximumSize(new Dimension(60, 24));
+        comboSize.addActionListener(e -> {
+            int size = Integer.parseInt((String) comboSize.getSelectedItem());
+            new StyledEditorKit.FontSizeAction("FontSize", size).actionPerformed(e);
+        });
+
+        JButton btnBulletList = new JButton("• List");
+        styleToolbarButton(btnBulletList);
+        btnBulletList.addActionListener(e -> insertList(false));
+
+        JButton btnNumList = new JButton("1. List");
+        styleToolbarButton(btnNumList);
+        btnNumList.addActionListener(e -> insertList(true));
+
+        formatToolbar.add(btnBold);
+        formatToolbar.add(btnItalic);
+        formatToolbar.add(btnUnderline);
+        formatToolbar.add(btnStrike);
+        formatToolbar.add(Box.createHorizontalStrut(8));
+        formatToolbar.add(new JLabel("Font: "));
+        formatToolbar.add(comboFamily);
+        formatToolbar.add(Box.createHorizontalStrut(5));
+        formatToolbar.add(new JLabel("Size: "));
+        formatToolbar.add(comboSize);
+        formatToolbar.add(Box.createHorizontalStrut(8));
+        formatToolbar.add(btnBulletList);
+        formatToolbar.add(btnNumList);
+
+        northPanel.add(formatToolbar, BorderLayout.SOUTH);
+        editorPanel.add(northPanel, BorderLayout.NORTH);
 
         JScrollPane editorScroll = new JScrollPane(editorArea);
         editorScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -184,7 +275,7 @@ public class NoteSystemFrame extends JFrame {
                 if (selectedNode.getUserObject() instanceof NotePage) {
                     activePage = (NotePage) selectedNode.getUserObject();
                     titleField.setText(activePage.title);
-                    editorArea.setText(activePage.content);
+                    editorArea.setText(ensureHtml(activePage.content));
                     statusLabel.setText("Note loaded: " + activePage.title);
                 }
             }
@@ -266,7 +357,16 @@ public class NoteSystemFrame extends JFrame {
 
                         SwingUtilities.invokeLater(() -> {
                             // Insert AI response at bottom of the page or replace it
-                            editorArea.append("\n\n---\n### AI Assistant Response (" + option + "):\n" + response);
+                            try {
+                                HTMLDocument htmlDoc = (HTMLDocument) editorArea.getDocument();
+                                HTMLEditorKit kit = (HTMLEditorKit) editorArea.getEditorKit();
+                                String responseHtml = "<hr><p><b>AI Assistant Response (" + option + "):</b></p><p>" +
+                                        response.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>") + "</p>";
+                                kit.insertHTML(htmlDoc, htmlDoc.getLength(), responseHtml, 0, 0, null);
+                            } catch (Exception ex) {
+                                // Fallback to plain text modification if HTML insert fails
+                                editorArea.setText(editorArea.getText() + "\n\n---\nAI Assistant Response (" + option + "):\n" + response);
+                            }
                             statusLabel.setText("✓ AI Assistant completed task.");
                         });
                     } catch (Exception ex) {
@@ -332,5 +432,43 @@ public class NoteSystemFrame extends JFrame {
                 pageTree.expandRow(i);
             }
         }
+    }
+
+    private void styleToolbarButton(JButton btn) {
+        btn.setBackground(new Color(55, 55, 55));
+        btn.setForeground(Color.WHITE);
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    }
+
+    private void insertList(boolean ordered) {
+        String tag = ordered ? "<ol><li>Item</li></ol>" : "<ul><li>Item</li></ul>";
+        try {
+            HTMLDocument doc = (HTMLDocument) editorArea.getDocument();
+            HTMLEditorKit kit = (HTMLEditorKit) editorArea.getEditorKit();
+            kit.insertHTML(doc, editorArea.getCaretPosition(), tag, 0, 0, ordered ? HTML.Tag.OL : HTML.Tag.UL);
+        } catch (Exception ex) {
+            System.err.println("Error inserting list: " + ex.getMessage());
+        }
+    }
+
+    private String ensureHtml(String content) {
+        if (content == null) return "";
+        if (content.toLowerCase().contains("<html>") || content.toLowerCase().contains("<body>")) {
+            return content;
+        }
+        // Simple plain text conversion to HTML for backward compatibility
+        StringBuilder html = new StringBuilder();
+        html.append("<html><body style='font-family: Arial, sans-serif; font-size: 13px; color: #ffffff; background-color: #1e1e1e;'>");
+        String[] paragraphs = content.split("\n");
+        for (String p : paragraphs) {
+            if (!p.trim().isEmpty()) {
+                html.append("<p>").append(p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")).append("</p>");
+            } else {
+                html.append("<br>");
+            }
+        }
+        html.append("</body></html>");
+        return html.toString();
     }
 }
