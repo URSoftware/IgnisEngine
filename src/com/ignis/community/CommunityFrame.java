@@ -46,18 +46,40 @@ public class CommunityFrame extends JFrame {
                 BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(60, 60, 60)),
                 BorderFactory.createEmptyBorder(12, 16, 12, 16)));
 
-        JLabel titleLabel = new JLabel("👥 Community & Marketplace (Vercel Server Connected)");
+        JLabel titleLabel = new JLabel("👥 Community & Marketplace");
         titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
         titleLabel.setForeground(Color.WHITE);
         headerPanel.add(titleLabel, BorderLayout.WEST);
 
-        JButton btnPublish = new JButton("🌐 Publish Your Work...");
-        btnPublish.setBackground(new Color(70, 130, 180));
-        btnPublish.setForeground(Color.WHITE);
-        btnPublish.setFocusPainted(false);
-        btnPublish.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
-        btnPublish.addActionListener(e -> openPublishDialog());
-        headerPanel.add(btnPublish, BorderLayout.EAST);
+        // Painel de acoes: publicar no site, publicar com token, token e ajuda.
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.setOpaque(false);
+
+        JButton btnPublishSite = new JButton("🌐 Publicar no site");
+        styleActionButton(btnPublishSite, new Color(70, 130, 180));
+        btnPublishSite.setToolTipText("Abre o marketplace no navegador para publicar com login GitHub.");
+        btnPublishSite.addActionListener(e -> openInBrowser(marketplace.getPublishUrl()));
+
+        JButton btnPublishLocal = new JButton("💻 Publicar com token");
+        styleActionButton(btnPublishLocal, new Color(46, 139, 87));
+        btnPublishLocal.setToolTipText("Publica direto do editor usando seu token (sem abrir o navegador).");
+        btnPublishLocal.addActionListener(e -> openLocalPublishDialog());
+
+        JButton btnToken = new JButton("🔑 Token");
+        styleActionButton(btnToken, new Color(90, 90, 90));
+        btnToken.setToolTipText("Configurar o token de publicacao.");
+        btnToken.addActionListener(e -> openTokenDialog());
+
+        JButton btnHelp = new JButton("❓");
+        styleActionButton(btnHelp, new Color(90, 90, 90));
+        btnHelp.setToolTipText("Como publicar funciona.");
+        btnHelp.addActionListener(e -> showPublishHelp());
+
+        actions.add(btnPublishSite);
+        actions.add(btnPublishLocal);
+        actions.add(btnToken);
+        actions.add(btnHelp);
+        headerPanel.add(actions, BorderLayout.EAST);
 
         add(headerPanel, BorderLayout.NORTH);
 
@@ -260,75 +282,163 @@ public class CommunityFrame extends JFrame {
         progressDialog.setVisible(true);
     }
 
-    private void openPublishDialog() {
-        JPanel inputPanel = new JPanel(new GridLayout(6, 2, 8, 8));
+    // Estiliza um botao de acao do cabecalho.
+    private void styleActionButton(JButton b, Color bg) {
+        b.setBackground(bg);
+        b.setForeground(Color.WHITE);
+        b.setFocusPainted(false);
+        b.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+    }
+
+    // Abre uma URL no navegador padrao.
+    private void openInBrowser(String url) {
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new java.net.URI(url));
+                statusLabel.setText("Abrindo no navegador: " + url);
+            } else {
+                JOptionPane.showMessageDialog(this, "Abra no navegador:\n" + url, "Link", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Abra no navegador:\n" + url, "Link", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    // Explica como funciona a publicacao (site x token).
+    private void showPublishHelp() {
+        String msg =
+            "Como publicar no marketplace:\n\n" +
+            "🌐 Publicar no site\n" +
+            "   Abre o marketplace no navegador. Voce entra com o GitHub e\n" +
+            "   publica pelo formulario da web. Mais simples; nao precisa de token.\n\n" +
+            "💻 Publicar com token\n" +
+            "   Publica direto daqui, sem abrir o navegador. Para isso:\n" +
+            "   1) Clique em '🔑 Token' e depois em 'Gerar token no site';\n" +
+            "   2) No site (logado), gere um token e copie;\n" +
+            "   3) Cole o token aqui e salve;\n" +
+            "   4) Use '💻 Publicar com token' quantas vezes quiser.\n\n" +
+            "Em ambos os casos, a submissao passa por uma verificacao de\n" +
+            "seguranca (repo Git valido e publico). Se reprovar, nao e publicada.";
+        JOptionPane.showMessageDialog(this, msg, "Ajuda - Publicar", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // Configura/limpa o token de publicacao.
+    private void openTokenDialog() {
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        panel.setBackground(new Color(45, 45, 45));
+
+        JLabel info = new JLabel("<html><div style='width:360px;color:#ddd;'>"
+                + "O token permite publicar direto do editor.<br>"
+                + "Gere no site (logado com GitHub), copie e cole abaixo.</div></html>");
+        panel.add(info, BorderLayout.NORTH);
+
+        JTextField txtToken = new JTextField(marketplace.hasToken() ? marketplace.getToken() : "");
+        txtToken.setBackground(new Color(60, 60, 60));
+        txtToken.setForeground(Color.WHITE);
+        panel.add(txtToken, BorderLayout.CENTER);
+
+        JButton btnGen = new JButton("Gerar token no site ↗");
+        btnGen.addActionListener(e -> openInBrowser(marketplace.getAccountUrl()));
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        south.setBackground(new Color(45, 45, 45));
+        south.add(btnGen);
+        panel.add(south, BorderLayout.SOUTH);
+
+        String[] options = {"Salvar", "Limpar token", "Cancelar"};
+        int r = JOptionPane.showOptionDialog(this, panel, "🔑 Token de publicacao",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+        if (r == 0) {
+            marketplace.setToken(txtToken.getText().trim());
+            statusLabel.setText(marketplace.hasToken() ? "Token salvo." : "Token vazio (nada salvo).");
+        } else if (r == 1) {
+            marketplace.clearToken();
+            statusLabel.setText("Token removido.");
+        }
+    }
+
+    // Publica direto do editor usando o token (sem navegador).
+    private void openLocalPublishDialog() {
+        if (!marketplace.hasToken()) {
+            int opt = JOptionPane.showConfirmDialog(this,
+                    "Voce ainda nao configurou um token.\nQuer configurar agora?",
+                    "Token necessario", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (opt == JOptionPane.YES_OPTION) openTokenDialog();
+            if (!marketplace.hasToken()) return;
+        }
+
+        JPanel inputPanel = new JPanel(new GridLayout(7, 2, 8, 8));
         inputPanel.setBackground(new Color(45, 45, 45));
-        
-        inputPanel.add(new JLabel("Type:"));
+
+        inputPanel.add(new JLabel("Tipo:"));
         JComboBox<String> typeCombo = new JComboBox<>(new String[]{"plugin", "workshop", "asset"});
-        typeCombo.setBackground(new Color(60, 60, 60));
-        typeCombo.setForeground(Color.WHITE);
         inputPanel.add(typeCombo);
 
-        inputPanel.add(new JLabel("Name:"));
+        inputPanel.add(new JLabel("Nome:"));
         JTextField txtName = new JTextField();
-        txtName.setBackground(new Color(60, 60, 60));
-        txtName.setForeground(Color.WHITE);
         inputPanel.add(txtName);
 
-        inputPanel.add(new JLabel("Author:"));
+        inputPanel.add(new JLabel("Autor (opcional):"));
         JTextField txtAuthor = new JTextField();
-        txtAuthor.setBackground(new Color(60, 60, 60));
-        txtAuthor.setForeground(Color.WHITE);
         inputPanel.add(txtAuthor);
 
-        inputPanel.add(new JLabel("Description:"));
+        inputPanel.add(new JLabel("Descricao:"));
         JTextField txtDesc = new JTextField();
-        txtDesc.setBackground(new Color(60, 60, 60));
-        txtDesc.setForeground(Color.WHITE);
         inputPanel.add(txtDesc);
 
-        inputPanel.add(new JLabel("Git URL:"));
+        inputPanel.add(new JLabel("URL do repo Git:"));
         JTextField txtGit = new JTextField();
-        txtGit.setBackground(new Color(60, 60, 60));
-        txtGit.setForeground(Color.WHITE);
         inputPanel.add(txtGit);
 
-        inputPanel.add(new JLabel("Version:"));
+        inputPanel.add(new JLabel("Versao:"));
         JTextField txtVer = new JTextField("1.0.0");
-        txtVer.setBackground(new Color(60, 60, 60));
-        txtVer.setForeground(Color.WHITE);
         inputPanel.add(txtVer);
 
-        int result = JOptionPane.showConfirmDialog(this, inputPanel, "Publish to Vercel Marketplace", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (result == JOptionPane.OK_OPTION) {
-            String name = txtName.getText().trim();
-            String author = txtAuthor.getText().trim();
-            String git = txtGit.getText().trim();
+        JCheckBox chkTerms = new JCheckBox("Aceito os Termos e Privacidade");
+        chkTerms.setBackground(new Color(45, 45, 45));
+        chkTerms.setForeground(Color.LIGHT_GRAY);
+        JButton btnTerms = new JButton("ver termos ↗");
+        btnTerms.addActionListener(e -> openInBrowser(marketplace.getBaseUrl() + "/terms"));
+        inputPanel.add(chkTerms);
+        inputPanel.add(btnTerms);
 
-            if (name.isEmpty() || author.isEmpty() || git.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Name, Author, and Git URL are required.", "Error", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+        int result = JOptionPane.showConfirmDialog(this, inputPanel,
+                "💻 Publicar com token", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
 
-            String type = (String) typeCombo.getSelectedItem();
-            String desc = txtDesc.getText().trim();
-            String version = txtVer.getText().trim().isEmpty() ? "1.0.0" : txtVer.getText().trim();
-
-            statusLabel.setText("Publishing package " + name + " to marketplace index...");
-            MarketplaceItem item = new MarketplaceItem(type, name, author, desc, version, git, "", "None");
-            new Thread(() -> {
-                boolean ok = marketplace.publish(item);
-                SwingUtilities.invokeLater(() -> {
-                    if (ok) {
-                        statusLabel.setText("✓ " + name + " published and indexed on " + marketplace.getBaseUrl() + ".");
-                        JOptionPane.showMessageDialog(this, name + " published successfully!\nYour repository is now searchable in the Marketplace.", "Publish Successful", JOptionPane.INFORMATION_MESSAGE);
-                    } else {
-                        statusLabel.setText("❌ Could not publish " + name + " (marketplace API offline).");
-                        JOptionPane.showMessageDialog(this, "Could not reach the marketplace API.\nCheck your internet connection or the IGNIS_MARKETPLACE_URL setting.", "Publish Failed", JOptionPane.WARNING_MESSAGE);
-                    }
-                });
-            }).start();
+        String name = txtName.getText().trim();
+        String git = txtGit.getText().trim();
+        if (name.isEmpty() || git.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Nome e URL do repo Git sao obrigatorios.", "Erro", JOptionPane.WARNING_MESSAGE);
+            return;
         }
+        if (!chkTerms.isSelected()) {
+            JOptionPane.showMessageDialog(this, "Voce precisa aceitar os Termos para publicar.", "Erro", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String type = (String) typeCombo.getSelectedItem();
+        String author = txtAuthor.getText().trim();
+        String desc = txtDesc.getText().trim();
+        String version = txtVer.getText().trim().isEmpty() ? "1.0.0" : txtVer.getText().trim();
+
+        statusLabel.setText("Publicando " + name + "...");
+        MarketplaceItem item = new MarketplaceItem(type, name, author, desc, version, git, "", "None");
+        new Thread(() -> {
+            MarketplaceClient.PublishResult res = marketplace.publish(item, true);
+            SwingUtilities.invokeLater(() -> {
+                if (res.ok) {
+                    statusLabel.setText("✓ " + name + " publicado em " + marketplace.getBaseUrl() + ".");
+                    JOptionPane.showMessageDialog(this, name + " publicado com sucesso!", "Publicado", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    statusLabel.setText("❌ " + res.message);
+                    StringBuilder sb = new StringBuilder(res.message);
+                    if (!res.reasons.isEmpty()) {
+                        sb.append("\n\nMotivos da verificacao de seguranca:");
+                        for (String r : res.reasons) sb.append("\n • ").append(r);
+                    }
+                    JOptionPane.showMessageDialog(this, sb.toString(), "Falha ao publicar", JOptionPane.WARNING_MESSAGE);
+                }
+            });
+        }).start();
     }
 }

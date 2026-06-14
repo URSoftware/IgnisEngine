@@ -7,6 +7,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.prefs.Preferences;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -37,11 +38,66 @@ public final class MarketplaceClient {
     private final String baseUrl;
     private boolean lastFetchOnline = false;
 
+    /** Armazena o token de publicacao localmente, por usuario do SO. */
+    private final Preferences prefs = Preferences.userRoot().node("com/ignis/marketplace");
+    private static final String TOKEN_KEY = "publishToken";
+
     private MarketplaceClient() {
         this.baseUrl = resolveBaseUrl();
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
+    }
+
+    /** URL da pagina web de publicacao (abrir no navegador). */
+    public String getPublishUrl() {
+        return baseUrl + "/publish";
+    }
+
+    /** URL da pagina de conta (gerar token). */
+    public String getAccountUrl() {
+        return baseUrl + "/account";
+    }
+
+    // ---- Token de publicacao (persistido via Preferences) ----
+
+    public String getToken() {
+        // Prioridade: env/propriedade (CI) -> Preferences salvas.
+        String sys = System.getProperty("ignis.marketplace.token");
+        if (sys != null && !sys.isBlank()) return sys.trim();
+        String env = System.getenv("IGNIS_MARKETPLACE_TOKEN");
+        if (env != null && !env.isBlank()) return env.trim();
+        String saved = prefs.get(TOKEN_KEY, "");
+        return saved.isBlank() ? null : saved;
+    }
+
+    public boolean hasToken() {
+        return getToken() != null;
+    }
+
+    public void setToken(String token) {
+        if (token == null || token.isBlank()) {
+            prefs.remove(TOKEN_KEY);
+        } else {
+            prefs.put(TOKEN_KEY, token.trim());
+        }
+    }
+
+    public void clearToken() {
+        prefs.remove(TOKEN_KEY);
+    }
+
+    /** Resultado de uma tentativa de publicacao, com mensagem e motivos do gate. */
+    public static class PublishResult {
+        public final boolean ok;
+        public final String message;
+        public final List<String> reasons;
+
+        public PublishResult(boolean ok, String message, List<String> reasons) {
+            this.ok = ok;
+            this.message = message;
+            this.reasons = reasons != null ? reasons : new ArrayList<>();
+        }
     }
 
     public static MarketplaceClient getInstance() {
@@ -116,10 +172,16 @@ public final class MarketplaceClient {
     }
 
     /**
-     * Publica um pacote no marketplace (POST /api/items). Best-effort: retorna
-     * false se a API estiver offline.
+     * Publica um pacote no marketplace (POST /api/items) usando o token salvo.
+     * Envia "Authorization: Bearer &lt;token&gt;" e o aceite dos termos.
+     * Retorna um {@link PublishResult} com sucesso/mensagem/motivos do gate.
      */
-    public boolean publish(MarketplaceItem item) {
+    public PublishResult publish(MarketplaceItem item, boolean acceptTerms) {
+        String token = getToken();
+        if (token == null) {
+            return new PublishResult(false,
+                    "Nenhum token configurado. Gere um token no site e cole no editor.", null);
+        }
         try {
             JSONObject payload = new JSONObject()
                     .put("type", item.type)
@@ -129,19 +191,44 @@ public final class MarketplaceClient {
                     .put("version", item.version)
                     .put("gitUrl", item.gitUrl)
                     .put("coverImageText", item.coverImageText)
-                    .put("dependencies", item.dependencies);
+                    .put("dependencies", item.dependencies)
+                    .put("acceptTerms", acceptTerms);
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/items"))
-                    .timeout(Duration.ofSeconds(8))
+                    .timeout(Duration.ofSeconds(12))
                     .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + token)
                     .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
                     .build();
 
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            return resp.statusCode() == 200 || resp.statusCode() == 201;
+            int code = resp.statusCode();
+            if (code == 200 || code == 201) {
+                return new PublishResult(true, "Pacote publicado com sucesso!", null);
+            }
+
+            // Extrai mensagem e motivos do gate de seguranca, se houver.
+            String message = "Falha ao publicar (HTTP " + code + ").";
+            List<String> reasons = new ArrayList<>();
+            try {
+                JSONObject body = new JSONObject(resp.body());
+                if (body.has("error")) message = body.getString("error");
+                if (body.has("report")) {
+                    JSONObject report = body.getJSONObject("report");
+                    if (report.has("reasons")) {
+                        JSONArray rs = report.getJSONArray("reasons");
+                        for (int i = 0; i < rs.length(); i++) reasons.add(rs.getString(i));
+                    }
+                }
+            } catch (Exception ignore) {
+                // resposta nao-JSON
+            }
+            if (code == 401) message = "Token invalido ou expirado. Gere um novo no site.";
+            return new PublishResult(false, message, reasons);
         } catch (Exception e) {
-            return false;
+            return new PublishResult(false,
+                    "Nao foi possivel contatar o marketplace (" + e.getMessage() + ").", null);
         }
     }
 
