@@ -143,6 +143,13 @@ public class EditorTextPane extends JTextPane {
     public EditorTextPane() {
         super();
         setFont(new Font("Consolas", Font.PLAIN, 14));
+
+        // Debounced syntax highlighting (50ms). Precisa existir ANTES de setTheme(),
+        // pois setTheme() chama highlightTimer.restart() (senao, NPE no construtor e
+        // a janela do editor de script nao abre).
+        highlightTimer = new Timer(50, e -> runHighlighting());
+        highlightTimer.setRepeats(false);
+
         setTheme(CLASSIC_DARK);
 
         // Setup Tab interception
@@ -164,10 +171,6 @@ public class EditorTextPane extends JTextPane {
                 }
             }
         });
-
-        // Setup debounced syntax highlighting (50ms)
-        highlightTimer = new Timer(50, e -> runHighlighting());
-        highlightTimer.setRepeats(false);
 
         // Listen for modifications
         getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
