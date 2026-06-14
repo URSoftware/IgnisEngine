@@ -1270,6 +1270,15 @@ public class Game extends Canvas implements Runnable {
      * pelo editor Swing). Ver doc/JAVAFX_MIGRATION_PLAN.md (ponte de render).
      */
     public synchronized void renderWorldTo(Graphics2D g2d, int width, int height) {
+        renderWorldTo(g2d, width, height, null);
+    }
+
+    /**
+     * Como {@link #renderWorldTo(Graphics2D, int, int)}, mas tambem desenha um
+     * contorno de selecao em torno de {@code selected} (usado pelo editor JavaFX,
+     * Fase 2). Aditivo.
+     */
+    public synchronized void renderWorldTo(Graphics2D g2d, int width, int height, GameObject selected) {
         if (g2d == null || width <= 0 || height <= 0) return;
 
         g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
@@ -1305,6 +1314,21 @@ public class Game extends Canvas implements Runnable {
             }
             entity.render(g2d);
             g2d.setTransform(entityTransform);
+        }
+
+        // Contorno de selecao (espaco do mundo, com a transform da camera aplicada)
+        if (selected != null && selected.isVisible() && !(selected instanceof Camera)) {
+            AffineTransform selTransform = g2d.getTransform();
+            if (selected.getRotation() != 0) {
+                double cx = selected.getX() + selected.getWidth() / 2.0;
+                double cy = selected.getY() + selected.getHeight() / 2.0;
+                g2d.rotate(Math.toRadians(selected.getRotation()), cx, cy);
+            }
+            g2d.setColor(new Color(46, 204, 113));
+            g2d.setStroke(new java.awt.BasicStroke(2f));
+            g2d.drawRect((int) selected.getX() - 2, (int) selected.getY() - 2,
+                    selected.getWidth() + 4, selected.getHeight() + 4);
+            g2d.setTransform(selTransform);
         }
 
         g2d.setTransform(originalTransform);
