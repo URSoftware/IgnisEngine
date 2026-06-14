@@ -50,6 +50,8 @@ public class IgnisEditorApp extends Application {
     private final Game game = new Game();
     private GameObject selected;
     private boolean suppressInspectorEvents = false;
+    private File projectFolder;
+    private File currentIgnisFile;
 
     private final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
     private TreeView<String> hierarchy;
@@ -112,16 +114,31 @@ public class IgnisEditorApp extends Application {
         exit.setOnAction(e -> { stage.close(); Platform.exit(); });
         file.getItems().addAll(open, exit);
 
+        Menu tools = new Menu("Ferramentas");
+        MenuItem miAudio = new MenuItem("Editor de Audio (DAW)");
+        miAudio.setOnAction(e -> openAudioEditor());
+        MenuItem miImage = new MenuItem("Editor de Imagens");
+        miImage.setOnAction(e -> openImageEditor());
+        MenuItem miAnim = new MenuItem("Editor de Animacao");
+        miAnim.setOnAction(e -> openAnimationEditor());
+        MenuItem miNotes = new MenuItem("Sistema de Notas");
+        miNotes.setOnAction(e -> openNotes());
+        MenuItem miCommunity = new MenuItem("Comunidade & Marketplace");
+        miCommunity.setOnAction(e -> openCommunity());
+        MenuItem miBuild = new MenuItem("Build do Projeto");
+        miBuild.setOnAction(e -> openBuildDialog());
+        tools.getItems().addAll(miAudio, miImage, miAnim, miNotes, miCommunity, miBuild);
+
         Menu view = new Menu("Visualizar");
         view.getItems().add(new MenuItem("Viewport"));
 
         Menu help = new Menu("Ajuda");
         MenuItem about = new MenuItem("Sobre");
         about.setOnAction(e -> new Alert(Alert.AlertType.INFORMATION,
-                "IgnisEngine — editor JavaFX (Fase 2 da migracao).").showAndWait());
+                "IgnisEngine — editor JavaFX (Fase 3 da migracao).").showAndWait());
         help.getItems().add(about);
 
-        return new MenuBar(file, view, help);
+        return new MenuBar(file, tools, view, help);
     }
 
     private void openProject(Stage stage) {
@@ -138,6 +155,8 @@ public class IgnisEditorApp extends Application {
 
         try {
             Project project = IgnisProjectIO.load(fileChosen, game);
+            this.currentIgnisFile = fileChosen;
+            this.projectFolder = IgnisProjectIO.getProjectFolder(fileChosen);
             game.getEntities().clear();
             setSelected(null);
             Scene scene = project.getCurrentScene();
@@ -153,6 +172,81 @@ public class IgnisEditorApp extends Application {
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir projeto:\n" + ex.getMessage()).showAndWait();
         }
+    }
+
+    // ---------------- Ferramentas (janelas Swing durante a transicao) ----------------
+    // Estrategia do plano: durante a migracao, as janelas-ferramenta sao abertas como
+    // janelas Swing independentes a partir do app JavaFX (cada uma sera reescrita em
+    // JavaFX nas iteracoes seguintes). Tudo na EDT e com protecao contra falha.
+
+    private void openSwing(String toolName, java.util.function.Supplier<javax.swing.JFrame> factory) {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            try {
+                javax.swing.JFrame frame = factory.get();
+                if (frame != null) frame.setVisible(true);
+            } catch (Throwable t) {
+                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
+                        "Falha ao abrir " + toolName + ":\n" + t.getMessage()).showAndWait());
+            }
+        });
+    }
+
+    private boolean requireProject() {
+        if (projectFolder == null) {
+            new Alert(Alert.AlertType.INFORMATION,
+                    "Abra um projeto primeiro (Arquivo > Abrir projeto).").showAndWait();
+            return false;
+        }
+        return true;
+    }
+
+    private void openAudioEditor() {
+        openSwing("Editor de Audio", () -> new com.ignis.audioeditor.AudioEditorFrame());
+    }
+
+    private void openImageEditor() {
+        File folder = projectFolder != null ? projectFolder : IgnisProjectIO.getProjectsRootFolder();
+        openSwing("Editor de Imagens", () -> new com.ignis.imageeditor.ImageEditorFrame(folder));
+    }
+
+    private void openAnimationEditor() {
+        if (!requireProject()) return;
+        if (selected == null) {
+            new Alert(Alert.AlertType.INFORMATION,
+                    "Selecione um objeto na Hierarchy para animar.").showAndWait();
+            return;
+        }
+        final File sprites = new File(projectFolder, "assets/sprites");
+        final GameObject target = selected;
+        openSwing("Editor de Animacao",
+                () -> new com.ignis.editor.AnimationEditorFrame(projectFolder, sprites, target));
+    }
+
+    private void openNotes() {
+        if (!requireProject()) return;
+        openSwing("Sistema de Notas",
+                () -> new com.ignis.notes.NoteSystemFrame(projectFolder, null));
+    }
+
+    private void openCommunity() {
+        if (!requireProject()) return;
+        openSwing("Comunidade & Marketplace",
+                () -> new com.ignis.community.CommunityFrame(projectFolder));
+    }
+
+    private void openBuildDialog() {
+        if (!requireProject() || currentIgnisFile == null) return;
+        final File ignis = currentIgnisFile;
+        final String name = ignis.getName().replace(".ignis", "");
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            try {
+                com.ignis.editor.BuildDialog dlg = new com.ignis.editor.BuildDialog(null, ignis, name);
+                dlg.setVisible(true);
+            } catch (Throwable t) {
+                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
+                        "Falha ao abrir Build:\n" + t.getMessage()).showAndWait());
+            }
+        });
     }
 
     // ---------------- Hierarchy ----------------
