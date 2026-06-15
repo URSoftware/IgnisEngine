@@ -354,7 +354,7 @@ public class FxImageEditor extends Stage {
 
         // Double click rename
         layerList.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2) {
+            if (e.getClickCount() == 2 && e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
                 ImageDocument.Layer layer = layerList.getSelectionModel().getSelectedItem();
                 if (layer != null) {
                     TextInputDialog dialog = new TextInputDialog(layer.getName());

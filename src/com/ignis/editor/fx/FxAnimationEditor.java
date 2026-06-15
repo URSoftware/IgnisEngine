@@ -220,6 +220,7 @@ public class FxAnimationEditor extends Stage {
 
     private void setupTimelineListeners() {
         timelineCanvas.setOnMousePressed(e -> {
+            if (e.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
             double x = e.getX();
             double y = e.getY();
 

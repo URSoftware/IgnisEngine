@@ -1049,9 +1049,8 @@ public class IgnisEditorApp extends Application {
             java.util.List<GameObject> ents = game.getEntities();
             setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
         });
-        tree.setContextMenu(buildHierarchyContextMenu());
         tree.setOnMouseClicked(ev -> {
-            if (ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+            if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
                 TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
                 ContextMenu menu;
                 if (sel != null && sel != hierarchyRoot) {
@@ -1215,7 +1214,7 @@ public class IgnisEditorApp extends Application {
                 if (file != null && file.isFile()) {
                     openAssetFile(file);
                 }
-            } else if (ev.getButton() == javafx.scene.input.MouseButton.PRIMARY || ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+            } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
                 ContextMenu menu = buildAssetsContextMenu(file);
                 menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
             }

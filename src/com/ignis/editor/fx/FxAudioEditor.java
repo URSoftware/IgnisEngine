@@ -511,6 +511,7 @@ public class FxAudioEditor extends Stage {
 
         private void setupInteraction() {
             clipsCanvas.setOnMousePressed(e -> {
+                if (e.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
                 double x = e.getX();
                 double clickTime = x / zoomFactor;
 

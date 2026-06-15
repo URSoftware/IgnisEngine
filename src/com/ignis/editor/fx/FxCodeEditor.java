@@ -950,11 +950,11 @@ public class FxCodeEditor extends Stage {
             "    -fx-fill: " + annotationHex + ";\n" +
             "}\n" +
             ".code-area .paragraph-graphic {\n" +
-            "    -fx-background-color: " + linenoBgHex + ";\n" +
+            "    -fx-background-color: " + linenoBgHex + " !important;\n" +
             "    -fx-padding: 0 5 0 5;\n" +
             "}\n" +
-            ".code-area .lineno {\n" +
-            "    -fx-text-fill: " + linenoFgHex + ";\n" +
+            ".code-area .lineno, .code-area .line-number {\n" +
+            "    -fx-text-fill: " + linenoFgHex + " !important;\n" +
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +
             "}\n" +

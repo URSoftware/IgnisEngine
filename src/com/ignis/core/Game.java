@@ -642,7 +642,7 @@ public class Game extends Canvas implements Runnable {
         lastMouseY = mouseY;
         
         // Check for edge wrapping (infinite drag)
-        if (robot != null) {
+        if (robot != null && isShowing()) {
             int w = getWidth();
             int h = getHeight();
             boolean needsWarp = false;

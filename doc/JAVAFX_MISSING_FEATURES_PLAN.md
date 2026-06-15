@@ -102,14 +102,20 @@ Nesta fase subsequente, focamos na usabilidade do motor gráfico e do editor de 
 - **Implementação:** Integrado o método `updateInspectorFields()` no `AnimationTimer` da ponte de renderização. Os campos de propriedades (X, Y, Largura, Altura, Rotação e Visibilidade) agora sincronizam continuamente com a posição e escala das entidades na viewport enquanto elas são manipuladas via Gizmos.
 - **Experiência do Usuário:** Para evitar bugs de caret e loops infinitos de entrada de dados, os campos de texto do Inspector só atualizam seus valores se não estiverem com foco ativo do teclado.
 
-### C. HUDs Dedicadas de Clique Esquerdo (Menus Contextuais)
-- **Hierarchy:** Cliques com o botão esquerdo simples agora abrem diretamente a HUD rápida de opções de entidades ou o menu de criação de objetos primitivos.
-- **Assets Tree:** Configurado um listener de clique esquerdo para abrir a HUD de operações em arquivos do navegador de assets (com suporte a *Abrir/Editar*, *Renomear*, *Deletar*, *Copiar Caminho* e *Criar Novo Script*).
-- **Viewport Canvas:** Cliques esquerdos simples (sem arraste) efetuam apenas a seleção do objeto (atualizando a Hierarchy e o Inspector). A HUD rápida (menu de contexto) da viewport é disparada exclusivamente com o clique do botão direito do mouse, garantindo uma navegação e seleção livre de interferências de menus.
-- **Dismiss Automático:** Todas as HUDs do botão esquerdo utilizam auto-hide padrão, fechando instantaneamente quando o usuário clica com o botão esquerdo em qualquer outra área do editor.
+### C. Separacao e Auditoria de Cliques de Mouse (Botoes Esquerdo vs. Direito)
+- **Hierarchy:** Cliques com o botao esquerdo simples (`PRIMARY`) agora efetuam apenas a selecao de objetos. O menu de contexto (HUD) e disparado exclusivamente com o clique do botao direito (`SECONDARY`).
+- **Assets Tree:** Cliques com o botao esquerdo simples (`PRIMARY`) selecionam o arquivo. Duplo clique com `PRIMARY` abre/edita o arquivo selecionado. O menu de contexto de assets (`buildAssetsContextMenu`) e disparado exclusivamente com o botao direito (`SECONDARY`).
+- **Viewport Canvas:** Cliques esquerdos simples (`PRIMARY`) efetuam apenas a selecao da entidade (atualizando a Hierarchy e o Inspector). O menu de contexto da viewport e disparado exclusivamente com o clique do botao direito (`SECONDARY`), garantindo navegacao livre de interferencias.
+- **Linha do Tempo de Animacoes (`FxAnimationEditor.java`):** Restringido o scrub da linha do tempo e arraste de quadros exclusivamente ao botao esquerdo (`PRIMARY`).
+- **Painel de Audio (`FxAudioEditor.java`):** Selecao e manipulacao de faixas e clipes de audio no canvas restritos ao botao esquerdo (`PRIMARY`).
+- **Lista de Camadas de Imagem (`FxImageEditor.java`):** Duplo clique para renomeacao de camadas restrito ao botao esquerdo (`PRIMARY`).
 
-### D. Visual Temático Premium no Editor de Código
-- **Estilização Dinâmica:** Removemos todas as estilizações de cor em linha (inline CSS) das barras de ferramentas, status e botões de `FxCodeEditor.java`. Substituímos por seletores de classes CSS e criamos regras dinâmicas em `applyTheme(EditorTheme)` baseadas nas cores de realce do tema de código selecionado (ex: Dracula, Monokai, One Dark). Os botões de ação e ComboBoxes agora adaptam suas cores e estados ativos para combinar perfeitamente com a paleta do tema ativo.
-- **Identidade Visual:** Aplicamos o ícone oficial da engine (`Icons/IconeIgnis.png`) em todos os `Stage`s principais (`IgnisEditorApp` e `FxCodeEditor`) para unificação visual da barra de tarefas e cabeçalhos.
+### D. Resolucao do Bug de Loop de Warping do Mouse
+- **Warping Loop:** Resolvido o bug critico em `Game.java` restringindo a execucao do Robot warping a ambientes onde o canvas esta visivel (`isShowing()`). Sob JavaFX, como a renderizacao ocorre off-screen, o warping e desativado com seguranca, prevenindo exceptions e loops infinitos de teleporte de cursor.
+
+### E. Visual Tematico Premium no Editor de Codigo
+- **Estilizacao Dinamica:** Removemos todas as estilizacoes de cor em linha (inline CSS) das barras de ferramentas, status e botoes de `FxCodeEditor.java`. Substituimos por seletores de classes CSS e criamos regras dinamicas em `applyTheme(EditorTheme)` baseadas nas cores de realce do tema de codigo selecionado (ex: Dracula, Monokai, One Dark). Os botoes de acao e ComboBoxes agora adaptam suas cores e estados ativos para combinar perfeitamente com a paleta do tema ativo.
+- **Numeracao de Linhas:** Aplicados estilos CSS robustos em `applyTheme` com as classes corretas do RichTextFX (`.paragraph-graphic` e `.line-number`) utilizando a diretiva `!important` para sobrescrever temas conflitantes que causavam numeros de linhas ilegiveis.
+- **Identidade Visual:** Aplicamos o icone oficial da engine (`Icons/IconeIgnis.png`) em todos os Stages principais (`IgnisEditorApp` e `FxCodeEditor`) para unificacao visual da barra de tarefas e cabecalhos.
 
 ```
