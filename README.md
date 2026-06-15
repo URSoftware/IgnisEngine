@@ -31,6 +31,8 @@ A migração ativa do editor para JavaFX acontece na branch `main`. A versão Sw
 ```text
 IgnisEngine/
 ├── CONTRIBUTING.md          # Guia de contribuição para desenvolvedores
+├── CODE_OF_CONDUCT.md       # Código de conduta da comunidade
+├── CHANGELOG.md             # Registro cronológico de alterações e releases
 ├── pom.xml                  # Configuração de dependências Maven
 ├── run-editor-javafx.bat    # Script de execução rápida no Windows
 ├── editor_layout.json       # Configurações de layout salvas do editor
@@ -57,7 +59,7 @@ IgnisEngine/
 O coração do IgnisEngine, responsável por toda a lógica de renderização e execução física/lógica:
 * Loop de atualização e desenho constante (Tick/Render).
 * Gerenciamento de tela com suporte a redimensionamento e modo tela cheia.
-* Sistema de GameObject reutilizável para gerenciar elementos em cena.
+* Sistema de GameObject reutilizável para gerenciar elements em cena.
 
 ### Editor — Ferramenta de Modelagem
 Interface visual profissional para agilizar o desenvolvimento:
@@ -75,12 +77,17 @@ Toda a documentação técnica detalhada do projeto está organizada de forma mo
 ### Configuração e Contribuição
 * [Guia de Configuração de Ambiente](doc/DEVELOPER_SETUP.md): Requisitos de JDK, clonagem de submódulos, configurações de IDE e execução do editor.
 * [Diretrizes de Contribuição](CONTRIBUTING.md): Padrões de código, estratégias de branches e formatação de mensagens de commit.
+* [Código de Conduta](CODE_OF_CONDUCT.md): Princípios de convivência saudável da comunidade de colaboradores.
+* [Política de Segurança](doc/SECURITY.md): Diretrizes para reporte responsável de vulnerabilidades.
+* [Registro de Alterações (Changelog)](CHANGELOG.md): Histórico cronológico detalhado de melhorias e correções.
 * [Configuração de CI/CD](doc/CI_CD_SETUP.md): Pipeline automatizado com GitHub Actions, matriz de JDK e cache de dependências.
 
 ### Planejamento e Arquitetura
 * [Roadmap de Evolução](doc/MASTER_ROADMAP.md): Planejamento oficial de evolução da engine e fases de desenvolvimento.
 * [Arquitetura do Sistema](doc/ARCHITECTURE.md): Estrutura de pacotes, ciclo de vida do editor/runtime e modelo de concorrência.
 * [Inventário do Projeto](doc/PROJECT_INVENTORY.md): Auditoria completa do estado dos arquivos e módulos do repositório.
+* [Guia de ADRs (Decisões de Arquitetura)](doc/ADR_GUIDE.md): Conceituação e modelo de documentação de escolhas técnicas.
+* [Guia de Versionamento e Releases](doc/RELEASE_GUIDE.md): Padrão de SemVer e passo a passo de publicação de builds.
 * [Especificação do Formato .ignis](doc/IGNIS_FILE_SPEC.md): Detalhes do formato de arquivo comprimido do projeto.
 
 ### Sistemas da Engine e Viewport
