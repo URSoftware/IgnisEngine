@@ -237,6 +237,15 @@ public class FxCodeEditor extends Stage {
         setWidth(800);
         setHeight(600);
 
+        try {
+            File iconFile = new File("Icons/IconeIgnis.png");
+            if (iconFile.exists()) {
+                getIcons().add(new javafx.scene.image.Image(iconFile.toURI().toString()));
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
         setupUI();
         setupAutoSave();
         setupWindowListeners();
@@ -244,22 +253,22 @@ public class FxCodeEditor extends Stage {
 
     private void setupUI() {
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #282828;");
+        root.getStyleClass().add("editor-root");
 
         // --- Toolbar ---
         ToolBar toolbar = new ToolBar();
-        toolbar.setStyle("-fx-background-color: #323232; -fx-padding: 5;");
+        toolbar.getStyleClass().add("editor-toolbar");
 
         Button saveBtn = new Button("Save");
-        saveBtn.setStyle("-fx-background-color: #3c783c; -fx-text-fill: white; -fx-font-weight: bold;");
+        saveBtn.getStyleClass().add("btn-save");
         saveBtn.setOnAction(e -> saveScript());
 
         Button compileBtn = new Button("Compile");
-        compileBtn.setStyle("-fx-background-color: #3c6496; -fx-text-fill: white; -fx-font-weight: bold;");
+        compileBtn.getStyleClass().add("btn-compile");
         compileBtn.setOnAction(e -> compileScript());
 
         Button saveAndCompileBtn = new Button("Save & Compile");
-        saveAndCompileBtn.setStyle("-fx-background-color: #645096; -fx-text-fill: white; -fx-font-weight: bold;");
+        saveAndCompileBtn.getStyleClass().add("btn-save-compile");
         saveAndCompileBtn.setOnAction(e -> {
             if (saveScript()) {
                 compileScript();
@@ -268,7 +277,7 @@ public class FxCodeEditor extends Stage {
 
         autocompleteToggle = new ToggleButton("Auto Complete");
         autocompleteToggle.setSelected(true);
-        autocompleteToggle.setStyle("-fx-background-color: #505050; -fx-text-fill: white;");
+        autocompleteToggle.getStyleClass().add("btn-autocomplete");
         autocompleteToggle.setOnAction(e -> {
             boolean active = autocompleteToggle.isSelected();
             statusLabel.setText(active ? " Auto-complete active" : " Auto-complete disabled");
@@ -281,7 +290,7 @@ public class FxCodeEditor extends Stage {
         ComboBox<String> themeBox = new ComboBox<>();
         themeBox.getItems().addAll("Dracula", "Monokai", "One Dark", "Solarized Dark", "Classic Dark", "Classic Light");
         themeBox.setValue("Classic Dark");
-        themeBox.setStyle("-fx-background-color: #464646; -fx-text-fill: white; -fx-mark-color: white;");
+        themeBox.getStyleClass().add("theme-box");
         themeBox.setOnAction(evt -> {
             String selected = themeBox.getValue();
             if (selected == null) return;
@@ -296,7 +305,7 @@ public class FxCodeEditor extends Stage {
         });
 
         Button importThemeBtn = new Button("Import Theme");
-        importThemeBtn.setStyle("-fx-background-color: #464646; -fx-text-fill: white;");
+        importThemeBtn.getStyleClass().add("btn-theme-action");
         importThemeBtn.setOnAction(evt -> {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Import Theme JSON");
@@ -317,7 +326,7 @@ public class FxCodeEditor extends Stage {
         });
 
         Button exportThemeBtn = new Button("Export Theme");
-        exportThemeBtn.setStyle("-fx-background-color: #464646; -fx-text-fill: white;");
+        exportThemeBtn.getStyleClass().add("btn-theme-action");
         exportThemeBtn.setOnAction(evt -> {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Export Theme JSON");
@@ -370,7 +379,7 @@ public class FxCodeEditor extends Stage {
 
         // --- Status Bar ---
         HBox statusBar = new HBox();
-        statusBar.setStyle("-fx-background-color: #323232; -fx-padding: 5 10;");
+        statusBar.getStyleClass().add("editor-statusbar");
         statusBar.setAlignment(Pos.CENTER_LEFT);
 
         statusLabel = new Label(" Ready");
@@ -893,50 +902,136 @@ public class FxCodeEditor extends Stage {
         String linenoFgHex = toCssColor(linenoFg);
         String linenoBgHex = toCssColor(linenoBg);
 
-        String css = String.format(
+        Color barBg = theme.background.darker();
+        Color btnBg = theme.background.brighter();
+        
+        if (theme == CLASSIC_LIGHT) {
+            barBg = Color.rgb(230, 230, 230);
+            btnBg = Color.rgb(240, 240, 240);
+        } else if (theme.background.getRed() < 0.1 && theme.background.getGreen() < 0.1 && theme.background.getBlue() < 0.1) {
+            barBg = Color.rgb(20, 20, 20);
+            btnBg = Color.rgb(55, 55, 55);
+        }
+        
+        String barBgHex = toCssColor(barBg);
+        String btnBgHex = toCssColor(btnBg);
+        String btnHoverBgHex = toCssColor(btnBg.brighter());
+
+        String css =
             ".styled-text-area, .code-area {\n" +
-            "    -fx-background-color: %s;\n" +
+            "    -fx-background-color: " + bgHex + ";\n" +
             "}\n" +
             ".styled-text-area .text, .code-area .text {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + fgHex + ";\n" +
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +
             "}\n" +
             ".code-area .caret {\n" +
-            "    -fx-stroke: %s;\n" +
+            "    -fx-stroke: " + caretHex + ";\n" +
             "}\n" +
             ".code-area .keyword {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + keywordHex + ";\n" +
             "    -fx-font-weight: bold;\n" +
             "}\n" +
             ".code-area .type {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + typeHex + ";\n" +
             "}\n" +
             ".code-area .number {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + numberHex + ";\n" +
             "}\n" +
             ".code-area .string {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + stringHex + ";\n" +
             "}\n" +
             ".code-area .comment {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + commentHex + ";\n" +
             "    -fx-font-style: italic;\n" +
             "}\n" +
             ".code-area .annotation {\n" +
-            "    -fx-fill: %s;\n" +
+            "    -fx-fill: " + annotationHex + ";\n" +
             "}\n" +
             ".code-area .paragraph-graphic {\n" +
-            "    -fx-background-color: %s;\n" +
+            "    -fx-background-color: " + linenoBgHex + ";\n" +
             "    -fx-padding: 0 5 0 5;\n" +
             "}\n" +
             ".code-area .lineno {\n" +
-            "    -fx-text-fill: %s;\n" +
+            "    -fx-text-fill: " + linenoFgHex + ";\n" +
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +
-            "}\n",
-            bgHex, fgHex, caretHex, keywordHex, typeHex, numberHex, stringHex, commentHex, annotationHex,
-            linenoBgHex, linenoFgHex
-        );
+            "}\n" +
+            ".editor-root {\n" +
+            "    -fx-background-color: " + bgHex + ";\n" +
+            "}\n" +
+            ".editor-toolbar {\n" +
+            "    -fx-background-color: " + barBgHex + ";\n" +
+            "    -fx-padding: 5;\n" +
+            "    -fx-spacing: 5;\n" +
+            "}\n" +
+            ".editor-statusbar {\n" +
+            "    -fx-background-color: " + barBgHex + ";\n" +
+            "    -fx-padding: 5 10;\n" +
+            "}\n" +
+            ".btn-save {\n" +
+            "    -fx-background-color: #3c783c;\n" +
+            "    -fx-text-fill: white;\n" +
+            "    -fx-font-weight: bold;\n" +
+            "    -fx-background-radius: 4;\n" +
+            "}\n" +
+            ".btn-save:hover {\n" +
+            "    -fx-background-color: #4ca84c;\n" +
+            "}\n" +
+            ".btn-compile {\n" +
+            "    -fx-background-color: #3c6496;\n" +
+            "    -fx-text-fill: white;\n" +
+            "    -fx-font-weight: bold;\n" +
+            "    -fx-background-radius: 4;\n" +
+            "}\n" +
+            ".btn-compile:hover {\n" +
+            "    -fx-background-color: #4c84c6;\n" +
+            "}\n" +
+            ".btn-save-compile {\n" +
+            "    -fx-background-color: #645096;\n" +
+            "    -fx-text-fill: white;\n" +
+            "    -fx-font-weight: bold;\n" +
+            "    -fx-background-radius: 4;\n" +
+            "}\n" +
+            ".btn-save-compile:hover {\n" +
+            "    -fx-background-color: #8470c6;\n" +
+            "}\n" +
+            ".btn-autocomplete {\n" +
+            "    -fx-background-color: " + btnBgHex + ";\n" +
+            "    -fx-text-fill: " + fgHex + ";\n" +
+            "    -fx-background-radius: 4;\n" +
+            "}\n" +
+            ".btn-autocomplete:selected {\n" +
+            "    -fx-background-color: " + keywordHex + ";\n" +
+            "    -fx-text-fill: " + bgHex + ";\n" +
+            "    -fx-font-weight: bold;\n" +
+            "}\n" +
+            ".btn-theme-action {\n" +
+            "    -fx-background-color: " + btnBgHex + ";\n" +
+            "    -fx-text-fill: " + fgHex + ";\n" +
+            "    -fx-background-radius: 4;\n" +
+            "}\n" +
+            ".btn-theme-action:hover, .btn-autocomplete:hover {\n" +
+            "    -fx-background-color: " + btnHoverBgHex + ";\n" +
+            "}\n" +
+            ".theme-box {\n" +
+            "    -fx-background-color: " + btnBgHex + ";\n" +
+            "    -fx-text-fill: " + fgHex + ";\n" +
+            "    -fx-background-radius: 4;\n" +
+            "    -fx-mark-color: " + fgHex + ";\n" +
+            "}\n" +
+            ".theme-box .label {\n" +
+            "    -fx-text-fill: " + fgHex + ";\n" +
+            "}\n" +
+            ".theme-box .list-cell {\n" +
+            "    -fx-background-color: " + btnBgHex + ";\n" +
+            "    -fx-text-fill: " + fgHex + ";\n" +
+            "}\n" +
+            ".theme-box .list-cell:hover {\n" +
+            "    -fx-background-color: " + keywordHex + ";\n" +
+            "    -fx-text-fill: " + bgHex + ";\n" +
+            "}\n";
 
         Scene scene = getScene();
         if (scene != null) {

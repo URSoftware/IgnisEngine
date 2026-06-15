@@ -261,6 +261,14 @@ public class IgnisEditorApp extends Application {
             }
         });
         stage.setTitle("IgnisEngine — Editor (JavaFX) [migracao]");
+        try {
+            File iconFile = new File("Icons/IconeIgnis.png");
+            if (iconFile.exists()) {
+                stage.getIcons().add(new javafx.scene.image.Image(iconFile.toURI().toString()));
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
         stage.setScene(scene);
         stage.setOnCloseRequest(e -> {
             stopGameLoop();
@@ -951,6 +959,17 @@ public class IgnisEditorApp extends Application {
             }
             viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
         });
+        canvas.setOnMouseClicked(e -> {
+            if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
+                if (clicked != null) {
+                    selectEntity(clicked);
+                } else {
+                    selectEntity(null);
+                }
+                viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
+            }
+        });
 
         canvas.setOnKeyPressed(e -> {
             if (!playing) return;
@@ -1032,6 +1051,25 @@ public class IgnisEditorApp extends Application {
             setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
         });
         tree.setContextMenu(buildHierarchyContextMenu());
+        tree.setOnMouseClicked(ev -> {
+            if (ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
+                ContextMenu menu;
+                if (sel != null && sel != hierarchyRoot) {
+                    menu = buildHierarchyContextMenu();
+                } else {
+                    menu = new ContextMenu();
+                    Menu createMenu = new Menu("Criar objeto");
+                    for (String type : com.ignis.core.EntityFactory.getSupportedTypes()) {
+                        MenuItem item = new MenuItem(type);
+                        item.setOnAction(e -> createEntity(type));
+                        createMenu.getItems().add(item);
+                    }
+                    menu.getItems().add(createMenu);
+                }
+                menu.show(tree, ev.getScreenX(), ev.getScreenY());
+            }
+        });
         // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
         tree.setOnKeyPressed(ev -> {
             if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
@@ -1172,11 +1210,15 @@ public class IgnisEditorApp extends Application {
             }
         });
         assetTree.setOnMouseClicked(ev -> {
-            if (ev.getClickCount() == 2) {
-                TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
-                if (sel != null && sel.getValue() != null && sel.getValue().isFile()) {
-                    openAssetFile(sel.getValue());
+            TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
+            File file = (sel != null) ? sel.getValue() : null;
+            if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                if (file != null && file.isFile()) {
+                    openAssetFile(file);
                 }
+            } else if (ev.getButton() == javafx.scene.input.MouseButton.PRIMARY || ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                ContextMenu menu = buildAssetsContextMenu(file);
+                menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
             }
         });
         VBox.setVgrow(assetTree, Priority.ALWAYS);
@@ -1392,6 +1434,7 @@ public class IgnisEditorApp extends Application {
                 gc.drawImage(fxImage, 0, 0);
 
                 updateCameraLabels();
+                updateInspectorFields();
             }
         };
         timer.start();
@@ -1500,5 +1543,168 @@ public class IgnisEditorApp extends Application {
 
         menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del, new SeparatorMenuItem(), copyItem, pasteItem);
         return menu;
+    }
+
+    private void updateInspectorFields() {
+        if (selected == null || suppressInspectorEvents) return;
+        suppressInspectorEvents = true;
+        try {
+            if (!nameField.isFocused()) {
+                String val = selected.getName();
+                if (!java.util.Objects.equals(nameField.getText(), val)) {
+                    nameField.setText(val);
+                }
+            }
+            if (!xField.isFocused()) {
+                String val = String.valueOf(selected.getX());
+                if (!java.util.Objects.equals(xField.getText(), val)) {
+                    xField.setText(val);
+                }
+            }
+            if (!yField.isFocused()) {
+                String val = String.valueOf(selected.getY());
+                if (!java.util.Objects.equals(yField.getText(), val)) {
+                    yField.setText(val);
+                }
+            }
+            if (!wField.isFocused()) {
+                String val = String.valueOf(selected.getWidth());
+                if (!java.util.Objects.equals(wField.getText(), val)) {
+                    wField.setText(val);
+                }
+            }
+            if (!hField.isFocused()) {
+                String val = String.valueOf(selected.getHeight());
+                if (!java.util.Objects.equals(hField.getText(), val)) {
+                    hField.setText(val);
+                }
+            }
+            if (!rotField.isFocused()) {
+                String val = String.valueOf(selected.getRotation());
+                if (!java.util.Objects.equals(rotField.getText(), val)) {
+                    rotField.setText(val);
+                }
+            }
+            if (!visibleCheck.isFocused()) {
+                boolean val = selected.isVisible();
+                if (visibleCheck.isSelected() != val) {
+                    visibleCheck.setSelected(val);
+                }
+            }
+        } finally {
+            suppressInspectorEvents = false;
+        }
+    }
+
+    private ContextMenu buildAssetsContextMenu(File file) {
+        ContextMenu menu = new ContextMenu();
+        if (file == null) {
+            MenuItem refreshItem = new MenuItem("Atualizar Assets");
+            refreshItem.setOnAction(e -> refreshAssetBrowser());
+            menu.getItems().add(refreshItem);
+            return menu;
+        }
+
+        MenuItem openItem = new MenuItem("Abrir / Editar");
+        openItem.setOnAction(e -> openAssetFile(file));
+
+        MenuItem renameItem = new MenuItem("Renomear");
+        renameItem.setOnAction(e -> renameAssetFile(file));
+
+        MenuItem deleteItem = new MenuItem("Deletar");
+        deleteItem.setOnAction(e -> deleteAssetFile(file));
+
+        MenuItem copyPathItem = new MenuItem("Copiar Caminho");
+        copyPathItem.setOnAction(e -> {
+            javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+            javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+            content.putString(file.getAbsolutePath());
+            clipboard.setContent(content);
+            setStatus("Caminho copiado: " + file.getName());
+        });
+
+        menu.getItems().addAll(openItem, renameItem, deleteItem, new SeparatorMenuItem(), copyPathItem);
+
+        if (file.isDirectory()) {
+            MenuItem newScriptItem = new MenuItem("Criar Novo Script...");
+            newScriptItem.setOnAction(e -> createNewScriptInFolder(file));
+            menu.getItems().add(0, newScriptItem);
+        }
+
+        return menu;
+    }
+
+    private void renameAssetFile(File file) {
+        TextInputDialog dialog = new TextInputDialog(file.getName());
+        dialog.setTitle("Renomear Arquivo");
+        dialog.setHeaderText("Renomear '" + file.getName() + "'");
+        dialog.setContentText("Novo Nome:");
+        dialog.showAndWait().ifPresent(newName -> {
+            if (newName.trim().isEmpty() || newName.equals(file.getName())) return;
+            File dest = new File(file.getParentFile(), newName.trim());
+            if (dest.exists()) {
+                new Alert(Alert.AlertType.ERROR, "Destino já existe!").showAndWait();
+                return;
+            }
+            if (file.renameTo(dest)) {
+                refreshAssetBrowser();
+                setStatus("Renomeado para: " + dest.getName());
+            } else {
+                new Alert(Alert.AlertType.ERROR, "Falha ao renomear.").showAndWait();
+            }
+        });
+    }
+
+    private void deleteAssetFile(File file) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Tem certeza que deseja deletar '" + file.getName() + "'?", ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText(null);
+        if (confirm.showAndWait().orElse(ButtonType.NO) == ButtonType.YES) {
+            if (deleteRecursively(file)) {
+                refreshAssetBrowser();
+                setStatus("Deletado: " + file.getName());
+            } else {
+                new Alert(Alert.AlertType.ERROR, "Falha ao deletar arquivo/diretório.").showAndWait();
+            }
+        }
+    }
+
+    private boolean deleteRecursively(File f) {
+        if (f.isDirectory()) {
+            File[] files = f.listFiles();
+            if (files != null) {
+                for (File sub : files) {
+                    if (!deleteRecursively(sub)) return false;
+                }
+            }
+        }
+        return f.delete();
+    }
+
+    private void createNewScriptInFolder(File folder) {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) {
+                sm = new com.ignis.core.ScriptManager(projectFolder);
+                game.setScriptManager(sm);
+            }
+            TextInputDialog input = new TextInputDialog("NovoScript");
+            input.setTitle("Novo script");
+            input.setHeaderText(null);
+            input.setContentText("Nome da classe do script:");
+            java.util.Optional<String> nameOpt = input.showAndWait();
+            if (nameOpt.isEmpty() || nameOpt.get().trim().isEmpty()) return;
+
+            if (!sm.createNewScript(nameOpt.get().trim())) {
+                new Alert(Alert.AlertType.ERROR,
+                        "Não foi possível criar o script (nome inválido ou já existe).").showAndWait();
+                return;
+            }
+            refreshAssetBrowser();
+            setStatus("Script criado com sucesso.");
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao criar script:\n" + ex.getMessage()).showAndWait();
+        }
     }
 }

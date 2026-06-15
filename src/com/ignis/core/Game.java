@@ -2034,6 +2034,13 @@ public class Game extends Canvas implements Runnable {
     }
 
     @Override
+    public void setCursor(java.awt.Cursor cursor) {
+        if (isDisplayable()) {
+            super.setCursor(cursor);
+        }
+    }
+
+    @Override
     public void run() {
         long lastTime = System.nanoTime();
         double amountOfTicks = 60.0;
