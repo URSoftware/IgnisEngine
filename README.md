@@ -30,13 +30,13 @@ A migração ativa do editor para JavaFX acontece na branch `main`. A versão Sw
 
 ```text
 IgnisEngine/
-├── CONTRIBUTING.md          # Guia de contribuição para desenvolvedores
-├── CODE_OF_CONDUCT.md       # Código de conduta da comunidade
-├── CHANGELOG.md             # Registro cronológico de alterações e releases
 ├── pom.xml                  # Configuração de dependências Maven
 ├── run-editor-javafx.bat    # Script de execução rápida no Windows
 ├── editor_layout.json       # Configurações de layout salvas do editor
 ├── doc/                     # Documentação técnica detalhada (Vault)
+│   ├── CONTRIBUTING.md      # Guia de contribuição para desenvolvedores
+│   ├── CODE_OF_CONDUCT.md   # Código de conduta da comunidade
+│   ├── CHANGELOG.md         # Registro cronológico de alterações e releases
 ├── src/com/ignis/
 │   ├── core/                # Core da engine (loop principal e renderização)
 │   │   ├── Game.java        # Loop do jogo, tick/render e canvas
@@ -76,10 +76,10 @@ Toda a documentação técnica detalhada do projeto está organizada de forma mo
 
 ### Configuração e Contribuição
 * [Guia de Configuração de Ambiente](doc/DEVELOPER_SETUP.md): Requisitos de JDK, clonagem de submódulos, configurações de IDE e execução do editor.
-* [Diretrizes de Contribuição](CONTRIBUTING.md): Padrões de código, estratégias de branches e formatação de mensagens de commit.
-* [Código de Conduta](CODE_OF_CONDUCT.md): Princípios de convivência saudável da comunidade de colaboradores.
+* [Diretrizes de Contribuição](doc/CONTRIBUTING.md): Padrões de código, estratégias de branches e formatação de mensagens de commit.
+* [Código de Conduta](doc/CODE_OF_CONDUCT.md): Princípios de convivência saudável da comunidade de colaboradores.
 * [Política de Segurança](doc/SECURITY.md): Diretrizes para reporte responsável de vulnerabilidades.
-* [Registro de Alterações (Changelog)](CHANGELOG.md): Histórico cronológico detalhado de melhorias e correções.
+* [Registro de Alterações (Changelog)](doc/CHANGELOG.md): Histórico cronológico detalhado de melhorias e correções.
 * [Configuração de CI/CD](doc/CI_CD_SETUP.md): Pipeline automatizado com GitHub Actions, matriz de JDK e cache de dependências.
 
 ### Planejamento e Arquitetura
