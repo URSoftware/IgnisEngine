@@ -967,7 +967,6 @@ public class IgnisEditorApp extends Application {
                 } else {
                     selectEntity(null);
                 }
-                viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
             }
         });
 
