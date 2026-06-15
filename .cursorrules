@@ -1,0 +1,19 @@
+# AI Coding Assistant Rules / Regras para Assistentes de IA
+
+Este repositório possui regras específicas para agentes e assistentes de IA (como Claude, Gemini, GPT) que trabalham na base de código do IgnisEngine.
+
+## 📌 Regra de Ouro (Git Flow)
+
+> [!IMPORTANT]
+> **Sempre que fizer qualquer alteração no código-fonte, recursos ou documentação:**
+> 1. **Faça o commit** de todas as alterações localmente com uma mensagem de commit clara e no padrão convencional do projeto.
+> 2. **Realize o push** das alterações para o repositório remoto (`origin` / `https://github.com/URSoftware/IgnisEngine.git`) para manter o repositório online atualizado.
+
+---
+
+## 📌 Golden Rule (Git Flow) - English Version
+
+> [!IMPORTANT]
+> **Whenever you make any changes to the source code, resources, or documentation:**
+> 1. **Always commit** all changes locally with a clear commit message matching the project's conventional style.
+> 2. **Push the changes** to the remote repository (`origin` / `https://github.com/URSoftware/IgnisEngine.git`) to keep the online repository updated.
