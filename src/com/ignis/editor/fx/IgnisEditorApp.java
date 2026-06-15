@@ -16,18 +16,24 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.ToolBar;
 import javafx.scene.control.Button;
 import javafx.scene.control.Separator;
+import javafx.geometry.Orientation;
+import javafx.scene.layout.Priority;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.WritableImage;
@@ -60,6 +66,9 @@ public class IgnisEditorApp extends Application {
     private boolean suppressInspectorEvents = false;
     private File projectFolder;
     private File currentIgnisFile;
+    private Project currentProject;
+    private Stage primaryStage;
+    private Menu recentMenu;
     private Button playButton;
     private Button stopButton;
     private boolean playing = false;
@@ -70,6 +79,7 @@ public class IgnisEditorApp extends Application {
 
     private final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
     private TreeView<String> hierarchy;
+    private TreeView<File> assetTree;
     private Label status;
 
     // Campos do Inspector
@@ -78,13 +88,14 @@ public class IgnisEditorApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        this.primaryStage = stage;
         seedSampleScene();
 
         BorderPane root = new BorderPane();
 
         // Menu + ToolBar (Fase 3)
         Button btnOpen = new Button("Abrir");
-        btnOpen.setOnAction(e -> openProject(stage));
+        btnOpen.setOnAction(e -> openProjectViaChooser(stage));
         Button btnBuild = new Button("Build");
         btnBuild.setOnAction(e -> openBuildDialog());
         playButton = new Button("▶ Play");
@@ -104,14 +115,19 @@ public class IgnisEditorApp extends Application {
         this.viewportCanvas = canvas;
         wireFxInputToEngine(canvas);
 
-        // ---- Hierarchy (esquerda) ----
+        // ---- Hierarchy + Asset Browser (esquerda) ----
         hierarchy = buildHierarchy();
+        javafx.scene.Node assetBrowser = buildAssetBrowser();
+        SplitPane leftSplit = new SplitPane();
+        leftSplit.setOrientation(Orientation.VERTICAL);
+        leftSplit.getItems().addAll(hierarchy, assetBrowser);
+        leftSplit.setDividerPositions(0.6);
 
         // ---- Inspector (direita) ----
         VBox inspector = buildInspector();
 
         SplitPane split = new SplitPane();
-        split.getItems().addAll(hierarchy, viewportPane, inspector);
+        split.getItems().addAll(leftSplit, viewportPane, inspector);
         split.setDividerPositions(0.2, 0.78);
         root.setCenter(split);
 
@@ -120,8 +136,10 @@ public class IgnisEditorApp extends Application {
         root.setBottom(status);
 
         javafx.scene.Scene scene = new javafx.scene.Scene(root, 1100, 700);
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN), () -> openProject(stage));
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN), () -> openProjectViaChooser(stage));
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN), this::openBuildDialog);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN), this::saveProject);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN), () -> saveProjectAs(stage));
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), this::playWorld);
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), this::stopWorld);
         stage.setTitle("IgnisEngine — Editor (JavaFX) [migracao]");
@@ -134,6 +152,9 @@ public class IgnisEditorApp extends Application {
         stage.show();
 
         startRenderBridge(canvas);
+
+        // Tela inicial de selecao de projeto (analoga ao startup do editor Swing).
+        Platform.runLater(() -> showProjectStartup(stage, true));
     }
 
     private void seedSampleScene() {
@@ -146,11 +167,24 @@ public class IgnisEditorApp extends Application {
 
     private MenuBar buildMenuBar(Stage stage) {
         Menu file = new Menu("Arquivo");
+        MenuItem novo = new MenuItem("Novo projeto…");
+        novo.setOnAction(e -> newProject(stage));
         MenuItem open = new MenuItem("Abrir projeto…");
-        open.setOnAction(e -> openProject(stage));
+        open.setOnAction(e -> openProjectViaChooser(stage));
+        recentMenu = new Menu("Abrir recente");
+        rebuildRecentMenu(stage);
+        MenuItem selecionar = new MenuItem("Selecionar projeto…");
+        selecionar.setOnAction(e -> showProjectStartup(stage, false));
+        MenuItem salvar = new MenuItem("Salvar");
+        salvar.setOnAction(e -> saveProject());
+        MenuItem salvarComo = new MenuItem("Salvar como…");
+        salvarComo.setOnAction(e -> saveProjectAs(stage));
+        MenuItem fechar = new MenuItem("Fechar projeto");
+        fechar.setOnAction(e -> closeProject(stage));
         MenuItem exit = new MenuItem("Sair");
-        exit.setOnAction(e -> { stage.close(); Platform.exit(); });
-        file.getItems().addAll(open, exit);
+        exit.setOnAction(e -> { stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
+        file.getItems().addAll(novo, open, recentMenu, selecionar, new SeparatorMenuItem(),
+                salvar, salvarComo, new SeparatorMenuItem(), fechar, exit);
 
         Menu tools = new Menu("Ferramentas");
         MenuItem miAudio = new MenuItem("Editor de Audio (DAW)");
@@ -178,10 +212,97 @@ public class IgnisEditorApp extends Application {
                 "IgnisEngine — editor JavaFX (Fase 3 da migracao).").showAndWait());
         help.getItems().add(about);
 
-        return new MenuBar(file, tools, view, help);
+        return new MenuBar(file, buildSceneMenu(), tools, view, help);
     }
 
-    private void openProject(Stage stage) {
+    // Menu "Cena": criar/duplicar/renomear/deletar/reordenar entidades.
+    private Menu buildSceneMenu() {
+        Menu scene = new Menu("Cena");
+        Menu criar = new Menu("Criar objeto");
+        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
+            MenuItem mi = new MenuItem(t);
+            mi.setOnAction(e -> createEntity(t));
+            criar.getItems().add(mi);
+        }
+        MenuItem dup = new MenuItem("Duplicar selecionado");
+        dup.setOnAction(e -> duplicateSelected());
+        MenuItem ren = new MenuItem("Renomear selecionado…");
+        ren.setOnAction(e -> renameSelected());
+        MenuItem del = new MenuItem("Deletar selecionado");
+        del.setOnAction(e -> deleteSelected());
+        MenuItem up = new MenuItem("Mover para cima");
+        up.setOnAction(e -> moveSelected(-1));
+        MenuItem down = new MenuItem("Mover para baixo");
+        down.setOnAction(e -> moveSelected(1));
+        MenuItem top = new MenuItem("Mover para o topo");
+        top.setOnAction(e -> moveSelectedTo(0));
+        MenuItem bottom = new MenuItem("Mover para o fundo");
+        bottom.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
+        scene.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+                new SeparatorMenuItem(), up, down, top, bottom);
+        return scene;
+    }
+
+    private ContextMenu buildHierarchyContextMenu() {
+        ContextMenu menu = new ContextMenu();
+        Menu criar = new Menu("Criar objeto");
+        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
+            MenuItem mi = new MenuItem(t);
+            mi.setOnAction(e -> createEntity(t));
+            criar.getItems().add(mi);
+        }
+        MenuItem dup = new MenuItem("Duplicar");
+        dup.setOnAction(e -> duplicateSelected());
+        MenuItem ren = new MenuItem("Renomear…");
+        ren.setOnAction(e -> renameSelected());
+        MenuItem del = new MenuItem("Deletar");
+        del.setOnAction(e -> deleteSelected());
+        MenuItem up = new MenuItem("Mover para cima");
+        up.setOnAction(e -> moveSelected(-1));
+        MenuItem down = new MenuItem("Mover para baixo");
+        down.setOnAction(e -> moveSelected(1));
+        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+                new SeparatorMenuItem(), up, down);
+        return menu;
+    }
+
+    // ---------------- Ciclo de vida do projeto ----------------
+    // Tela de selecao inicial + abrir/criar/salvar/fechar/trocar projeto, com
+    // persistencia de ultimo/recentes (EditorPrefs). Reproduz o fluxo do editor
+    // Swing (showStartupDialog/showNewProjectDialog/showOpenProjectDialog/doSaveProject),
+    // mas 100% JavaFX. Tudo aditivo; nada em com.ignis.core muda.
+
+    // Mostra a tela de selecao em laco ate carregar um projeto ou o usuario sair.
+    // exitOnCancel=true (startup/fechar): cancelar sem projeto encerra o app, como o Swing.
+    // exitOnCancel=false (trocar): cancelar apenas mantem o estado atual.
+    private void showProjectStartup(Stage stage, boolean exitOnCancel) {
+        while (true) {
+            FxProjectStartupDialog.Choice c =
+                    FxProjectStartupDialog.show(stage, listProjectIgnisFiles(), recentProjectFiles());
+            switch (c.kind) {
+                case OPEN:
+                    if (c.file != null && openProjectFile(c.file)) return;
+                    break;
+                case NEW:
+                    if (newProject(stage)) return;
+                    break;
+                case IMPORT:
+                    if (openProjectViaChooser(stage)) return;
+                    break;
+                case EXIT:
+                default:
+                    if (exitOnCancel && currentProject == null) {
+                        stopGameLoop();
+                        Platform.exit();
+                        System.exit(0);
+                    }
+                    return;
+            }
+        }
+    }
+
+    // Abre via FileChooser (.ignis). Retorna true se carregou.
+    private boolean openProjectViaChooser(Stage stage) {
         FileChooser fc = new FileChooser();
         fc.setTitle("Abrir projeto .ignis");
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Projeto Ignis (*.ignis)", "*.ignis"));
@@ -191,12 +312,22 @@ public class IgnisEditorApp extends Application {
         } catch (Exception ignore) { /* sem dir inicial */ }
 
         File fileChosen = fc.showOpenDialog(stage);
-        if (fileChosen == null) return;
+        if (fileChosen == null) return false;
+        return openProjectFile(fileChosen);
+    }
 
+    // Carga efetiva de um .ignis (sem dialogos). Reaproveitada por dialog/recentes/chooser.
+    private boolean openProjectFile(File ignisFile) {
+        if (ignisFile == null || !ignisFile.isFile()) {
+            new Alert(Alert.AlertType.ERROR, "Arquivo de projeto inexistente:\n" + ignisFile).showAndWait();
+            return false;
+        }
         try {
-            Project project = IgnisProjectIO.load(fileChosen, game);
-            this.currentIgnisFile = fileChosen;
-            this.projectFolder = IgnisProjectIO.getProjectFolder(fileChosen);
+            clearGameCameras();
+            Project project = IgnisProjectIO.load(ignisFile, game);
+            this.currentProject = project;
+            this.currentIgnisFile = ignisFile;
+            this.projectFolder = IgnisProjectIO.getProjectFolder(ignisFile);
             try {
                 game.setScriptManager(new com.ignis.core.ScriptManager(projectFolder));
             } catch (Exception ignore) { /* scripts opcionais para Play */ }
@@ -210,11 +341,208 @@ public class IgnisEditorApp extends Application {
                 }
             }
             refreshHierarchy();
+            refreshAssetBrowser();
+            EditorPrefs.addRecent(ignisFile);
+            rebuildRecentMenu(primaryStage);
+            stage().setTitle("IgnisEngine — " + project.getProjectName() + " (JavaFX)");
             setStatus("Projeto carregado: " + project.getProjectName()
                     + " (" + game.getEntities().size() + " objetos)");
+            return true;
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir projeto:\n" + ex.getMessage()).showAndWait();
+            return false;
         }
+    }
+
+    // Cria um novo projeto no disco (estrutura + .ignis + Square central), como o Swing.
+    private boolean newProject(Stage stage) {
+        TextInputDialog dlg = new TextInputDialog("MyGame");
+        dlg.setTitle("Novo projeto");
+        dlg.setHeaderText(null);
+        dlg.setContentText("Nome do projeto:");
+        java.util.Optional<String> opt = dlg.showAndWait();
+        if (opt.isEmpty() || opt.get().trim().isEmpty()) return false;
+        String name = opt.get().trim();
+        try {
+            File projectsRoot = IgnisProjectIO.getProjectsRootFolder();
+            File projectMainFolder = new File(projectsRoot, name);
+            if (projectMainFolder.exists()) {
+                Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                        "Ja existe um projeto com esse nome. Sobrescrever?", ButtonType.YES, ButtonType.NO);
+                confirm.setHeaderText(null);
+                if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return false;
+            }
+
+            Project project = IgnisProjectIO.createNew(name);
+            game.getEntities().clear();
+            setSelected(null);
+            Scene scene = project.getCurrentScene();
+            int sz = 100;
+            Square sq = new Square("Square", game, -sz / 2, -sz / 2, sz, sz);
+            if (scene != null) scene.addEntity(sq);
+            game.addEntity(sq);
+
+            projectMainFolder.mkdirs();
+            IgnisProjectIO.ensureProjectFolderStructure(
+                    new File(projectMainFolder, IgnisProjectIO.PROJECT_FOLDER_NAME));
+            File ignisFile = new File(projectMainFolder, name + ".ignis");
+            IgnisProjectIO.save(project, ignisFile);
+
+            this.currentProject = project;
+            this.currentIgnisFile = project.getProjectFile() != null ? project.getProjectFile() : ignisFile;
+            this.projectFolder = IgnisProjectIO.getProjectFolder(this.currentIgnisFile);
+            try {
+                game.setScriptManager(new com.ignis.core.ScriptManager(projectFolder));
+            } catch (Exception ignore) { /* scripts opcionais */ }
+            refreshHierarchy();
+            refreshAssetBrowser();
+            EditorPrefs.addRecent(this.currentIgnisFile);
+            rebuildRecentMenu(stage);
+            stage.setTitle("IgnisEngine — " + name + " (JavaFX)");
+            setStatus("Projeto criado: " + name);
+            return true;
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao criar projeto:\n" + ex.getMessage()).showAndWait();
+            return false;
+        }
+    }
+
+    // Salva o projeto atual (sincroniza game -> Scene, depois IgnisProjectIO.save).
+    private void saveProject() {
+        if (currentProject == null || currentIgnisFile == null) {
+            setStatus("Nenhum projeto aberto para salvar.");
+            return;
+        }
+        try {
+            syncEntitiesToScene();
+            IgnisProjectIO.save(currentProject, currentIgnisFile);
+            if (currentProject.getProjectFile() != null) currentIgnisFile = currentProject.getProjectFile();
+            EditorPrefs.addRecent(currentIgnisFile);
+            setStatus("Projeto salvo: " + currentProject.getProjectName());
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao salvar:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private void saveProjectAs(Stage stage) {
+        if (currentProject == null) {
+            setStatus("Nenhum projeto aberto.");
+            return;
+        }
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Salvar projeto como");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Projeto Ignis (*.ignis)", "*.ignis"));
+        fc.setInitialFileName(currentProject.getProjectName() + ".ignis");
+        File dest = fc.showSaveDialog(stage);
+        if (dest == null) return;
+        try {
+            // IgnisProjectIO.save deriva a pasta e a identidade do NOME do projeto; atualizar
+            // o nome para o destino escolhido evita pasta e project.json divergentes.
+            String novoNome = dest.getName().replaceFirst("(?i)\\.ignis$", "");
+            if (!novoNome.isEmpty()) currentProject.setProjectName(novoNome);
+            syncEntitiesToScene();
+            IgnisProjectIO.save(currentProject, dest);
+            currentIgnisFile = currentProject.getProjectFile() != null ? currentProject.getProjectFile() : dest;
+            projectFolder = IgnisProjectIO.getProjectFolder(currentIgnisFile);
+            EditorPrefs.addRecent(currentIgnisFile);
+            rebuildRecentMenu(stage);
+            stage.setTitle("IgnisEngine — " + currentProject.getProjectName() + " (JavaFX)");
+            // O core sempre grava em projects/<nome>/; informar o destino real, nao o escolhido.
+            setStatus("Projeto salvo em: " + currentIgnisFile.getAbsolutePath());
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao salvar como:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    // Remove as cameras residuais do Game ao trocar/fechar projeto. Scene.fromJSON
+    // registra cada camera carregada via game.addCamera; sem isto elas acumulam entre
+    // projetos e getActiveCamera() poderia retornar uma camera de outro projeto.
+    private void clearGameCameras() {
+        try {
+            game.getCameras().clear();
+        } catch (Exception ignore) { /* best-effort */ }
+    }
+
+    // Espelha doSaveProject() do Swing: reescreve as entidades da cena com as do game.
+    // Usa scene.clear() (limpa entities + cameras + activeCamera) para nao deixar
+    // cameras orfas, e reconstroi via addEntity (que re-registra cameras).
+    private void syncEntitiesToScene() {
+        if (currentProject == null) return;
+        Scene scene = currentProject.getCurrentScene();
+        if (scene == null) return;
+        scene.clear();
+        for (GameObject e : game.getEntities()) scene.addEntity(e);
+    }
+
+    // Fecha o projeto atual e volta para a tela de selecao (espelha o ramo sem-projeto
+    // de updateProjectRoot() do Swing: libera ScriptManager e limpa o estado).
+    private void closeProject(Stage stage) {
+        this.currentProject = null;
+        this.currentIgnisFile = null;
+        this.projectFolder = null;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm != null) sm.close();
+        } catch (Exception ignore) { /* best-effort */ }
+        game.setScriptManager(null);
+        game.getEntities().clear();
+        clearGameCameras();
+        setSelected(null);
+        refreshHierarchy();
+        refreshAssetBrowser();
+        stage.setTitle("IgnisEngine — Editor (JavaFX)");
+        setStatus("Projeto fechado.");
+        // Editor ja aberto: cancelar a selecao mantem o editor vazio (nao encerra).
+        showProjectStartup(stage, false);
+    }
+
+    // (Re)constroi o submenu "Abrir recente" a partir do EditorPrefs (limpa inexistentes).
+    private void rebuildRecentMenu(Stage stage) {
+        if (recentMenu == null) return;
+        recentMenu.getItems().clear();
+        java.util.List<File> recents = recentProjectFiles();
+        if (recents.isEmpty()) {
+            MenuItem vazio = new MenuItem("(nenhum)");
+            vazio.setDisable(true);
+            recentMenu.getItems().add(vazio);
+            return;
+        }
+        for (File f : recents) {
+            MenuItem mi = new MenuItem(f.getName().replaceFirst("(?i)\\.ignis$", "") + "   —  " + f.getParent());
+            mi.setOnAction(e -> openProjectFile(f));
+            recentMenu.getItems().add(mi);
+        }
+    }
+
+    // Enumera os .ignis em projects/ (nenhuma API do core lista projetos).
+    private static java.util.List<File> listProjectIgnisFiles() {
+        java.util.List<File> out = new java.util.ArrayList<>();
+        try {
+            File root = IgnisProjectIO.getProjectsRootFolder();
+            File[] dirs = root.listFiles(File::isDirectory);
+            if (dirs != null) {
+                java.util.Arrays.sort(dirs,
+                        java.util.Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
+                for (File d : dirs) {
+                    File preferred = new File(d, d.getName() + ".ignis");
+                    if (preferred.isFile()) { out.add(preferred); continue; }
+                    File[] ignis = d.listFiles((dir, n) -> n.toLowerCase().endsWith(".ignis"));
+                    if (ignis != null && ignis.length > 0) out.add(ignis[0]);
+                }
+            }
+        } catch (Exception ignore) { /* lista vazia em caso de erro */ }
+        return out;
+    }
+
+    // Recentes validos (existentes) do EditorPrefs, como File.
+    private static java.util.List<File> recentProjectFiles() {
+        java.util.List<File> out = new java.util.ArrayList<>();
+        for (String p : EditorPrefs.clearMissing()) out.add(new File(p));
+        return out;
+    }
+
+    private Stage stage() {
+        return primaryStage;
     }
 
     // ---------------- Ferramentas (janelas JavaFX) ----------------
@@ -491,7 +819,212 @@ public class IgnisEditorApp extends Application {
             java.util.List<GameObject> ents = game.getEntities();
             setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
         });
+        tree.setContextMenu(buildHierarchyContextMenu());
+        // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
+        tree.setOnKeyPressed(ev -> {
+            if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
+            else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
+            else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
+        });
         return tree;
+    }
+
+    // ---------------- Mecanicas de edicao da cena ----------------
+
+    private void createEntity(String type) {
+        if (!requireProject()) return;
+        try {
+            GameObject obj = com.ignis.core.EntityFactory.create(type);
+            obj.setName(uniqueNameExcept(type, null));
+            obj.setGame(game);
+            obj.setX(-25);
+            obj.setY(-25);
+            obj.setWidth(50);
+            obj.setHeight(50);
+            game.addEntity(obj);
+            // Camera precisa ser registrada na lista de cameras do Game, alem de virar entidade.
+            if (obj instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) obj);
+            refreshHierarchy();
+            selectEntity(obj);
+            setStatus("Objeto criado: " + obj.getName());
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao criar objeto:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private void duplicateSelected() {
+        if (selected == null) { setStatus("Nada selecionado para duplicar."); return; }
+        try {
+            GameObject original = selected;
+            GameObject copy = com.ignis.core.EntityFactory.create(original.getType());
+            copy.setGame(game);
+            copy.setX(original.getX());
+            copy.setY(original.getY());
+            copy.setWidth(original.getWidth());
+            copy.setHeight(original.getHeight());
+            copy.setSpritePath(original.getSpritePath());
+            try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) { /* props opcionais */ }
+            copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
+            game.addEntity(copy);
+            refreshHierarchy();
+            selectEntity(copy);
+            setStatus("Duplicado: " + copy.getName());
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao duplicar:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private void deleteSelected() {
+        if (selected == null) { setStatus("Nada selecionado para deletar."); return; }
+        GameObject toDelete = selected;
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Deletar '" + toDelete.getName() + "'?", ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText(null);
+        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
+        game.removeEntity(toDelete);
+        setSelected(null);
+        refreshHierarchy();
+        setStatus("Deletado: " + toDelete.getName());
+    }
+
+    private void renameSelected() {
+        if (selected == null) { setStatus("Nada selecionado para renomear."); return; }
+        GameObject go = selected;
+        TextInputDialog dlg = new TextInputDialog(go.getName());
+        dlg.setTitle("Renomear objeto");
+        dlg.setHeaderText(null);
+        dlg.setContentText("Novo nome:");
+        java.util.Optional<String> opt = dlg.showAndWait();
+        if (opt.isEmpty() || opt.get().trim().isEmpty()) return;
+        go.setName(uniqueNameExcept(opt.get().trim(), go));
+        refreshHierarchy();
+        selectEntity(go);
+        setStatus("Renomeado para: " + go.getName());
+    }
+
+    private void moveSelected(int delta) {
+        if (selected == null) return;
+        GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
+        if (delta < 0) game.moveEntityUp(toReselect);
+        else game.moveEntityDown(toReselect);
+        refreshHierarchy();
+        selectEntity(toReselect);
+    }
+
+    private void moveSelectedTo(int index) {
+        if (selected == null) return;
+        GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
+        int target = (index == Integer.MAX_VALUE) ? game.getEntities().size() - 1 : index;
+        if (target < 0) target = 0;
+        game.moveEntityToIndex(toReselect, target);
+        refreshHierarchy();
+        selectEntity(toReselect);
+    }
+
+    // Nome unico entre as entidades (ignora 'except', util ao renomear o proprio objeto).
+    private String uniqueNameExcept(String base, GameObject except) {
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (GameObject g : game.getEntities()) if (g != except) existing.add(g.getName());
+        if (!existing.contains(base)) return base;
+        int c = 1;
+        String n;
+        do { n = base + " (" + c++ + ")"; } while (existing.contains(n));
+        return n;
+    }
+
+    // Seleciona uma entidade na Hierarchy (dispara o listener que atualiza o Inspector).
+    private void selectEntity(GameObject go) {
+        if (go == null) { setSelected(null); return; }
+        int idx = game.getEntities().indexOf(go);
+        if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
+            hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
+        } else {
+            setSelected(go);
+        }
+    }
+
+    // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
+
+    private javafx.scene.Node buildAssetBrowser() {
+        VBox box = new VBox(4);
+        box.setStyle("-fx-background-color: #2d2d2d;");
+        Label title = new Label("Assets");
+        title.setStyle("-fx-text-fill: #2e8b57; -fx-font-weight: bold; -fx-padding: 4 8;");
+
+        assetTree = new TreeView<>();
+        assetTree.setShowRoot(true);
+        assetTree.setCellFactory(tv -> new TreeCell<>() {
+            @Override protected void updateItem(File item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getName());
+            }
+        });
+        assetTree.setOnMouseClicked(ev -> {
+            if (ev.getClickCount() == 2) {
+                TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
+                if (sel != null && sel.getValue() != null && sel.getValue().isFile()) {
+                    openAssetFile(sel.getValue());
+                }
+            }
+        });
+        VBox.setVgrow(assetTree, Priority.ALWAYS);
+
+        box.getChildren().addAll(title, assetTree);
+        refreshAssetBrowser();
+        return box;
+    }
+
+    // Reconstroi a arvore a partir da pasta do projeto (ou vazia se nenhum projeto).
+    private void refreshAssetBrowser() {
+        if (assetTree == null) return;
+        if (projectFolder != null && projectFolder.isDirectory()) {
+            TreeItem<File> root = buildFileTree(projectFolder);
+            root.setExpanded(true);
+            assetTree.setRoot(root);
+        } else {
+            assetTree.setRoot(null);
+        }
+    }
+
+    private TreeItem<File> buildFileTree(File f) {
+        return buildFileTree(f, 0, new java.util.HashSet<>());
+    }
+
+    // Recursao com guarda: pula symlinks, limita profundidade e detecta ciclos (canonical
+    // path ja visitado) — evita StackOverflowError (que e Error, nao Exception) em FS POSIX.
+    private TreeItem<File> buildFileTree(File f, int depth, java.util.Set<String> visited) {
+        TreeItem<File> item = new TreeItem<>(f);
+        boolean symlink;
+        try { symlink = java.nio.file.Files.isSymbolicLink(f.toPath()); } catch (Exception e) { symlink = false; }
+        if (f.isDirectory() && depth < 32 && !symlink) {
+            String canonical;
+            try { canonical = f.getCanonicalPath(); } catch (Exception e) { canonical = f.getAbsolutePath(); }
+            if (visited.add(canonical)) {
+                File[] kids = f.listFiles();
+                if (kids != null) {
+                    java.util.Arrays.sort(kids, java.util.Comparator
+                            .comparing((File k) -> !k.isDirectory())
+                            .thenComparing(File::getName, String.CASE_INSENSITIVE_ORDER));
+                    for (File k : kids) item.getChildren().add(buildFileTree(k, depth + 1, visited));
+                }
+            }
+        }
+        return item;
+    }
+
+    // Abre o arquivo com o aplicativo padrao do sistema (best-effort).
+    private void openAssetFile(File f) {
+        try {
+            if (java.awt.Desktop.isDesktopSupported()
+                    && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
+                java.awt.Desktop.getDesktop().open(f);
+                setStatus("Abrindo: " + f.getName());
+            } else {
+                setStatus("Abertura de arquivos nao suportada neste sistema.");
+            }
+        } catch (Exception ex) {
+            setStatus("Nao foi possivel abrir: " + f.getName());
+        }
     }
 
     private void refreshHierarchy() {
