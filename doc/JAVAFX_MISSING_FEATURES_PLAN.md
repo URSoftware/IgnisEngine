@@ -87,4 +87,29 @@ Passo 4: Implementar Menus de Contexto Completos
 
 Passo 5: Vincular Atalhos de Teclado Globais
   └─ [Concluído] Adicionar filtros de atalhos na cena sem interromper a digitação nos campos do Inspector
+
+---
+
+## 3. Otimizações de UX e Estilo Temático (Fase Recente — Concluído)
+
+Nesta fase subsequente, focamos na usabilidade do motor gráfico e do editor de código para garantir uma transição premium da versão Swing:
+
+### A. Resolução de Lags e Travamentos de Cursor
+- **Problema:** Ao passar o mouse ou clicar na viewport JavaFX (que renderiza a tela do jogo em cima de um Canvas AWT), ocorriam engasgos periódicos ("gargalos") na thread principal do JavaFX. A causa era a chamada de `setCursor()` no Canvas nativo do Swing/AWT, que tentava se sincronizar de forma síncrona com o gerenciador de janelas do sistema operacional em um componente sem peer nativo ativo (ambiente headless sob JavaFX).
+- **Correção:** Sobrescrito `setCursor(Cursor)` em `Game.java` para validar `isDisplayable()` antes de delegar à superclasse, eliminando 100% dos travamentos.
+
+### B. Sincronização do Inspector em Tempo Real (60 FPS)
+- **Implementação:** Integrado o método `updateInspectorFields()` no `AnimationTimer` da ponte de renderização. Os campos de propriedades (X, Y, Largura, Altura, Rotação e Visibilidade) agora sincronizam continuamente com a posição e escala das entidades na viewport enquanto elas são manipuladas via Gizmos.
+- **Experiência do Usuário:** Para evitar bugs de caret e loops infinitos de entrada de dados, os campos de texto do Inspector só atualizam seus valores se não estiverem com foco ativo do teclado.
+
+### C. HUDs Dedicadas de Clique Esquerdo (Menus Contextuais)
+- **Hierarchy:** Cliques com o botão esquerdo simples agora abrem diretamente a HUD rápida de opções de entidades ou o menu de criação de objetos primitivos.
+- **Assets Tree:** Configurado um listener de clique esquerdo para abrir a HUD de operações em arquivos do navegador de assets (com suporte a *Abrir/Editar*, *Renomear*, *Deletar*, *Copiar Caminho* e *Criar Novo Script*).
+- **Viewport Canvas:** Cliques esquerdos simples (sem arraste) disparam a exibição flutuante da HUD rápida da viewport.
+- **Dismiss Automático:** Todas as HUDs do botão esquerdo utilizam auto-hide padrão, fechando instantaneamente quando o usuário clica com o botão esquerdo em qualquer outra área do editor.
+
+### D. Visual Temático Premium no Editor de Código
+- **Estilização Dinâmica:** Removemos todas as estilizações de cor em linha (inline CSS) das barras de ferramentas, status e botões de `FxCodeEditor.java`. Substituímos por seletores de classes CSS e criamos regras dinâmicas em `applyTheme(EditorTheme)` baseadas nas cores de realce do tema de código selecionado (ex: Dracula, Monokai, One Dark). Os botões de ação e ComboBoxes agora adaptam suas cores e estados ativos para combinar perfeitamente com a paleta do tema ativo.
+- **Identidade Visual:** Aplicamos o ícone oficial da engine (`Icons/IconeIgnis.png`) em todos os `Stage`s principais (`IgnisEditorApp` e `FxCodeEditor`) para unificação visual da barra de tarefas e cabeçalhos.
+
 ```
