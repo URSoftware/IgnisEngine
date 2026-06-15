@@ -52,3 +52,9 @@ Thumbs.db
 # Runtime
 *.pid
 *.seed
+
+# Local user projects (not part of the repository)
+projects/MyGame/
+
+# AI assistant config
+.claude/
