@@ -74,3 +74,33 @@ Atualizamos o metodo `applyTheme` em `FxCodeEditor.java` para injetar regras exp
 "}\n"
 ```
 Com este ajuste, a numeracao assume perfeitamente o contraste correto de cores em todos os temas de visualizacao disponiveis.
+
+---
+
+## 4. Loop de Selecao Infinita e Saltos de Coordenadas
+
+### Sintomas e Comportamento:
+Ao abrir o HUD de clique direito na Viewport, e em seguida clicar com o botao esquerdo em qualquer outra area (como a Viewport fora do HUD ou no painel da Hierarchy), o Inspector comecava a atualizar indefinidamente com coordenadas aleatorias e o editor comecava a alternar repetidamente e de forma descontrolada a selecao entre os GameObjects da cena (ex: Mapa, Player, Circulo).
+
+### Causa Raiz:
+1. **Perda de Evento de Mouse Release:** Ao exibir o menu de contexto (HUD) do JavaFX na Viewport, o JavaFX consome o clique de mouse fora do HUD para fechar o menu. AWT/Swing nunca recebe o evento `MOUSE_RELEASED` correspondente.
+2. **Modo de Arraste Preso:** Por consequencia, o estado de arraste de gizmos em `Game.java` (`currentDragMode`) permanecia preso em `CENTER`.
+3. **Salto de Coordenadas e Sobreposicao:** Ao mudar a selecao para outro objeto, o arraste continuava ativo de forma transparente no novo objeto com as coordenadas acumuladas do objeto anterior. Isso fazia com que o novo objeto saltasse instantaneamente para a posicao do anterior, sobrepondo-se a ele.
+4. **Ciclo de Colisao e Selecao:** Como os objetos ficavam sobrepostos nas mesmas coordenadas, qualquer pequeno movimento do mouse disparava novas selecoes consecutivas via `game.getObjectAt(...)` para os objetos coincidentes, gerando um loop infinito.
+5. **Recursão Asíncrona:** O listener de selecao do `Game` e o listener do `TreeView` da Hierarchy geravam atualizacoes de selecao cruzadas de forma asíncrona via `Platform.runLater`, perpetuando o loop de alternacao de selecao.
+
+### Solucao:
+1. **Reset do Estado de Arraste:** Criamos o metodo publico `cancelDrag()` em `Game.java` para resetar `currentDragMode` para `NONE`, restaurar o cursor padrao e notificar o encerramento do transformador para o listener do sistema de Undo.
+2. **Desativacao do Arraste Preso:** Invocamos `game.cancelDrag()` ao abrir o menu de contexto da viewport e ao mudar o objeto selecionado em `setSelected(go)` no editor JavaFX.
+3. **Guarda de Selecao Reentrante:** Criamos a flag boolean `suppressSelectionEvents` em `IgnisEditorApp.java`. Qualquer atualizacao de selecao do `TreeView` ou do listener do `Game` e ignorada se a flag estiver ativa. A flag e configurada como `true` durante a mudanca de selecao e redefinida para `false` no bloco `finally`, interrompendo qualquer possibilidade de recursão de eventos de selecao.
+
+---
+
+## 5. Abertura do Editor de Scripts Interno via Assets Browser
+
+### Melhoria de UX:
+Anteriormente, a abertura de qualquer arquivo da arvore de assets chamava o aplicativo padrao do sistema operacional. Para melhorar o fluxo de trabalho do desenvolvedor, integramos o editor de codigo interno da engine (`FxCodeEditor`) diretamente a arvore de assets:
+1. **Clique Duplo:** No listener `setOnMouseClicked` da árvore de assets, se o desenvolvedor der um clique duplo com o botao esquerdo em um arquivo `.java` (script), ele sera aberto diretamente no `FxCodeEditor` interno da engine.
+2. **Menu Contextual:** Adicionamos a opcao "Abrir no Editor do Ignis" no topo do menu contextual de arquivos `.java` no navegador de assets. O item padrao do sistema foi renomeado para "Abrir / Editar (Sistema)" para evitar ambiguidade.
+3. **Resolucao de Nome do Script:** O metodo `openScriptInIgnisEditor` resolve o nome da classe removendo a extensao `.java` e instancia o editor usando o `ScriptManager` ativo do projeto.
+

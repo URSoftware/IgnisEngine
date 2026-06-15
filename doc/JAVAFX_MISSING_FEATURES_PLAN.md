@@ -104,14 +104,15 @@ Nesta fase subsequente, focamos na usabilidade do motor gráfico e do editor de 
 
 ### C. Separacao e Auditoria de Cliques de Mouse (Botoes Esquerdo vs. Direito)
 - **Hierarchy:** Cliques com o botao esquerdo simples (`PRIMARY`) agora efetuam apenas a selecao de objetos. O menu de contexto (HUD) e disparado exclusivamente com o clique do botao direito (`SECONDARY`).
-- **Assets Tree:** Cliques com o botao esquerdo simples (`PRIMARY`) selecionam o arquivo. Duplo clique com `PRIMARY` abre/edita o arquivo selecionado. O menu de contexto de assets (`buildAssetsContextMenu`) e disparado exclusivamente com o botao direito (`SECONDARY`).
+- **Assets Tree:** Cliques com o botao esquerdo simples (`PRIMARY`) selecionam o arquivo. Duplo clique com `PRIMARY` em arquivos `.java` abre o script diretamente no editor interno do Ignis, e outros arquivos no editor padrão do sistema. O menu de contexto de assets (`buildAssetsContextMenu`) e disparado exclusivamente com o botao direito (`SECONDARY`), contendo a opcao dedicada "Abrir no Editor do Ignis".
 - **Viewport Canvas:** Cliques esquerdos simples (`PRIMARY`) efetuam apenas a selecao da entidade (atualizando a Hierarchy e o Inspector). O menu de contexto da viewport e disparado exclusivamente com o clique do botao direito (`SECONDARY`), garantindo navegacao livre de interferencias.
 - **Linha do Tempo de Animacoes (`FxAnimationEditor.java`):** Restringido o scrub da linha do tempo e arraste de quadros exclusivamente ao botao esquerdo (`PRIMARY`).
 - **Painel de Audio (`FxAudioEditor.java`):** Selecao e manipulacao de faixas e clipes de audio no canvas restritos ao botao esquerdo (`PRIMARY`).
 - **Lista de Camadas de Imagem (`FxImageEditor.java`):** Duplo clique para renomeacao de camadas restrito ao botao esquerdo (`PRIMARY`).
 
-### D. Resolucao do Bug de Loop de Warping do Mouse
+### D. Resolucao do Bug de Loop de Warping e Selecao de Mouse
 - **Warping Loop:** Resolvido o bug critico em `Game.java` restringindo a execucao do Robot warping a ambientes onde o canvas esta visivel (`isShowing()`). Sob JavaFX, como a renderizacao ocorre off-screen, o warping e desativado com seguranca, prevenindo exceptions e loops infinitos de teleporte de cursor.
+- **Selection Loop & Stuck Drag:** Resolvido o bug de loop de selecao infinita e saltos de coordenadas no Inspector. Implementado o metodo `game.cancelDrag()` para limpar o estado de arraste de gizmos quando a selecao muda ou o menu de contexto e exibido, e criada a flag reentrante `suppressSelectionEvents` em `IgnisEditorApp.java` para bloquear loops circulares asíncronos de selecao entre a Hierarchy e o Game.
 
 ### E. Visual Tematico Premium no Editor de Codigo
 - **Estilizacao Dinamica:** Removemos todas as estilizacoes de cor em linha (inline CSS) das barras de ferramentas, status e botoes de `FxCodeEditor.java`. Substituimos por seletores de classes CSS e criamos regras dinamicas em `applyTheme(EditorTheme)` baseadas nas cores de realce do tema de codigo selecionado (ex: Dracula, Monokai, One Dark). Os botoes de acao e ComboBoxes agora adaptam suas cores e estados ativos para combinar perfeitamente com a paleta do tema ativo.

@@ -70,6 +70,7 @@ public class IgnisEditorApp extends Application {
     private final Game game = new Game();
     private GameObject selected;
     private boolean suppressInspectorEvents = false;
+    private boolean suppressSelectionEvents = false;
     private File projectFolder;
     private File currentIgnisFile;
     private Project currentProject;
@@ -156,6 +157,7 @@ public class IgnisEditorApp extends Application {
         // Configure selection listener from Game
         game.addSelectionListener(go -> {
             Platform.runLater(() -> {
+                if (suppressSelectionEvents) return;
                 if (selected != go) {
                     selectEntity(go);
                 }
@@ -951,6 +953,7 @@ public class IgnisEditorApp extends Application {
 
         ContextMenu viewportMenu = buildViewportContextMenu();
         canvas.setOnContextMenuRequested(e -> {
+            game.cancelDrag();
             GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
             if (clicked != null) {
                 selectEntity(clicked);
@@ -1044,10 +1047,16 @@ public class IgnisEditorApp extends Application {
         hierarchyRoot.setExpanded(true);
         TreeView<String> tree = new TreeView<>(hierarchyRoot);
         tree.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, item) -> {
-            if (item == null || item == hierarchyRoot) { setSelected(null); return; }
-            int idx = hierarchyRoot.getChildren().indexOf(item);
-            java.util.List<GameObject> ents = game.getEntities();
-            setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
+            if (suppressSelectionEvents) return;
+            suppressSelectionEvents = true;
+            try {
+                if (item == null || item == hierarchyRoot) { setSelected(null); return; }
+                int idx = hierarchyRoot.getChildren().indexOf(item);
+                java.util.List<GameObject> ents = game.getEntities();
+                setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
+            } finally {
+                suppressSelectionEvents = false;
+            }
         });
         tree.setOnMouseClicked(ev -> {
             if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
@@ -1182,12 +1191,18 @@ public class IgnisEditorApp extends Application {
 
     // Seleciona uma entidade na Hierarchy (dispara o listener que atualiza o Inspector).
     private void selectEntity(GameObject go) {
-        if (go == null) { setSelected(null); return; }
-        int idx = game.getEntities().indexOf(go);
-        if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
-            hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
-        } else {
-            setSelected(go);
+        if (suppressSelectionEvents) return;
+        suppressSelectionEvents = true;
+        try {
+            if (go == null) { setSelected(null); return; }
+            int idx = game.getEntities().indexOf(go);
+            if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
+                hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
+            } else {
+                setSelected(go);
+            }
+        } finally {
+            suppressSelectionEvents = false;
         }
     }
 
@@ -1212,7 +1227,11 @@ public class IgnisEditorApp extends Application {
             File file = (sel != null) ? sel.getValue() : null;
             if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
                 if (file != null && file.isFile()) {
-                    openAssetFile(file);
+                    if (file.getName().endsWith(".java")) {
+                        openScriptInIgnisEditor(file);
+                    } else {
+                        openAssetFile(file);
+                    }
                 }
             } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
                 ContextMenu menu = buildAssetsContextMenu(file);
@@ -1276,6 +1295,25 @@ public class IgnisEditorApp extends Application {
             }
         } catch (Exception ex) {
             setStatus("Nao foi possivel abrir: " + f.getName());
+        }
+    }
+
+    private void openScriptInIgnisEditor(File file) {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) {
+                sm = new com.ignis.core.ScriptManager(projectFolder);
+                game.setScriptManager(sm);
+            }
+            String scriptName = file.getName();
+            if (scriptName.endsWith(".java")) {
+                scriptName = scriptName.substring(0, scriptName.length() - 5);
+            }
+            FxCodeEditor codeEditor = new FxCodeEditor(null, sm, scriptName);
+            codeEditor.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
         }
     }
 
@@ -1350,6 +1388,9 @@ public class IgnisEditorApp extends Application {
     }
 
     private void setSelected(GameObject go) {
+        if (this.selected != go) {
+            game.cancelDrag();
+        }
         this.selected = go;
         suppressInspectorEvents = true;
         if (go == null) {
@@ -1603,8 +1644,16 @@ public class IgnisEditorApp extends Application {
             return menu;
         }
 
-        MenuItem openItem = new MenuItem("Abrir / Editar");
+        MenuItem openItem = new MenuItem("Abrir / Editar (Sistema)");
         openItem.setOnAction(e -> openAssetFile(file));
+
+        if (file.isFile() && file.getName().endsWith(".java")) {
+            MenuItem openInIgnisItem = new MenuItem("Abrir no Editor do Ignis");
+            openInIgnisItem.setOnAction(e -> openScriptInIgnisEditor(file));
+            menu.getItems().add(openInIgnisItem);
+        }
+
+        menu.getItems().add(openItem);
 
         MenuItem renameItem = new MenuItem("Renomear");
         renameItem.setOnAction(e -> renameAssetFile(file));
@@ -1621,7 +1670,7 @@ public class IgnisEditorApp extends Application {
             setStatus("Caminho copiado: " + file.getName());
         });
 
-        menu.getItems().addAll(openItem, renameItem, deleteItem, new SeparatorMenuItem(), copyPathItem);
+        menu.getItems().addAll(renameItem, deleteItem, new SeparatorMenuItem(), copyPathItem);
 
         if (file.isDirectory()) {
             MenuItem newScriptItem = new MenuItem("Criar Novo Script...");

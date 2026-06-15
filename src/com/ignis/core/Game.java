@@ -886,6 +886,15 @@ public class Game extends Canvas implements Runnable {
         repaint();
     }
 
+    public void cancelDrag() {
+        if (currentDragMode != GizmoDragMode.NONE && selectedObject != null && transformListener != null) {
+            transformListener.onTransformEnd(selectedObject);
+        }
+        currentDragMode = GizmoDragMode.NONE;
+        isPanning = false;
+        setCursor(Cursor.getDefaultCursor());
+    }
+
     public GameObject getSelectedObject() {
         return selectedObject;
     }
