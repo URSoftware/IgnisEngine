@@ -88,6 +88,7 @@ Toda a documentação técnica detalhada do projeto está organizada de forma mo
 * [Arquitetura do Sistema](doc/ARCHITECTURE.md): Estrutura de pacotes, ciclo de vida do editor/runtime e modelo de concorrência.
 * [Inventário do Projeto](doc/PROJECT_INVENTORY.md): Auditoria completa do estado dos arquivos e módulos do repositório.
 * [Guia de ADRs (Decisões de Arquitetura)](doc/ADR_GUIDE.md): Conceituação e modelo de documentação de escolhas técnicas.
+* [Diretrizes de Documentação](doc/DOCUMENTATION_GUIDELINES.md): Padrões de organização de documentos, HTML no README e regras do Vault.
 * [Guia de Versionamento e Releases](doc/RELEASE_GUIDE.md): Padrão de SemVer e passo a passo de publicação de builds.
 * [Especificação do Formato .ignis](doc/IGNIS_FILE_SPEC.md): Detalhes do formato de arquivo comprimido do projeto.
 
@@ -160,5 +161,19 @@ run-editor-javafx.bat
 
 Este projeto é mantido pela organização **URSoftware**.
 
-* **Thyago Toledo** - [GitHub](https://github.com/ThyagoToledo)
-* **FeronZerbana** - [GitHub](https://github.com/FeronZerbana)
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://github.com/ThyagoToledo">
+        <img src="https://github.com/ThyagoToledo.png?size=100" width="100px;" alt="Thyago Toledo" style="border-radius: 50%;" /><br />
+        <sub><b>Thyago Toledo</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/FeronZerbana">
+        <img src="https://github.com/FeronZerbana.png?size=100" width="100px;" alt="FeronZerbana" style="border-radius: 50%;" /><br />
+        <sub><b>FeronZerbana</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
