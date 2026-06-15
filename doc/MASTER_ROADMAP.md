@@ -1,6 +1,6 @@
 # Roadmap Mestre — IgnisEngine
 
-> 2026-06-14 · Referência principal de evolução do projeto.
+> 2026-06-15 · Referência principal de evolução do projeto.
 > Base: [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) · [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) · [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md).
 > Legenda: Prioridade 🔴 Alta / 🟠 Média / 🟢 Baixa · Complexidade B/M/A.
 
@@ -10,7 +10,7 @@ Cada item planejado traz: **Prioridade · Complexidade · Dependências · Benef
 
 ## Core Engine
 
-**Concluído:** game loop (tick/render), `GameObject` (modelo herança + scripts), `Scene`, `Transform`, `Camera`, `Viewport`, `Input`, prefabs, serialização `.ignis` (JSON).
+**Concluído:** game loop (tick/render), `GameObject` (modelo herança + scripts), `Scene`, `Transform`, `Camera`, `Viewport`, `Input`, prefabs, serialização `.ignis` (JSON), ponte de render para JavaFX (`renderWorldTo` -> `SwingFXUtils`).
 
 **Em andamento:** consolidação de WIP recente (ícones vetoriais, editor de código).
 
@@ -27,56 +27,41 @@ Cada item planejado traz: **Prioridade · Complexidade · Dependências · Benef
 **Em andamento:** editor de código temático (WIP).
 
 **Planejado:**
-- Extrair painéis do `Editor.java` (5580) em classes coesas — 🔴 · A · dep: nenhuma · pré-requisito da migração JavaFX.
-- Migração da UI para JavaFX (feature mestre da `main`) — 🔴 · A · dep: extração de painéis + Renderer · UI moderna/CSS/binding.
+- Extrair painéis do `Editor.java` — 🔴 · M · dep: nenhuma · organização do código legador Swing.
+- Multi-abas para edição de múltiplos scripts/cenas — 🟠 · M · dep: nenhuma · UX de desenvolvimento.
+- Desfazer/Refazer (Undo/Redo) no histórico de ações do editor — 🔴 · A · dep: comando centralizado · confiabilidade.
 
-## Renderização
+## Sub-editores Especializados
 
-**Concluído:** pipeline AWT (`Game extends Canvas`, `BufferStrategy`, `Graphics2D`), double buffering, viewport/zoom, múltiplas câmeras.
-
-**Em andamento:** —
-
-**Planejado:**
-- Ponte de render para JavaFX (offscreen `BufferedImage` → `Canvas` FX) — 🔴 · M · dep: Renderer · base da migração.
-- Otimização da cópia de frame (reuso de buffer / `PixelBuffer`) — 🟠 · M · dep: ponte · FPS.
-
-## Física / Colisões
-
-**Concluído:** detecção/respostas básicas + alertas (`IgnisSampleCollisions`).
+**Concluído:**
+- `imageeditor` (PaintCanvas, camadas, ferramentas básicas).
+- `audioeditor` (DawFrame, equalizador, timeline).
+- `notes` (Wiki/MarkdownViewer).
+- `animation` (Model/Timeline/SpriteSheet para animações 2D).
 
 **Planejado:**
-- Motor de física desacoplado (rigidbodies, solver, fricção/restituição) — 🟠 · A · dep: separar exemplos de produção · gameplay robusto.
-- Separar exemplos de produção em `IgnisSampleCollisions` — 🟠 · M · dep: nenhuma · clareza/manutenção.
+- Visualizador/Editor de Curvas (para interpolação de animações) — 🟠 · M · dep: animation · controle de movimento.
+- Editor de Partículas integrado — 🟠 · M · dep: core/renderer · efeitos visuais ricos.
 
-## Áudio
+## Compilação e Distribuição (Builder)
 
-**Concluído:** engine de som (`IgnisSoundEngine`, `MusicPath`), editor DAW (`AudioEditorFrame`, multipista/mix), processamento WAV.
-
-**Planejado:**
-- Modularizar a UI do DAW (faixas/mixer/transport) — 🟠 · M · dep: nenhuma · manutenção.
-- Mais formatos além de WAV — 🟢 · M · dep: nenhuma · alcance.
-
-## Animação
-
-**Concluído:** 2D por sprites/keyframes (`Animator`, `SpriteAnimation`, `AnimationEditorFrame`), IO de animação.
+**Concluído:** exportação para executável JVM (Windows/Linux/macOS), empacotamento em JAR auto-executável, log de build unificado.
 
 **Planejado:**
-- Animação 3D (skeletal / blend trees) — 🟢 · A · dep: pipeline de render · escopo futuro.
-- Timeline mais rica (curvas/easing) — 🟠 · M · dep: nenhuma · qualidade de animação.
+- Validação real da exportação C++ (`CppExportStrategy`) em consoles/desktop nativo — 🔴 · A · dep: nenhuma · portabilidade máxima.
+- Compilação Ahead-Of-Time (AOT) usando GraalVM para gerar binários nativos sem JVM — 🟢 · A · dep: nenhuma · startup time / proteção de código.
 
-## Builder
+## Sistema de Scripting
 
-**Concluído:** orquestração multiplataforma (`Builder`, `BuildStrategy`, `BuildTarget`), estratégia Java (JVM Win/Linux/macOS), runtime standalone.
-
-**Em andamento/Experimental:** exportação C++ (`CppExportStrategy`).
+**Concluído:** chamadas em tempo de tick, controle de componentes (Transform/Camera/Sound), detecção de colisões scriptada, hot-reload em runtime.
 
 **Planejado:**
-- Validar/concluir exportação C++ compilável (consoles) — 🟠 · A · dep: nenhuma · alvo de consoles.
-- `jpackage`/`jlink` para distribuir com JavaFX (pós-migração) — 🟠 · M · dep: migração JavaFX · empacotamento.
+- Visual Scripting (Nós/Fluxo) para não-programadores — 🟢 · A · dep: editor · acessibilidade.
+- Depurador de Scripts (breakpoints, variáveis em tempo real) — 🟠 · A · dep: nenhuma · produtividade.
 
-## IA
+## Inteligência Artificial (Agent Mode)
 
-**Concluído:** integração Gemini ("Agent Mode") via `AIIntegration`/`GeminiProvider`, abstração `AIServiceProvider`.
+**Concluído:** integração com Gemini, assistente contextual no editor, geração de scripts e auxílio de design.
 
 **Planejado:**
 - Multi-provedor de IA (OpenAI/Anthropic/local) sobre `AIServiceProvider` — 🟠 · M · dep: nenhuma · flexibilidade.
@@ -93,19 +78,17 @@ Cada item planejado traz: **Prioridade · Complexidade · Dependências · Benef
 
 ## Migração JavaFX (feature mestre)
 
-**Em andamento:** terreno preparado (branches `Legado`/`main`, plano técnico). Ver [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md).
+**Concluído:** F0 (infra/deps) → F1 (casca/ponte de render) → F2 (painéis nativos TreeView/Inspector) → F3 (janelas-ferramenta) → F3.5 (janelas vinculadas ao menu, roteamento de input, tela de projetos recentes, salvar/abrir, Asset Browser). Ver [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md).
 
-**Planejado (fases):** F0 infra (deps/plugin) → F1 casca + ponte de render → F2 painéis nativos (TreeView/Inspector) → F3 janelas-ferramenta → F4 tema CSS e limpeza.
+**Em andamento:** F4 (Tema CSS escuro e limpeza geral).
 
 ---
 
 ## Próximas Prioridades (ordenado)
 
-1. 🔴 **Extrair painéis do `Editor.java`** (pré-requisito da migração).
-2. 🔴 **Camada `Renderer` desacoplada do toolkit** (habilita ponte JavaFX + testes).
-3. 🔴 **Fase 0 da migração JavaFX** (deps + `javafx-maven-plugin` + pacote `editor.fx`).
-4. 🔴 **Ponte de render** (prova de conceito Viewport em JavaFX) + medir FPS.
-5. 🟠 **Testes automatizados** (serialização `.ignis` round-trip, colisões).
-6. 🟠 **Loader de plugins com sandbox** (alinha com o marketplace).
-7. 🟠 **Quebrar `Game.java`** (loop/render/input).
-8. 🟠 **Validar exportação C++** do Builder.
+1. 🔴 **Fase 4 da migração JavaFX** (Tema CSS escuro, layouts flexíveis SplitPane/Stage, remoção de dependências legadas).
+2. 🟠 **Testes automatizados** (serialização `.ignis` round-trip, colisões).
+3. 🟠 **Loader de plugins com sandbox** (alinha com o marketplace).
+4. 🟠 **Quebrar `Game.java`** (desacoplar loop, render e input).
+5. 🟠 **Validar exportação C++** do Builder.
+6. 🟢 **Cache de assets no `AssetResolver`** (performance de IO).

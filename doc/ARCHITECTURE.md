@@ -1,11 +1,16 @@
 # Arquitetura Técnica do IgnisEngine
 
-> 2026-06-14 · Permite entender o motor sem ler o código-fonte.
-> Complementa [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) e [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md).
+> 2026-06-15 · Permite entender o motor sem ler o código-fonte.
+> Complementa [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) · [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) · [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md).
 
 ## 1. Visão geral
 
-Motor de jogos **2D em Java 17 puro** com editor visual integrado. Dependência única em runtime: `org.json`. Entry point do editor: `com.ignis.editor.Editor`; entry point do jogo distribuído: `com.ignis.runtime.GameRuntime`.
+Motor de jogos **2D em Java 17 puro** com editor visual integrado. Dependência única em runtime: `org.json`. 
+
+O projeto possui **dois entry points** para o editor (devido à migração Swing → JavaFX) e um para o runtime do jogo:
+- **Editor JavaFX (Moderno / Padrão):** `com.ignis.editor.fx.IgnisEditorApp` (executado via `mvnw javafx:run` ou `run-editor-javafx.bat`).
+- **Editor Swing (Legado):** `com.ignis.editor.Editor` (executado via `mvnw exec:java`).
+- **Runtime Standalone:** `com.ignis.runtime.GameRuntime` (para rodar jogos compilados e distribuídos).
 
 ### Estrutura de pacotes
 
@@ -13,7 +18,8 @@ Motor de jogos **2D em Java 17 puro** com editor visual integrado. Dependência 
 com.ignis
 ├── core            # motor: loop, entidades, cena, transform, câmera, input, serialização
 │   └── ui          # UI in-game desenhada em canvas (HUD/menus do jogo)
-├── editor          # editor visual (Swing): janela, painéis, editor de código, IA
+├── editor          # editor visual Swing (legado)
+│   └── fx          # editor visual JavaFX (moderno, em migração)
 ├── imageeditor     # editor de imagens (pintura/camadas)
 ├── audioeditor     # editor de áudio estilo DAW
 ├── notes           # sistema de notas/wiki
@@ -45,11 +51,29 @@ Transform / TransformSpace   # posição/rotação/escala; local vs mundo
 
 Comportamento dinâmico vem de **scripts** (`IgnisScript`) anexados ao `GameObject`. Campos de script marcados com `@Serialize` aparecem no Inspector e são persistidos.
 
-## 3. Ciclo de vida do Editor
+## 3. Ciclos de vida do Editor
 
+### A. Editor JavaFX (com.ignis.editor.fx.IgnisEditorApp)
+```
+IgnisEditorApp.main()
+ → inicializa JavaFX Application Thread
+ → exibe FxProjectStartupDialog (tela de boas-vindas / projetos recentes / abrir ou novo)
+ → ao carregar projeto, monta o Stage principal (IgnisEditorApp)
+ → inicializa painéis nativos JavaFX:
+     - Hierarchy: TreeView nativo que gerencia o ciclo de vida das entidades na cena
+     - Inspector: VBox dinâmico mapeando propriedades do objeto selecionado
+     - Asset Browser: Árvore de arquivos do projeto
+     - Janelas de ferramentas adicionais (FxCodeEditor, FxImageEditor, FxAudioEditor, FxCommunityWindow, FxAnimationEditor)
+ → inicia a Game Thread (Canvas AWT interno)
+ → ponte de render: desenha a viewport usando SwingFXUtils (BufferedImage do Game -> WritableImage exposta na UI JavaFX)
+ → roteia eventos de teclado e mouse do JavaFX Stage para a Game Thread
+ → Play/Stop/Pause alteram o estado da máquina de estados do Game
+```
+
+### B. Editor Swing Clássico (com.ignis.editor.Editor)
 ```
 Editor.main()
- → cria JFrame (Editor.java) e painéis (Hierarchy, Inspector, Scene View, Asset Browser)
+ → cria JFrame (Editor.java) e painéis Swing (Hierarchy, Inspector, Scene View, Asset Browser)
  → carrega editor_layout.json (preferências)
  → abre/cria Project (.ignis) via IgnisProjectIO
  → instancia Game (Canvas) embutido no Scene View (estado EDITOR)
@@ -89,8 +113,8 @@ loop (thread do jogo):
     - bufferStrategy.show()
 ```
 
-> Ponto crítico para a migração JavaFX: o desenho usa `java.awt.Graphics2D` direto no
-> `Canvas`/`BufferStrategy`. Ver [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md) (ponte de render).
+### Ponte de Render para JavaFX
+Quando executado no modo JavaFX, o game loop renderiza para uma `BufferedImage` interna por meio do método `Game.renderWorldTo()`. O editor JavaFX converte essa imagem periodicamente para um `WritableImage` via `SwingFXUtils.toFXImage()` e a desenha em um componente `ImageView` do JavaFX na thread da UI.
 
 ## 6. Fluxo de serialização (`.ignis`)
 
@@ -121,7 +145,7 @@ Builder copia assets para a distribuição final.
 
 ## 8. UI in-game (`core/ui`)
 
-Sistema próprio de UI **desenhado no canvas do jogo** (independente do Swing do editor):
+Sistema próprio de UI **desenhado no canvas do jogo** (independente do Swing/JavaFX do editor):
 `UICanvas` agrega `UIComponent`s (`UIButton`, `UILabel`, `UIPanel`, `UISlider`, `UITextField`, `UIProgressBar`, `UICheckbox`, `UIToggle`, `UIImage`), criados via `UIFactory`; ícones por `VectorIcon`. Recebe prioridade de input quando o jogo está `PLAYING`.
 
 ## 9. Builder
@@ -138,7 +162,7 @@ Builder + BuildConfig (alvo/opções)
 ## 10. Marketplace (integração)
 
 ```
-Editor (CommunityFrame)
+Editor (CommunityFrame ou FxCommunityWindow)
  → MarketplaceClient (java.net.http) → API Next.js (Vercel) + Neon
      GET /api/items        (catálogo, público; fallback mock offline)
      POST /api/items       (publicar; Authorization: Bearer <token>)
@@ -146,11 +170,17 @@ Editor (CommunityFrame)
 Backend: OAuth GitHub, gate de segurança (valida repo), admin (ban), tokens, legal.
 ```
 
-## 11. Threading
+## 11. Threading e Concorrência
 
-- **Thread do jogo:** loop tick/render (em `Game`).
-- **EDT (Swing):** UI do editor e sub-editores.
-- Fronteiras exigem `SwingUtilities.invokeLater` ao tocar a UI a partir da thread do jogo (e vice-versa). Disciplina necessária; risco de corrida ao crescer (ver dívidas). Na migração JavaFX, somará a regra do **FX Application Thread** (`Platform.runLater`).
+O IgnisEngine gerencia múltiplas threads para separar a simulação de jogo e a interface visual:
+1. **Game Thread:** O loop principal do jogo (em `Game.java`), responsável por atualizações (tick) e renderização gráfica contínua.
+2. **EDT (Event Dispatch Thread):** Usada quando o editor legado (Swing) está ativo, tratando cliques e repinturas da UI clássica.
+3. **JavaFX Application Thread:** A thread principal de UI para o editor JavaFX. Qualquer alteração em elementos visuais do JavaFX deve ocorrer obrigatoriamente nesta thread.
+
+### Regras de Ouro de Sincronização:
+- Alterar componentes JavaFX a partir da Game Thread: envolver o código em `Platform.runLater()`.
+- Alterar componentes Swing a partir da Game Thread: envolver o código em `SwingUtilities.invokeLater()`.
+- Acessar estados compartilhados do jogo: utilizar travas de sincronização apropriadas para evitar condições de corrida entre a thread de simulação e a thread de interface.
 
 ## 12. IA (Agent Mode)
 

@@ -15,52 +15,49 @@ IgnisEngine é uma engine gráfica 2D desenvolvida em Java puro, focada em rende
 
 ---
 
-## Branches
+## Branches de Desenvolvimento
 
 | Branch | Estado | Descrição |
 |--------|--------|-----------|
-| **`main`** | 🚧 em desenvolvimento | Migração da interface **Swing → JavaFX** (grande nova feature). Núcleo da engine e marketplace mantidos. |
-| **`Legado`** | ✅ estável | Versão atual com interface **Java Swing** + integração do **marketplace**. Snapshot funcional preservado. |
+| **`main`** | Em desenvolvimento | Migração da interface Swing para JavaFX (versão principal). Núcleo da engine e marketplace mantidos. |
+| **`Legado`** | Estável | Versão legada com interface Java Swing e integração do marketplace. Snapshot funcional preservado. |
 
-A migração do editor para JavaFX acontece na `main`. A versão Swing estável fica na
-`Legado` para referência/compatibilidade. Plano técnico: [`doc/JAVAFX_MIGRATION_PLAN.md`](doc/JAVAFX_MIGRATION_PLAN.md).
+A migração ativa do editor para JavaFX acontece na branch `main`. A versão Swing clássica permanece na branch `Legado` para referência. Plano técnico de migração disponível em [Plano de Migração JavaFX](doc/JAVAFX_MIGRATION_PLAN.md).
 
 ---
 
 ## Estrutura do Projeto
 
-```
+```text
 IgnisEngine/
-├── 📁 src/com/ignis/
-│   ├── 📁 core/                 # Core da engine (loop principal e renderização)
-│   │   ├── 📄 Game.java         # Loop do jogo, tick/render e canvas
-│   │   └── 📄 GameObject.java   # Classe base para objetos de jogo
-│   ├── 📁 builder/              # Builder: geração dos binários finais (Java e C++)
-│   │   ├── 📄 Builder.java      # Orquestrador de builds multiplataforma
-│   │   └── 📄 ...               # Estratégias Java/C++, configuração e utilitários
-│   ├── 📁 editor/               # Editor visual integrado para modelagem de cenas
-│   │   ├── 📄 Editor.java       # Interface gráfica e gerenciamento de painéis
-│   │   └── 📄 BuildDialog.java  # Diálogo de build (menu Build)
-│   ├── 📁 animation/            # Sistema de animação 2D (modelo + Animator runtime)
-│   ├── 📁 imageeditor/          # Editor de imagens integrado (Tools → Image Editor)
-│   └── 📁 runtime/              # Runtime standalone dos jogos distribuídos
-│       └── 📄 GameRuntime.java  # Entry point dos builds (carrega .ignis e executa)
-├── 📄 editor_layout.json        # Layout do editor (gerado automaticamente)
-├── 📁 doc/                      # Documentação técnica detalhada (Módulos do Vault)
-├── 📁 .mvn/wrapper/             # Maven Wrapper para execução independente de versão
-├── 📄 pom.xml                   # Configuração de dependências Maven
-└── 📄 README.md                 # Este arquivo (Hub Central)
+├── CONTRIBUTING.md          # Guia de contribuição para desenvolvedores
+├── pom.xml                  # Configuração de dependências Maven
+├── run-editor-javafx.bat    # Script de execução rápida no Windows
+├── editor_layout.json       # Configurações de layout salvas do editor
+├── doc/                     # Documentação técnica detalhada (Vault)
+├── src/com/ignis/
+│   ├── core/                # Core da engine (loop principal e renderização)
+│   │   ├── Game.java        # Loop do jogo, tick/render e canvas
+│   │   ├── GameObject.java  # Classe base para objetos de jogo
+│   │   └── ui/              # Componentes de interface in-game
+│   ├── editor/              # Editor visual Swing (legado)
+│   │   └── fx/              # Editor visual JavaFX (moderno)
+│   ├── builder/             # Compilador e empacotador de projetos
+│   ├── animation/           # Sistema de animação 2D
+│   ├── imageeditor/         # Editor de imagens integrado
+│   ├── audioeditor/         # Editor de áudio (DAW) integrado
+│   └── runtime/             # Player standalone para execução de builds
 ```
 
 ---
 
-## Componentes
+## Componentes Principais
 
 ### Core — Motor Gráfico
 O coração do IgnisEngine, responsável por toda a lógica de renderização e execução física/lógica:
 * Loop de atualização e desenho constante (Tick/Render).
 * Gerenciamento de tela com suporte a redimensionamento e modo tela cheia.
-* Sistema de `GameObject` reutilizável para gerenciar elementos em cena.
+* Sistema de GameObject reutilizável para gerenciar elementos em cena.
 
 ### Editor — Ferramenta de Modelagem
 Interface visual profissional para agilizar o desenvolvimento:
@@ -69,67 +66,45 @@ Interface visual profissional para agilizar o desenvolvimento:
 * **Inspector:** Editor de propriedades e atributos dinâmicos do objeto selecionado.
 * Salvamento automático do layout e restauração das preferências do desenvolvedor via JSON.
 
-### Main — Execução do Jogo
-A aplicação consumidora final que acopla o motor e o editor para a compilação e execução final do jogo desenvolvido.
-
 ---
 
-## Hub de Documentação
+## Hub de Documentação (Vault)
 
-Toda a documentação técnica detalhada do projeto está modularizada na pasta [doc/](doc/). Abaixo está o índice organizado de arquivos por área de interesse:
+Toda a documentação técnica detalhada do projeto está organizada de forma modular. Abaixo está o índice estruturado de arquivos:
 
-### Planejamento
-* **[Roadmap do IgnisEngine](doc/ROADMAP.md)**: Planejamento oficial de evolução do motor — Builder multiplataforma, exportação C++, editores integrados (imagem, animação e áudio), expansão da IA, sistema de notas e plataforma Comunidade/Marketplace.
+### Configuração e Contribuição
+* [Guia de Configuração de Ambiente](doc/DEVELOPER_SETUP.md): Requisitos de JDK, clonagem de submódulos, configurações de IDE e execução do editor.
+* [Diretrizes de Contribuição](CONTRIBUTING.md): Padrões de código, estratégias de branches e formatação de mensagens de commit.
+* [Configuração de CI/CD](doc/CI_CD_SETUP.md): Pipeline automatizado com GitHub Actions, matriz de JDK e cache de dependências.
 
-### Builder e Distribuição
-* **[Guia do Builder](doc/BUILDER_GUIDE.md)**: Geração dos binários finais do jogo — builds JVM para Windows/Linux/macOS, exportação de projetos C++ para consoles, uso pelo editor (Build → Build Project) e pela linha de comando.
+### Planejamento e Arquitetura
+* [Roadmap de Evolução](doc/MASTER_ROADMAP.md): Planejamento oficial de evolução da engine e fases de desenvolvimento.
+* [Arquitetura do Sistema](doc/ARCHITECTURE.md): Estrutura de pacotes, ciclo de vida do editor/runtime e modelo de concorrência.
+* [Inventário do Projeto](doc/PROJECT_INVENTORY.md): Auditoria completa do estado dos arquivos e módulos do repositório.
+* [Especificação do Formato .ignis](doc/IGNIS_FILE_SPEC.md): Detalhes do formato de arquivo comprimido do projeto.
 
-### Ferramentas Integradas
-* **[Editor de Imagens](doc/IMAGE_EDITOR_GUIDE.md)**: Desenho 2D, pintura, camadas, undo/redo e exportação de texturas direto para os assets do projeto (Tools → Image Editor).
-* **[Sistema de Animação](doc/ANIMATION_GUIDE.md)**: Animação 2D por sprites — timeline, keyframes, loop e transições; editor com pré-visualização e atribuição a objetos (Tools → Animation Editor).
+### Sistemas da Engine e Viewport
+* [Funcionamento do Game Loop](doc/GAME_LOOP_INTERNALS.md): Ciclo tick/render, estados da simulação e sistema de snapshots de cena.
+* [Modelo de Threads](doc/THREADING_MODEL.md): Concorrência entre a Game Thread, JavaFX Application Thread e Swing EDT.
+* [Guia de Câmera e Viewport](doc/CAMERA_VIEWPORT_GUIDE.md): Controles de foco, zoom, rotação, limites de tela e efeitos de tremor.
+* [Guia do Sistema de UI](doc/UI_SYSTEM_GUIDE.md): Interface do usuário em canvas, componentes de UI e exemplos práticos.
+* [Guia do Sistema de Áudio](doc/AUDIO_SYSTEM_GUIDE.md): Configuração de som, classes MusicPath e mixagem no editor de áudio.
 
-### Qualidade e Manutenção
-* **[Auditoria Técnica (2026-06-12)](doc/AUDIT_2026-06-12.md)**: Achados da inspeção profunda (leaks, threads, export C++, serialização) com causa raiz, impacto e correção.
+### Lógica e Scripting (IgnisScript)
+* [Guia Completo de Scripts](doc/IGNIS_SCRIPTS.md): Criação de comportamento, variáveis e ciclos de vida.
+* [Referência da API de Scripts](doc/IGNIS_SCRIPT_API.md): Tabela de métodos e constantes do IgnisScript.
+* [Manual de Consulta Rápida](doc/IGNISSCRIPT_QUICK_REFERENCE.md): Resumo sintático rápido das funções de scripting.
+* [Manual de Prefabs](doc/PREFAB_SCRIPTS_GUIDE.md): Modelagem e instanciação de prefabs de objetos de jogo.
 
-### Inteligência Artificial e Modo Agente (AI & AGENT Mode)
-* **[Guia de Início Rápido do Agente](doc/AGENT_MODE_QUICKSTART.md)**: Manual rápido de 3 passos para configurar e testar tarefas automatizadas com IA.
-* **[Manual de Uso Completo](doc/AGENT_MODE_GUIDE.md)**: Guia profundo contendo exemplos práticos, operações suportadas e troubleshooting de API.
-* **[Guia de Integração de IA](doc/AI_INTEGRATION_GUIDE.md)**: Configurações do modelo Google Gemini 2.5 Flash na engine.
-* **[Arquitetura e Detalhes Técnicos](doc/AGENT_MODE_TECHNICAL.md)**: Estrutura do parser JSON, rate limiting, conexões e benchmarks de desempenho.
-* **[Roteiro de Validação e Testes](doc/AGENT_MODE_TESTING.md)**: Casos de teste estruturados para validar o comportamento da IA.
-* **[Índice de Documentação do Agente](doc/AGENT_MODE_INDEX.md)**: Sumário de relações e fluxos de leitura recomendados por perfil de usuário.
-* **[Histórico de Alterações do Modo Agente](doc/AGENT_MODE_CHANGES.md)**: Resumo das melhorias estruturais implementadas.
-* **[Registro de Correções do Agente](doc/AGENT_MODE_FIXES.md)**: Correções de parser e chamadas de API.
-* **[Guia de Testes de IA](doc/AI_TEST_GUIDE.md)**: Procedimentos para ensaios e medições do assistente.
-* **[Melhorias de Prompts de IA](doc/AGENT_PROMPT_IMPROVEMENT.md)**: Engenharia de prompts usada para guiar o assistente de forma precisa.
-* **[Status Final de Implementação](doc/AGENT_MODE_STATUS.md)**: Diagnóstico final de funcionalidade e prontidão do agente.
+### Física e Colisões
+* [Sistema de Colisões Integrado](doc/IGNIS_COLLISION_SYSTEM.md): Teoria física das colisões AABB e Circle.
+* [Guia de Física de Colisões](doc/COLLISION_AND_ALERTS_GUIDE.md): Alertas de colisão e disparos físicos.
+* [Exemplos de Scripts de Colisão](doc/EXAMPLE_COLLISION_SCRIPTS.md): Scripts prontos para rebote, danos e limites de tela.
 
-### Programação e Scripts (IgnisScript)
-* **[Guia Completo do IgnisScript](doc/IGNIS_SCRIPTS.md)**: Manual definitivo para criação de comportamento e scripts em formato Ignis.
-* **[Referência da API de Scripts](doc/IGNIS_SCRIPT_API.md)**: Lista completa das chamadas de API, classes de física, entrada e controle de objetos.
-* **[Manual de Consulta Rápida](doc/IGNISSCRIPT_QUICK_REFERENCE.md)**: Resumo sintático rápido das funções e loops.
-* **[Manual de Prefabs e Comportamentos](doc/PREFAB_SCRIPTS_GUIDE.md)**: Criação de templates de objetos de jogo com scripts associados.
-* **[Especificação de Arquivo Ignis](doc/IGNIS_FILE_SPEC.md)**: Estrutura de sintaxe de arquivo e parseamento nativo.
-* **[Documentação do Scripting para Agentes](doc/AGENT_IGNISSCRIPT_DOCUMENTATION.md)**: Guia fornecido para orientar IAs a programarem scripts.
-* **[Correção do Script do Jogador](doc/PLAYER_SCRIPT_FIX.md)**: Correção de bugs de movimentação do jogador.
-
-### Sistemas Físicos e Renderização (Colisão e Câmera)
-* **[Sistema de Colisões Integrado](doc/IGNIS_COLLISION_SYSTEM.md)**: Lógica do mecanismo AABB/Círculo no espaço bidimensional.
-* **[Guia de Física e Colisões](doc/COLLISION_AND_ALERTS_GUIDE.md)**: Regras de restrição física, trigger de áudio e física de movimento.
-* **[Integração do Sistema de Colisão](doc/COLLISION_SYSTEM_INTEGRATION.md)**: Como acoplar os listeners físicos ao motor gráfico principal.
-* **[Exemplos de Scripts de Colisão](doc/EXAMPLE_COLLISION_SCRIPTS.md)**: Código de referência comentado para lógica de danos, ricochete e limites de tela.
-* **[Referência Rápida de Colisão](doc/IGNIS_COLLISION_QUICKREF.md)**: Resumo de funções úteis de colisão.
-* **[Sistema de Controle de Câmera](doc/CAMERA_SYSTEM_DOCS.md)**: Movimento de zoom, foco no jogador e limites de viewport da câmera 2D.
-
-### Sistema de Alertas (Alert System)
-* **[Arquitetura de Alertas Visuais](doc/ALERT_SYSTEM_IMPLEMENTATION.md)**: Sistema de notificações temporizadas do painel flutuante do Viewport.
-* **[Guia de Início Rápido de Alertas](doc/ALERT_QUICK_START.md)**: Configurações rápidas para testar alertas simples.
-* **[Manual de Referência de Alertas](doc/ALERT_QUICK_REFERENCE.md)**: Tabela de métodos e constantes do componente de alerta.
-* **[Validação e Testes de Alertas](doc/TESTING_ALERTS.md)**: Roteiros de testes visuais e temporizações das filas de alerta.
-
-### Históricos e Resumos Globais
-* **[Sumário de Implementações](doc/CHANGES_IMPLEMENTATION_SUMMARY.md)**: Lista completa das alterações físicas feitas no core e no editor.
-* **[Sumário Geral de Mudanças](doc/CHANGES_SUMMARY.md)**: Registro histórico das evoluções estruturais globais.
+### Notificações e Ferramentas
+* [Sistema de Alertas Visuais](doc/ALERT_SYSTEM_IMPLEMENTATION.md): Notificações temporizadas na Viewport.
+* [Guia do Builder](doc/BUILDER_GUIDE.md): Empacotamento de executáveis Java e exportação nativa C++.
+* [Guia do Cliente do Marketplace](doc/MARKETPLACE_CLIENT_GUIDE.md): Integração com marketplace Next.js e download de plugins.
 
 ---
 
@@ -137,94 +112,45 @@ Toda a documentação técnica detalhada do projeto está modularizada na pasta 
 
 | Tecnologia | Versão Mínima | Observação |
 |---|---|---|
-| **Java** | 17 (LTS) | Versão oficial do projeto; JDKs mais novos compilam para 17 via `release` |
-| **Maven** | — | Não é necessário instalar: use o Maven Wrapper incluso (`mvnw` / `mvnw.cmd`) |
+| **Java** | 17 (LTS) | Versão oficial do projeto; JDKs mais novos compilam para 17 via release |
+| **Maven** | — | Não é necessário instalar: utilize o Maven Wrapper incluso (mvnw / mvnw.cmd) |
 
 ---
 
-## Como Começar (Quick Start)
+## Como Rodar o Editor
 
-### Compilação com Maven
+### Executando pelo Terminal
+Certifique-se de estar no diretório raiz do projeto:
 
-Utilize os comandos a seguir no terminal para compilar e empacotar o projeto:
+**Windows (JavaFX):**
+```cmd
+run-editor-javafx.bat
+```
 
+**Outros Sistemas (JavaFX):**
 ```bash
-# Compilar o código do projeto
+./mvnw javafx:run
+```
+
+**Modo Clássico Swing (Legado):**
+```bash
+./mvnw exec:java
+```
+
+### Compilação e Empacotamento
+```bash
+# Limpar e compilar classes
 ./mvnw clean compile
 
-# Executar testes
-./mvnw test
-
-# Empacotar para arquivo JAR executável
+# Empacotar em arquivo JAR executável
 ./mvnw package
-
-# Limpar e instalar no repositório local
-./mvnw clean install
-```
-
-### Executando em uma IDE
-
-1. Clone o repositório:
-   ```bash
-   git clone https://github.com/URSoftware/IgnisEngine.git
-   ```
-2. Abra a pasta do projeto em sua IDE Java de preferência (VS Code, IntelliJ IDEA ou Eclipse).
-3. **Para iniciar o Editor Visual (Recomendado):** Execute a classe `src.com.ignis.editor.Editor`.
-   - O editor abrirá configurado por padrão.
-   - Divisórias de painéis ajustadas dinamicamente pelo mouse serão persistidas automaticamente ao sair.
-4. **Para iniciar apenas o Core de teste:** Execute a classe `src.com.ignis.core.Game`.
-5. **Para gerar e executar o jogo final:** Use o menu **Build → Build Project...** no editor (ou a CLI `com.ignis.builder.Builder`) e execute o launcher gerado. Detalhes no [Guia do Builder](doc/BUILDER_GUIDE.md).
-
-### Configuração do Editor Visual
-
-As configurações do layout do editor são salvas automaticamente no arquivo `editor_layout.json`, criado na raiz do projeto ao fechar o editor:
-
-```json
-{
-  "hierarchyWidth": 250,
-  "inspectorWidth": 1229
-}
 ```
 
 ---
 
-## Organização
+## Autores e Organização
 
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/URSoftware">
-        <img src="https://github.com/URSoftware.png" width="100px;" alt="URSoftware"/>
-        <br />
-        <sub><b>URSoftware</b></sub>
-      </a>
-    </td>
-  </tr>
-</table>
+Este projeto é mantido pela organização **URSoftware**.
 
----
-
-## Autores
-
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/ThyagoToledo">
-        <img src="https://github.com/ThyagoToledo.png" width="100px;" alt="Thyago Toledo"/>
-        <br />
-        <sub><b>Thyago Toledo</b></sub>
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://github.com/FeronZerbana">
-        <img src="https://github.com/FeronZerbana.png" width="100px;" alt="FeronZerbana"/>
-        <br />
-        <sub><b>FeronZerbana</b></sub>
-      </a>
-    </td>
-  </tr>
-</table>
-
----
-
-Este projeto é desenvolvido e distribuído pela organização **URSoftware**. Para mais informações, consulte os termos de licença de uso incluídos no repositório.
+* **Thyago Toledo** - [GitHub](https://github.com/ThyagoToledo)
+* **FeronZerbana** - [GitHub](https://github.com/FeronZerbana)

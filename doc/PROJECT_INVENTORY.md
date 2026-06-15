@@ -1,6 +1,6 @@
 # Inventário Completo do IgnisEngine
 
-> Auditoria de 2026-06-14 · Branch `main` · Java 17 · ~31.100 linhas em 75 arquivos `.java`
+> Auditoria de 2026-06-15 · Branch `main` · Java 17 · ~36.500 linhas em 85 arquivos `.java`
 > Documento de inventário. Ver também: [MASTER_ROADMAP.md](MASTER_ROADMAP.md), [ARCHITECTURE.md](ARCHITECTURE.md), [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md), [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md).
 
 ## Como ler
@@ -43,7 +43,7 @@ Estado de cada sistema:
 |---|---|---|---|
 | Linguagem/runtime IgnisScript | Concluído | `core/IgnisScript.java` (1610) | Sistema de scripts próprio anexado a `GameObject`. Arquivo muito grande. |
 | Gerenciador de scripts | Concluído | `core/ScriptManager.java` (416) | Registro/ciclo de vida dos scripts. |
-| Editor de código | Concluído | `editor/EditorTextPane.java` (361), `AutocompleteManager.java` (439), `ScriptEditorWindow.java` (348) | Editor temático com autocomplete. |
+| Editor de código (Swing) | Concluído | `editor/EditorTextPane.java` (361), `AutocompleteManager.java` (439), `ScriptEditorWindow.java` (348) | Editor temático com autocomplete. |
 | Docs/refs do script | Concluído | `doc/IGNIS_SCRIPT_API.md`, `IGNISSCRIPT_QUICK_REFERENCE.md` | Documentação existente. |
 
 ### 1.2 Física / Colisões
@@ -62,7 +62,7 @@ Estado de cada sistema:
 
 ## 2. UI in-game (`core/ui`)
 
-Sistema de UI **desenhado em canvas** (separado do Swing do editor) — para HUDs/menus dentro do jogo.
+Sistema de UI **desenhado em canvas** (separado do Swing/JavaFX do editor) — para HUDs/menus dentro do jogo.
 
 | Sistema | Estado | Arquivos |
 |---|---|---|
@@ -71,7 +71,7 @@ Sistema de UI **desenhado em canvas** (separado do Swing do editor) — para HUD
 
 ---
 
-## 3. Editor (Swing)
+## 3. Editor (Swing - Legado)
 
 | Sistema | Estado | Arquivos | Observações |
 |---|---|---|---|
@@ -85,7 +85,24 @@ Sistema de UI **desenhado em canvas** (separado do Swing do editor) — para HUD
 
 ---
 
-## 4. Sub-editores
+## 3.1 Editor Moderno (JavaFX - Principal)
+
+| Arquivo / Classe | Tamanho (Bytes) | Descrição / Responsabilidade | Estado |
+|---|---|---|---|
+| `editor/fx/IgnisEditorApp.java` | ~53.655 | Janela principal do editor moderno, implementando Hierarchy (TreeView), Inspector, Scene View (ImageView render bridge) e painéis. | Concluído |
+| `editor/fx/FxProjectStartupDialog.java` | ~6.340 | Diálogo inicial para gerenciar e abrir projetos recentes ou criar novos. | Concluído |
+| `editor/fx/FxCodeEditor.java` | ~41.211 | Editor de código integrado para scripts IgnisScript, com destaque de sintaxe e painéis de ajuda. | Concluído |
+| `editor/fx/FxImageEditor.java` | ~25.897 | Painel do editor de imagens para spritesheets e texturas com suporte a camadas. | Concluído |
+| `editor/fx/FxPaintCanvas.java` | ~26.159 | Área de pintura interativa utilizada pelo editor de imagens JavaFX. | Concluído |
+| `editor/fx/FxAudioEditor.java` | ~45.148 | Interface completa de DAW (Digital Audio Workstation) para visualização e mixagem de som. | Concluído |
+| `editor/fx/FxAnimationEditor.java` | ~22.309 | Painel de controle de animações baseado em spritesheets e quadros (keyframes). | Concluído |
+| `editor/fx/FxCommunityWindow.java` | ~22.861 | Janela integrada da comunidade e do marketplace de plugins. | Concluído |
+| `editor/fx/FxBuildDialog.java` | ~8.057 | Interface de build que gerencia as opções de compilação da engine. | Concluído |
+| `editor/fx/EditorPrefs.java` | ~3.693 | Utilitário de leitura e persistência de preferências de usuário no JavaFX. | Concluído |
+
+---
+
+## 4. Sub-editores (Swing)
 
 | Sistema | Estado | Arquivos | Observações |
 |---|---|---|---|
@@ -123,16 +140,16 @@ Sistema de UI **desenhado em canvas** (separado do Swing do editor) — para HUD
 |---|---|---|
 | Build | Concluído | Maven (`pom.xml`), `maven.compiler.release=17`, plugins compiler + exec (`mainClass=com.ignis.editor.Editor`). |
 | Maven Wrapper | Concluído | `mvnw`, `mvnw.cmd`, `.mvn/wrapper`. |
-| Dependências | Concluído | Apenas `org.json:json:20231013`. JavaFX **não** adicionado ainda. |
-| Estrutura de pacotes | Concluído | `com.ignis.{core, core.ui, editor, imageeditor, audioeditor, notes, animation, builder, runtime, community, marketplace}`. |
+| Dependências | Concluído | Apenas `org.json:json:20231013` e dependências JavaFX 17 (nos módulos `javafx-controls`, `javafx-fxml`, `javafx-web`, `javafx-swing` e `javafx-media`). |
+| Estrutura de pacotes | Concluído | `com.ignis.{core, core.ui, editor, editor.fx, imageeditor, audioeditor, notes, animation, builder, runtime, community, marketplace}`. |
 | Plugins | Parcial | Instalação de plugins via marketplace (cópia para `plugins/`); sem sandbox/loader real ainda. |
 
 ---
 
 ## Resumo por classificação
 
-- **Concluído:** Core (loop, GameObject, Scene, Transform, Câmera, Input, serialização, prefabs), scripting, áudio, UI in-game, editor principal, sub-editores (imagem/áudio/notas/animação 2D), Builder Java, runtime, marketplace (cliente + web).
+- **Concluído:** Core (loop, GameObject, Scene, Transform, Câmera, Input, serialização, prefabs), scripting, áudio, UI in-game, editor principal Swing, editor principal JavaFX (10 arquivos novos), sub-editores (imagem/áudio/notas/animação 2D), Builder Java, runtime, marketplace (cliente + web).
 - **Parcial:** Assets (sem cache/gerência), colisões (sem motor de física desacoplado), exportação C++, sistema de plugins (sem sandbox/loader).
 - **Experimental:** Exportação C++ (validar geração compilável real).
-- **Planejado:** Animação 3D (skeletal/blend trees), física rígida desacoplada, migração JavaFX, multi-provedor de IA.
+- **Planejado:** Animação 3D (skeletal/blend trees), física rígida desacoplada, multi-provedor de IA.
 - **Obsoleto:** ver [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) (candidatos: trechos de `IgnisSampleCollisions`, código morto em `Editor.java`).

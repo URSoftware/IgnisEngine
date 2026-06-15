@@ -57,11 +57,10 @@ Responsável por definir informações globais do projeto.
 
 ```json
 {
-  "engineVersion": "0.1.0",
+  "engineVersion": "1.0.0",
   "projectName": "Meu Projeto Ignis",
   "mainScene": "main.scene.json"
 }
-
 ```
 
 **Campos obrigatórios:**
@@ -92,7 +91,6 @@ Cada cena representa um conjunto de entidades carregadas simultaneamente.
     }
   ]
 }
-
 ```
 
 ---
@@ -103,7 +101,7 @@ Cada cena representa um conjunto de entidades carregadas simultaneamente.
 
 * Herança direta
 * `GameObject` é classe abstrata
-* Classes concretas: `Player`, `Enemy`, `NPC`, etc.
+* Classes concretas: `Player`, `Square`, `Circle`, `Triangle`, `Star`, `Pentagon`, `MergedShape`, `Camera`.
 
 ### Campos padrão
 
@@ -184,12 +182,17 @@ public class EntityFactory {
     public static GameObject create(String type) {
         return switch (type) {
             case "Player" -> new Player();
-            case "Enemy" -> new Enemy();
-            default -> throw new RuntimeException("Tipo desconhecido: " + type);
+            case "Square" -> new Square();
+            case "Circle" -> new Circle();
+            case "Triangle" -> new Triangle();
+            case "Star" -> new Star();
+            case "Pentagon" -> new Pentagon();
+            case "MergedShape" -> new MergedShape();
+            case "Camera" -> new Camera();
+            default -> throw new RuntimeException("Tipo de entidade desconhecido: " + type);
         };
     }
 }
-
 ```
 
 📌 O campo `type` no JSON **DEVE** corresponder ao nome da classe concreta.
@@ -205,7 +208,6 @@ public abstract class GameObject {
     public abstract void loadProperties(JSONObject props);
     public abstract JSONObject saveProperties();
 }
-
 ```
 
 ✔ Apenas tipos primitivos e String
@@ -266,7 +268,6 @@ public class IgnisProjectIO {
         return new Project();
     }
 }
-
 ```
 
 ---
@@ -317,9 +318,3 @@ O formato `.ignis`:
 * Está alinhado com o editor visual atual
 
 📌 **Este documento é a referência oficial do formato .ignis.**
-
-```
-
-Deseja que eu crie uma versão resumida (README) ou adicione exemplos de implementação do `IgnisProjectIO`?
-
-```
