@@ -105,7 +105,7 @@ Nesta fase subsequente, focamos na usabilidade do motor gráfico e do editor de 
 ### C. HUDs Dedicadas de Clique Esquerdo (Menus Contextuais)
 - **Hierarchy:** Cliques com o botão esquerdo simples agora abrem diretamente a HUD rápida de opções de entidades ou o menu de criação de objetos primitivos.
 - **Assets Tree:** Configurado um listener de clique esquerdo para abrir a HUD de operações em arquivos do navegador de assets (com suporte a *Abrir/Editar*, *Renomear*, *Deletar*, *Copiar Caminho* e *Criar Novo Script*).
-- **Viewport Canvas:** Cliques esquerdos simples (sem arraste) disparam a exibição flutuante da HUD rápida da viewport.
+- **Viewport Canvas:** Cliques esquerdos simples (sem arraste) efetuam apenas a seleção do objeto (atualizando a Hierarchy e o Inspector). A HUD rápida (menu de contexto) da viewport é disparada exclusivamente com o clique do botão direito do mouse, garantindo uma navegação e seleção livre de interferências de menus.
 - **Dismiss Automático:** Todas as HUDs do botão esquerdo utilizam auto-hide padrão, fechando instantaneamente quando o usuário clica com o botão esquerdo em qualquer outra área do editor.
 
 ### D. Visual Temático Premium no Editor de Código
