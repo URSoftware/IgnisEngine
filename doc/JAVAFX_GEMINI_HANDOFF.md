@@ -1,5 +1,7 @@
 # Handoff — Migração JavaFX (item 2 da Fase 3) · responsável: Gemini
 
+> **STATUS 2026-06-15 — FASE 3 CONCLUÍDA E INTEGRADA.** As 6 telas-ferramenta foram migradas para JavaFX (`FxCommunityWindow`, `FxNotesWindow`, `FxAnimationEditor`, `FxImageEditor`/`FxPaintCanvas`, `FxAudioEditor`, `FxCodeEditor`) e **todas estão ligadas ao menu Ferramentas** da casca `IgnisEditorApp` — incluindo o `FxCodeEditor`, o último a ser fiado. Além disso, o **input de teclado/mouse do jogo passou a ser roteado para o viewport FX** (`IgnisEditorApp.wireFxInputToEngine`, aditivo, via callbacks AWT do `Input`). A casca JavaFX não usa mais nenhum fallback Swing. Detalhes em [JAVAFX_MIGRATION_PLAN.md](JAVAFX_MIGRATION_PLAN.md) (Fase 3). Próxima fase: **F4** (tema CSS, layout persistido; remover `javafx-swing` só após desacoplar o `Renderer`).
+
 > Divisão da Fase 3 da migração Swing→JavaFX (branch `main`):
 > - **Claude:** passo 1 (`BuildDialog` nativo) + passo 3 (ToolBar, atalhos, Play/Stop).
 > - **Gemini (este documento):** item 2 — migrar nativamente as telas-ferramenta listadas abaixo.

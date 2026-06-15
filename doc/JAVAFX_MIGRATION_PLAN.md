@@ -1,6 +1,6 @@
 # Plano de Migração da Interface do Editor: Swing/AWT → JavaFX
 
-> Status: **F0 + F1 + F2 + F3 (interop) na `main`** · infra · casca/ponte · projeto+seleção+Inspector · janelas-ferramenta acessíveis · Java 17 · JavaFX 17 · 2026-06-14
+> Status: **F0 + F1 + F2 + F3 concluídas na `main`** · infra · casca/ponte · projeto+seleção+Inspector · janelas-ferramenta JavaFX 100% ligadas ao menu · input do jogo roteado para o viewport FX · Java 17 · JavaFX 17 · 2026-06-15
 > Complementa [ARCHITECTURE.md](ARCHITECTURE.md) e [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md).
 >
 > **Como rodar:** editor JavaFX (em migração) → `mvnw javafx:run` · editor Swing clássico → `mvnw exec:java`.
@@ -126,7 +126,7 @@ Justificativa: o render acoplado ao AWT e o `Editor.java` monolítico tornam o b
 - ✅ **F0 — Infra/build (feito):** deps JavaFX 17 (`javafx-controls`, `javafx-graphics`, `javafx-swing`) + `javafx-maven-plugin`; pacote `com.ignis.editor.fx` (Swing intacto). Compila (`mvnw compile`).
 - ✅ **F1 — Casca + ponte (feito):** `IgnisEditorApp` (`Application`/`BorderPane`/`MenuBar`/`SplitPane`); ponte de render num `Canvas` FX central (`Game.renderWorldTo` → `SwingFXUtils` → `Canvas` via `AnimationTimer`); Hierarchy já nativa (`TreeView`); Inspector placeholder. Pendente: validar FPS em uso real e ligar o viewport a um projeto/cena carregado (hoje cena de amostra).
 - ✅ **F2 — Painéis nativos (feito):** abrir projeto `.ignis` real no viewport (FileChooser → `IgnisProjectIO.load`); Hierarchy `TreeView` com seleção que desenha contorno no viewport (`Game.renderWorldTo` com objeto selecionado); Inspector `GridPane` editável (nome/x/y/largura/altura/rotação/visível) escrevendo no `GameObject` em tempo real. Pendente: ToolBar, atalhos, e Play/Stop no viewport JavaFX.
-- 🔄 **F3 — Janelas-ferramenta (em andamento):** trabalho dividido Claude/Gemini.
+- ✅ **F3 — Janelas-ferramenta (concluída):** trabalho dividido Claude/Gemini.
   - ✅ **Claude:** `BuildDialog` nativo (`FxBuildDialog`, reusa a API do `Builder`); **ToolBar** (Abrir/Build/Play/Stop); **atalhos** (Ctrl+O, Ctrl+B, F5, F6); **Play/Stop** ligados ao loop da engine (`playWorld`/`start`, `stopWorld`/`stop`, `ScriptManager` no carregar projeto).
   - ✅ **Gemini (100% Completo):**
     - `CommunityFrame` → `FxCommunityWindow` (Comunidade & Marketplace).
@@ -135,8 +135,10 @@ Justificativa: o render acoplado ao AWT e o `Editor.java` monolítico tornam o b
     - `ImageEditorFrame` / `PaintCanvas` → `FxImageEditor` / `FxPaintCanvas` (Editor de Imagens com camadas e estabilizador de traço).
     - `AudioEditorFrame` → `FxAudioEditor` (DAW com Waveform PCM e 3-Band Equalizer crossover integrado ao Mixer).
     - `ScriptEditorWindow` / `EditorTextPane` / `AutocompleteManager` → `FxCodeEditor` (Editor de Código baseado em RichTextFX com autocomplete context-sensitive, Ghost Text, temas por CSS dinâmico e auto-save).
-  - **Pendente (geral):** rotear input de teclado/mouse do jogo para o viewport FX (Play hoje roda simulação/scripts por tempo, mas sem input).
+  - ✅ **Fiação do menu (2026-06-15):** o menu **Ferramentas** da casca `IgnisEditorApp` abre **somente** janelas JavaFX — Audio (`FxAudioEditor`), Imagens (`FxImageEditor`), Animação (`FxAnimationEditor`), Notas (`FxNotesWindow`), Comunidade (`FxCommunityWindow`), **Editor de Código (`FxCodeEditor`)** e Build (`FxBuildDialog`). Sem fallback Swing na casca FX. O `FxCodeEditor` foi o último a ser ligado: o item abre um `ChoiceDialog` com os scripts do projeto (`ScriptManager.listAvailableScripts`) + opção "Novo script" (`createNewScript`, com descoberta do nome sanitizado via diff da lista) e instancia `new FxCodeEditor(null, scriptManager, scriptName)` (o parâmetro `Editor` Swing é null — já tratado por null-check na classe).
+  - ✅ **Input no viewport FX (2026-06-15):** teclado/mouse do `Canvas` JavaFX roteados ao singleton `com.ignis.core.Input` da engine, fabricando `java.awt.event.KeyEvent`/`MouseEvent` e chamando os **callbacks AWT públicos** do `Input` (mesma superfície que o editor Swing usa via `Input.init`). **Puramente aditivo** — todo o código fica em `IgnisEditorApp.wireFxInputToEngine(...)`, sem tocar `com.ignis.core` nem o Swing. Teclado encaminhado **apenas em Play** (`playing==true`, para não colidir com os atalhos do editor); mouse sempre. `Canvas` focável (`setFocusTraversable` + `requestFocus` no clique e no Play). **Pendente de validação manual em GUI** (foco do Canvas e cobertura do mapeamento FX `KeyCode`→AWT `VK_*`).
 - **F4 — Tema e limpeza:** CSS escuro (substitui cores hardcoded), layout persistido (SplitPane/Stage), remover `javafx-swing`. `runtime/GameRuntime` pode permanecer AWT (menor footprint) — decidir.
+  - **Bloqueio conhecido:** remover `javafx-swing` depende de eliminar a ponte de render `SwingFXUtils` (extrair um `Renderer` desacoplado do toolkit) — não fazer antes disso, sob risco de quebrar o render.
 
 ## 10. Pré-requisitos (antes de iniciar código JavaFX)
 

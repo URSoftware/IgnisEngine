@@ -15,12 +15,14 @@ import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.ToolBar;
@@ -61,6 +63,10 @@ public class IgnisEditorApp extends Application {
     private Button playButton;
     private Button stopButton;
     private boolean playing = false;
+    private Canvas viewportCanvas;
+    // Fonte AWT (nao exibida) usada apenas como 'source' nao-nulo ao fabricar
+    // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
+    private final java.awt.Component awtEventSource = new java.awt.Canvas();
 
     private final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
     private TreeView<String> hierarchy;
@@ -95,6 +101,8 @@ public class IgnisEditorApp extends Application {
         canvas.widthProperty().bind(viewportPane.widthProperty());
         canvas.heightProperty().bind(viewportPane.heightProperty());
         viewportPane.getChildren().add(canvas);
+        this.viewportCanvas = canvas;
+        wireFxInputToEngine(canvas);
 
         // ---- Hierarchy (esquerda) ----
         hierarchy = buildHierarchy();
@@ -155,9 +163,11 @@ public class IgnisEditorApp extends Application {
         miNotes.setOnAction(e -> openNotes());
         MenuItem miCommunity = new MenuItem("Comunidade & Marketplace");
         miCommunity.setOnAction(e -> openCommunity());
+        MenuItem miCode = new MenuItem("Editor de Codigo (Scripts)");
+        miCode.setOnAction(e -> openCodeEditor());
         MenuItem miBuild = new MenuItem("Build do Projeto");
         miBuild.setOnAction(e -> openBuildDialog());
-        tools.getItems().addAll(miAudio, miImage, miAnim, miNotes, miCommunity, miBuild);
+        tools.getItems().addAll(miAudio, miImage, miAnim, miNotes, miCommunity, miCode, miBuild);
 
         Menu view = new Menu("Visualizar");
         view.getItems().add(new MenuItem("Viewport"));
@@ -273,6 +283,62 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // Editor de Codigo nativo (FxCodeEditor / RichTextFX). Liga a ultima janela-ferramenta
+    // do Gemini ao menu. Sem editor Swing acoplado: passa null (FxCodeEditor ja trata null).
+    private void openCodeEditor() {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) {
+                sm = new com.ignis.core.ScriptManager(projectFolder);
+                game.setScriptManager(sm);
+            }
+            final com.ignis.core.ScriptManager scriptManager = sm;
+
+            final String novoLabel = "➕ Novo script…";
+            java.util.List<String> options = new java.util.ArrayList<>(scriptManager.listAvailableScripts());
+            options.add(novoLabel);
+
+            ChoiceDialog<String> picker = new ChoiceDialog<>(options.get(0), options);
+            picker.setTitle("Editor de Codigo");
+            picker.setHeaderText(null);
+            picker.setContentText("Escolha um script para editar:");
+            java.util.Optional<String> choice = picker.showAndWait();
+            if (choice.isEmpty()) return;
+
+            String scriptName = choice.get();
+            if (novoLabel.equals(scriptName)) {
+                TextInputDialog input = new TextInputDialog("NovoScript");
+                input.setTitle("Novo script");
+                input.setHeaderText(null);
+                input.setContentText("Nome da classe do script:");
+                java.util.Optional<String> nameOpt = input.showAndWait();
+                if (nameOpt.isEmpty() || nameOpt.get().trim().isEmpty()) return;
+
+                java.util.List<String> before = scriptManager.listAvailableScripts();
+                if (!scriptManager.createNewScript(nameOpt.get().trim())) {
+                    new Alert(Alert.AlertType.ERROR,
+                            "Nao foi possivel criar o script (nome invalido ou ja existe).").showAndWait();
+                    return;
+                }
+                // createNewScript sanitiza o nome; descobre o nome real via diff da lista.
+                java.util.List<String> after = scriptManager.listAvailableScripts();
+                after.removeAll(before);
+                if (after.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR,
+                            "Script criado, mas nao foi possivel localiza-lo.").showAndWait();
+                    return;
+                }
+                scriptName = after.get(0);
+            }
+
+            FxCodeEditor codeEditor = new FxCodeEditor(null, scriptManager, scriptName);
+            codeEditor.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
     // Build nativo em JavaFX (Fase 3, passo 1).
     private void openBuildDialog() {
         if (!requireProject() || currentIgnisFile == null) return;
@@ -298,6 +364,8 @@ public class IgnisEditorApp extends Application {
             playing = true;
             playButton.setDisable(true);
             stopButton.setDisable(false);
+            // Foco no viewport para que as teclas cheguem ao jogo durante o Play.
+            if (viewportCanvas != null) viewportCanvas.requestFocus();
             setStatus("Executando (Play)…");
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao iniciar Play:\n" + ex.getMessage()).showAndWait();
@@ -319,6 +387,96 @@ public class IgnisEditorApp extends Application {
         playing = false;
         if (playButton != null) playButton.setDisable(false);
         if (stopButton != null) stopButton.setDisable(true);
+    }
+
+    // ---------------- Roteamento de input para o viewport FX (Fase 3) ----------------
+    // Liga os eventos de teclado/mouse do Canvas JavaFX ao singleton Input da engine,
+    // fabricando java.awt.event.KeyEvent/MouseEvent e chamando os callbacks AWT publicos
+    // do Input (mesma superficie que o editor Swing usa via Input.init). Puramente
+    // aditivo: nao altera com.ignis.core. O teclado so e encaminhado durante o Play
+    // (playing) para nao colidir com os atalhos do editor; o mouse e sempre encaminhado
+    // (seu estado so e lido por scripts em Play). Validacao requer teste manual de GUI.
+
+    private void wireFxInputToEngine(Canvas canvas) {
+        canvas.setFocusTraversable(true);
+
+        canvas.setOnMousePressed(e -> {
+            canvas.requestFocus();
+            com.ignis.core.Input.getInstance().mousePressed(
+                    buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED));
+        });
+        canvas.setOnMouseReleased(e -> com.ignis.core.Input.getInstance().mouseReleased(
+                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_RELEASED)));
+        canvas.setOnMouseMoved(e -> com.ignis.core.Input.getInstance().mouseMoved(
+                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_MOVED)));
+        canvas.setOnMouseDragged(e -> com.ignis.core.Input.getInstance().mouseDragged(
+                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_DRAGGED)));
+
+        canvas.setOnKeyPressed(e -> {
+            if (!playing) return;
+            int vk = toAwtKeyCode(e.getCode());
+            if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
+                com.ignis.core.Input.getInstance().keyPressed(
+                        buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_PRESSED, vk));
+                e.consume();
+            }
+        });
+        canvas.setOnKeyReleased(e -> {
+            if (!playing) return;
+            int vk = toAwtKeyCode(e.getCode());
+            if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
+                com.ignis.core.Input.getInstance().keyReleased(
+                        buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_RELEASED, vk));
+                e.consume();
+            }
+        });
+    }
+
+    private java.awt.event.KeyEvent buildAwtKeyEvent(int id, int vk) {
+        return new java.awt.event.KeyEvent(awtEventSource, id, System.currentTimeMillis(), 0,
+                vk, java.awt.event.KeyEvent.CHAR_UNDEFINED);
+    }
+
+    private java.awt.event.MouseEvent buildAwtMouseEvent(javafx.scene.input.MouseEvent e, int id) {
+        int awtButton;
+        switch (e.getButton()) {
+            case PRIMARY:   awtButton = java.awt.event.MouseEvent.BUTTON1; break;
+            case MIDDLE:    awtButton = java.awt.event.MouseEvent.BUTTON2; break;
+            case SECONDARY: awtButton = java.awt.event.MouseEvent.BUTTON3; break;
+            default:        awtButton = java.awt.event.MouseEvent.NOBUTTON; break;
+        }
+        boolean pressOrRelease = (id == java.awt.event.MouseEvent.MOUSE_PRESSED
+                || id == java.awt.event.MouseEvent.MOUSE_RELEASED);
+        return new java.awt.event.MouseEvent(awtEventSource, id, System.currentTimeMillis(), 0,
+                (int) e.getX(), (int) e.getY(), pressOrRelease ? 1 : 0, false, awtButton);
+    }
+
+    // Traduz o KeyCode do JavaFX para o codigo VK_* do AWT esperado pelo Input.
+    // Para letras/digitos, o codigo VK coincide com o ASCII maiusculo (VK_A=='A', VK_0=='0').
+    private static int toAwtKeyCode(javafx.scene.input.KeyCode code) {
+        switch (code) {
+            case UP:         return java.awt.event.KeyEvent.VK_UP;
+            case DOWN:       return java.awt.event.KeyEvent.VK_DOWN;
+            case LEFT:       return java.awt.event.KeyEvent.VK_LEFT;
+            case RIGHT:      return java.awt.event.KeyEvent.VK_RIGHT;
+            case SPACE:      return java.awt.event.KeyEvent.VK_SPACE;
+            case ENTER:      return java.awt.event.KeyEvent.VK_ENTER;
+            case ESCAPE:     return java.awt.event.KeyEvent.VK_ESCAPE;
+            case TAB:        return java.awt.event.KeyEvent.VK_TAB;
+            case BACK_SPACE: return java.awt.event.KeyEvent.VK_BACK_SPACE;
+            case SHIFT:      return java.awt.event.KeyEvent.VK_SHIFT;
+            case CONTROL:    return java.awt.event.KeyEvent.VK_CONTROL;
+            case ALT:        return java.awt.event.KeyEvent.VK_ALT;
+            default:
+                String n = code.getName();
+                if (n != null && n.length() == 1) {
+                    char c = Character.toUpperCase(n.charAt(0));
+                    if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+                        return c;
+                    }
+                }
+                return java.awt.event.KeyEvent.VK_UNDEFINED;
+        }
     }
 
     // ---------------- Hierarchy ----------------
