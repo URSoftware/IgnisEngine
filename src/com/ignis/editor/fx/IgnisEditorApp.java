@@ -44,6 +44,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.ToggleButton;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -86,6 +92,13 @@ public class IgnisEditorApp extends Application {
     private TextField nameField, xField, yField, wField, hField, rotField;
     private CheckBox visibleCheck;
 
+    private Label cameraPosLabel;
+    private Label cameraZoomLabel;
+    private GameObject clipboardObject;
+    private ToggleButton btnMove;
+    private ToggleButton btnRotate;
+    private ToggleButton btnScale;
+
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
@@ -103,8 +116,51 @@ public class IgnisEditorApp extends Application {
         stopButton = new Button("⏹ Stop");
         stopButton.setOnAction(e -> stopWorld());
         stopButton.setDisable(true);
-        ToolBar toolBar = new ToolBar(btnOpen, btnBuild, new Separator(), playButton, stopButton);
+
+        btnMove = new ToggleButton("Mover (W)");
+        btnRotate = new ToggleButton("Rotacionar (E)");
+        btnScale = new ToggleButton("Redimensionar (R)");
+        ToggleGroup toolGroup = new ToggleGroup();
+        btnMove.setToggleGroup(toolGroup);
+        btnRotate.setToggleGroup(toolGroup);
+        btnScale.setToggleGroup(toolGroup);
+        btnMove.setSelected(true);
+        
+        btnMove.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE));
+        btnRotate.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.ROTATE));
+        btnScale.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.SCALE));
+
+        Button btnZoomIn = new Button("Zoom In");
+        btnZoomIn.setOnAction(e -> zoomCamera(1.25));
+        Button btnZoomOut = new Button("Zoom Out");
+        btnZoomOut.setOnAction(e -> zoomCamera(0.8));
+        Button btnResetCam = new Button("Reset Cam");
+        btnResetCam.setOnAction(e -> resetCamera());
+        Button btnFocusSelected = new Button("Focus Selected");
+        btnFocusSelected.setOnAction(e -> focusCameraOnSelected());
+
+        cameraPosLabel = new Label("Cam Pos: (0.0, 0.0)");
+        cameraPosLabel.setStyle("-fx-text-fill: white; -fx-padding: 0 10;");
+        cameraZoomLabel = new Label("Zoom: 100%");
+        cameraZoomLabel.setStyle("-fx-text-fill: white; -fx-padding: 0 10;");
+
+        ToolBar toolBar = new ToolBar(
+            btnOpen, btnBuild, new Separator(),
+            playButton, stopButton, new Separator(),
+            btnMove, btnRotate, btnScale, new Separator(),
+            btnZoomIn, btnZoomOut, btnResetCam, btnFocusSelected, new Separator(),
+            cameraPosLabel, cameraZoomLabel
+        );
         root.setTop(new VBox(buildMenuBar(stage), toolBar));
+
+        // Configure selection listener from Game
+        game.addSelectionListener(go -> {
+            Platform.runLater(() -> {
+                if (selected != go) {
+                    selectEntity(go);
+                }
+            });
+        });
 
         // ---- Viewport central ----
         Pane viewportPane = new Pane();
@@ -142,6 +198,68 @@ public class IgnisEditorApp extends Application {
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN), () -> saveProjectAs(stage));
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), this::playWorld);
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), this::stopWorld);
+
+        // Scene key event filter for tools, selection controls, camera resets
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+            if (scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl) {
+                return;
+            }
+
+            if (ev.getCode() == KeyCode.W && !ev.isControlDown() && !ev.isAltDown() && !ev.isShiftDown()) {
+                btnMove.setSelected(true);
+                game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE);
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.E && !ev.isControlDown() && !ev.isAltDown() && !ev.isShiftDown()) {
+                btnRotate.setSelected(true);
+                game.setCurrentTool(com.ignis.core.Game.ToolType.ROTATE);
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.R && !ev.isControlDown() && !ev.isAltDown() && !ev.isShiftDown()) {
+                btnScale.setSelected(true);
+                game.setCurrentTool(com.ignis.core.Game.ToolType.SCALE);
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.F && !ev.isControlDown() && !ev.isAltDown() && !ev.isShiftDown()) {
+                focusCameraOnSelected();
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.DELETE) {
+                deleteSelected();
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.F2) {
+                renameSelected();
+                ev.consume();
+            } else if (ev.getCode() == KeyCode.HOME) {
+                resetCamera();
+                ev.consume();
+            }
+
+            if (ev.isControlDown()) {
+                if (ev.getCode() == KeyCode.D) {
+                    duplicateSelected();
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.C) {
+                    copySelected();
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.V) {
+                    pasteSelected();
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.EQUALS || ev.getCode() == KeyCode.ADD) {
+                    zoomCamera(1.25);
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.MINUS || ev.getCode() == KeyCode.SUBTRACT) {
+                    zoomCamera(0.8);
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.DIGIT0 || ev.getCode() == KeyCode.NUMPAD0) {
+                    com.ignis.core.Camera cam = game.getMainCamera();
+                    if (cam != null) {
+                        cam.setZoom(1.0);
+                        updateCameraLabels();
+                    }
+                    ev.consume();
+                } else if (ev.getCode() == KeyCode.G) {
+                    game.setShowGrid(!game.isShowGrid());
+                    ev.consume();
+                }
+            }
+        });
         stage.setTitle("IgnisEngine — Editor (JavaFX) [migracao]");
         stage.setScene(scene);
         stage.setOnCloseRequest(e -> {
@@ -204,7 +322,60 @@ public class IgnisEditorApp extends Application {
         tools.getItems().addAll(miAudio, miImage, miAnim, miNotes, miCommunity, miCode, miBuild);
 
         Menu view = new Menu("Visualizar");
-        view.getItems().add(new MenuItem("Viewport"));
+        
+        MenuItem zoomInItem = new MenuItem("Zoom In");
+        zoomInItem.setAccelerator(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.CONTROL_DOWN));
+        zoomInItem.setOnAction(e -> zoomCamera(1.25));
+        
+        MenuItem zoomOutItem = new MenuItem("Zoom Out");
+        zoomOutItem.setAccelerator(new KeyCodeCombination(KeyCode.MINUS, KeyCombination.CONTROL_DOWN));
+        zoomOutItem.setOnAction(e -> zoomCamera(0.8));
+        
+        MenuItem zoom100Item = new MenuItem("Zoom to 100%");
+        zoom100Item.setAccelerator(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.CONTROL_DOWN));
+        zoom100Item.setOnAction(e -> {
+            com.ignis.core.Camera cam = game.getMainCamera();
+            if (cam != null) {
+                cam.setZoom(1.0);
+                updateCameraLabels();
+            }
+        });
+        
+        MenuItem resetCamItem = new MenuItem("Reset Camera");
+        resetCamItem.setAccelerator(new KeyCodeCombination(KeyCode.HOME));
+        resetCamItem.setOnAction(e -> resetCamera());
+        
+        MenuItem focusSelectedItem = new MenuItem("Focus on Selected");
+        focusSelectedItem.setAccelerator(new KeyCodeCombination(KeyCode.F));
+        focusSelectedItem.setOnAction(e -> focusCameraOnSelected());
+        
+        CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
+        showGridItem.setSelected(game.isShowGrid());
+        showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
+        showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
+        
+        Menu gridSizeMenu = new Menu("Grid Size");
+        ToggleGroup gridSizeGroup = new ToggleGroup();
+        int[] gridSizes = {16, 32, 64, 128};
+        for (int size : gridSizes) {
+            RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
+            sizeItem.setToggleGroup(gridSizeGroup);
+            sizeItem.setSelected(game.getGridSize() == size);
+            sizeItem.setOnAction(e -> game.setGridSize(size));
+            gridSizeMenu.getItems().add(sizeItem);
+        }
+        
+        CheckMenuItem showCollidersItem = new CheckMenuItem("Show Colliders");
+        showCollidersItem.setSelected(game.isShowColliders());
+        showCollidersItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
+        showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
+        
+        view.getItems().addAll(
+            zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
+            resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
+            showGridItem, gridSizeMenu, new SeparatorMenuItem(),
+            showCollidersItem
+        );
 
         Menu help = new Menu("Ajuda");
         MenuItem about = new MenuItem("Sobre");
@@ -251,18 +422,30 @@ public class IgnisEditorApp extends Application {
             mi.setOnAction(e -> createEntity(t));
             criar.getItems().add(mi);
         }
-        MenuItem dup = new MenuItem("Duplicar");
+        MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
         dup.setOnAction(e -> duplicateSelected());
-        MenuItem ren = new MenuItem("Renomear…");
+        MenuItem ren = new MenuItem("Renomear… (F2)");
         ren.setOnAction(e -> renameSelected());
-        MenuItem del = new MenuItem("Deletar");
+        MenuItem del = new MenuItem("Deletar (Delete)");
         del.setOnAction(e -> deleteSelected());
+        MenuItem copyItem = new MenuItem("Copiar (Ctrl+C)");
+        copyItem.setOnAction(e -> copySelected());
+        MenuItem pasteItem = new MenuItem("Colar (Ctrl+V)");
+        pasteItem.setOnAction(e -> pasteSelected());
+
+        Menu ordenar = new Menu("Ordenar");
         MenuItem up = new MenuItem("Mover para cima");
         up.setOnAction(e -> moveSelected(-1));
         MenuItem down = new MenuItem("Mover para baixo");
         down.setOnAction(e -> moveSelected(1));
+        MenuItem top = new MenuItem("Mover para o topo");
+        top.setOnAction(e -> moveSelectedTo(0));
+        MenuItem bottom = new MenuItem("Mover para o fundo");
+        bottom.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
+        ordenar.getItems().addAll(up, down, top, bottom);
+
         menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
-                new SeparatorMenuItem(), up, down);
+                new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar);
         return menu;
     }
 
@@ -730,15 +913,44 @@ public class IgnisEditorApp extends Application {
 
         canvas.setOnMousePressed(e -> {
             canvas.requestFocus();
-            com.ignis.core.Input.getInstance().mousePressed(
-                    buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED));
+            java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED);
+            com.ignis.core.Input.getInstance().mousePressed(awtEvent);
+            game.dispatchEvent(awtEvent);
         });
-        canvas.setOnMouseReleased(e -> com.ignis.core.Input.getInstance().mouseReleased(
-                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_RELEASED)));
-        canvas.setOnMouseMoved(e -> com.ignis.core.Input.getInstance().mouseMoved(
-                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_MOVED)));
-        canvas.setOnMouseDragged(e -> com.ignis.core.Input.getInstance().mouseDragged(
-                buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_DRAGGED)));
+        canvas.setOnMouseReleased(e -> {
+            java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_RELEASED);
+            com.ignis.core.Input.getInstance().mouseReleased(awtEvent);
+            game.dispatchEvent(awtEvent);
+        });
+        canvas.setOnMouseMoved(e -> {
+            java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_MOVED);
+            com.ignis.core.Input.getInstance().mouseMoved(awtEvent);
+            game.dispatchEvent(awtEvent);
+        });
+        canvas.setOnMouseDragged(e -> {
+            java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_DRAGGED);
+            com.ignis.core.Input.getInstance().mouseDragged(awtEvent);
+            game.dispatchEvent(awtEvent);
+        });
+
+        canvas.setOnScroll(e -> {
+            double deltaY = e.getDeltaY();
+            if (deltaY != 0) {
+                double factor = deltaY > 0 ? 1.15 : 0.85;
+                zoomCamera(factor);
+            }
+        });
+
+        ContextMenu viewportMenu = buildViewportContextMenu();
+        canvas.setOnContextMenuRequested(e -> {
+            GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
+            if (clicked != null) {
+                selectEntity(clicked);
+            } else {
+                selectEntity(null);
+            }
+            viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
+        });
 
         canvas.setOnKeyPressed(e -> {
             if (!playing) return;
@@ -1115,6 +1327,11 @@ public class IgnisEditorApp extends Application {
             rotField.setText(String.valueOf(go.getRotation()));
             visibleCheck.setSelected(go.isVisible());
         }
+
+        if (game.getSelectedObject() != go) {
+            game.setSelectedObject(go);
+        }
+
         suppressInspectorEvents = false;
     }
 
@@ -1156,6 +1373,10 @@ public class IgnisEditorApp extends Application {
                 if (buffer == null || buffer.getWidth() != w || buffer.getHeight() != h) {
                     buffer = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
                     fxImage = new WritableImage(w, h);
+                    game.setSize(w, h);
+                    if (game.getViewport() != null) {
+                        game.getViewport().resize(w, h);
+                    }
                 }
 
                 Graphics2D g2d = buffer.createGraphics();
@@ -1169,6 +1390,8 @@ public class IgnisEditorApp extends Application {
                 GraphicsContext gc = canvas.getGraphicsContext2D();
                 gc.clearRect(0, 0, w, h);
                 gc.drawImage(fxImage, 0, 0);
+
+                updateCameraLabels();
             }
         };
         timer.start();
@@ -1176,5 +1399,106 @@ public class IgnisEditorApp extends Application {
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    private void zoomCamera(double factor) {
+        com.ignis.core.Camera cam = game.getMainCamera();
+        if (cam != null) {
+            cam.setZoom(cam.getZoom() * factor);
+            updateCameraLabels();
+        }
+    }
+
+    private void resetCamera() {
+        com.ignis.core.Camera cam = game.getMainCamera();
+        if (cam != null) {
+            cam.setPosition(0, 0);
+            cam.setZoom(1.0);
+            cam.setRotation(0);
+            updateCameraLabels();
+        }
+    }
+
+    private void focusCameraOnSelected() {
+        GameObject sel = this.selected;
+        com.ignis.core.Camera cam = game.getMainCamera();
+        if (sel != null && cam != null) {
+            double centerX = sel.getX() + sel.getWidth() / 2.0;
+            double centerY = sel.getY() + sel.getHeight() / 2.0;
+            cam.setPosition(centerX, centerY);
+            updateCameraLabels();
+        }
+    }
+
+    private void updateCameraLabels() {
+        if (cameraPosLabel == null || cameraZoomLabel == null) return;
+        com.ignis.core.Camera cam = game.getMainCamera();
+        if (cam != null) {
+            Platform.runLater(() -> {
+                cameraPosLabel.setText(String.format("Cam Pos: (%.1f, %.1f)", cam.getX(), cam.getY()));
+                cameraZoomLabel.setText(String.format("Zoom: %.0f%%", cam.getZoom() * 100));
+            });
+        }
+    }
+
+    private void copySelected() {
+        if (selected != null) {
+            clipboardObject = selected;
+            setStatus("Copiado: " + selected.getName());
+        }
+    }
+
+    private void pasteSelected() {
+        if (clipboardObject != null) {
+            try {
+                GameObject original = clipboardObject;
+                GameObject copy = com.ignis.core.EntityFactory.create(original.getType());
+                copy.setGame(game);
+                copy.setX(original.getX() + 20);
+                copy.setY(original.getY() + 20);
+                copy.setWidth(original.getWidth());
+                copy.setHeight(original.getHeight());
+                copy.setSpritePath(original.getSpritePath());
+                try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) {}
+                copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
+                game.addEntity(copy);
+                if (copy instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) copy);
+
+                refreshHierarchy();
+                selectEntity(copy);
+                setStatus("Colado: " + copy.getName());
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Erro ao colar objeto:\n" + ex.getMessage()).showAndWait();
+            }
+        }
+    }
+
+    private ContextMenu buildViewportContextMenu() {
+        ContextMenu menu = new ContextMenu();
+
+        Menu criar = new Menu("Criar objeto");
+        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
+            MenuItem mi = new MenuItem(t);
+            mi.setOnAction(e -> createEntity(t));
+            criar.getItems().add(mi);
+        }
+
+        MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
+        dup.setOnAction(e -> duplicateSelected());
+
+        MenuItem ren = new MenuItem("Renomear… (F2)");
+        ren.setOnAction(e -> renameSelected());
+
+        MenuItem del = new MenuItem("Deletar (Delete)");
+        del.setOnAction(e -> deleteSelected());
+
+        MenuItem copyItem = new MenuItem("Copiar (Ctrl+C)");
+        copyItem.setOnAction(e -> copySelected());
+
+        MenuItem pasteItem = new MenuItem("Colar (Ctrl+V)");
+        pasteItem.setOnAction(e -> pasteSelected());
+
+        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del, new SeparatorMenuItem(), copyItem, pasteItem);
+        return menu;
     }
 }

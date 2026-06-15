@@ -97,4 +97,17 @@ public final class EditorPrefs {
         }
         return valid;
     }
+
+    /** Obtem o tema ativo do editor de codigo (default: Classic Dark) */
+    public static String getCodeEditorTheme() {
+        return read().optString("codeEditorTheme", "Classic Dark");
+    }
+
+    /** Salva o tema ativo do editor de codigo */
+    public static void setCodeEditorTheme(String themeName) {
+        JSONObject json = read();
+        json.put("codeEditorTheme", themeName);
+        write(json);
+    }
 }
+

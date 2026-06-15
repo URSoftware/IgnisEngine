@@ -286,12 +286,12 @@ public class FxCodeEditor extends Stage {
             String selected = themeBox.getValue();
             if (selected == null) return;
             switch (selected) {
-                case "Dracula" -> applyTheme(DRACULA);
-                case "Monokai" -> applyTheme(MONOKAI);
-                case "One Dark" -> applyTheme(ONE_DARK);
-                case "Solarized Dark" -> applyTheme(SOLARIZED_DARK);
-                case "Classic Dark" -> applyTheme(CLASSIC_DARK);
-                case "Classic Light" -> applyTheme(CLASSIC_LIGHT);
+                case "Dracula" -> { applyTheme(DRACULA); EditorPrefs.setCodeEditorTheme("Dracula"); }
+                case "Monokai" -> { applyTheme(MONOKAI); EditorPrefs.setCodeEditorTheme("Monokai"); }
+                case "One Dark" -> { applyTheme(ONE_DARK); EditorPrefs.setCodeEditorTheme("One Dark"); }
+                case "Solarized Dark" -> { applyTheme(SOLARIZED_DARK); EditorPrefs.setCodeEditorTheme("Solarized Dark"); }
+                case "Classic Dark" -> { applyTheme(CLASSIC_DARK); EditorPrefs.setCodeEditorTheme("Classic Dark"); }
+                case "Classic Light" -> { applyTheme(CLASSIC_LIGHT); EditorPrefs.setCodeEditorTheme("Classic Light"); }
             }
         });
 
@@ -431,7 +431,17 @@ public class FxCodeEditor extends Stage {
         // Setup Scene and Theme
         Scene scene = new Scene(root, 800, 600);
         setScene(scene);
-        applyTheme(CLASSIC_DARK);
+        
+        String savedTheme = EditorPrefs.getCodeEditorTheme();
+        themeBox.setValue(savedTheme);
+        switch (savedTheme) {
+            case "Dracula" -> applyTheme(DRACULA);
+            case "Monokai" -> applyTheme(MONOKAI);
+            case "One Dark" -> applyTheme(ONE_DARK);
+            case "Solarized Dark" -> applyTheme(SOLARIZED_DARK);
+            case "Classic Light" -> applyTheme(CLASSIC_LIGHT);
+            default -> applyTheme(CLASSIC_DARK);
+        }
     }
 
     private void handleKeyPressedFilter(KeyEvent e) {
@@ -892,34 +902,34 @@ public class FxCodeEditor extends Stage {
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +
             "}\n" +
-            ".caret {\n" +
+            ".code-area .caret {\n" +
             "    -fx-stroke: %s;\n" +
             "}\n" +
-            ".keyword {\n" +
+            ".code-area .keyword {\n" +
             "    -fx-fill: %s;\n" +
             "    -fx-font-weight: bold;\n" +
             "}\n" +
-            ".type {\n" +
+            ".code-area .type {\n" +
             "    -fx-fill: %s;\n" +
             "}\n" +
-            ".number {\n" +
+            ".code-area .number {\n" +
             "    -fx-fill: %s;\n" +
             "}\n" +
-            ".string {\n" +
+            ".code-area .string {\n" +
             "    -fx-fill: %s;\n" +
             "}\n" +
-            ".comment {\n" +
+            ".code-area .comment {\n" +
             "    -fx-fill: %s;\n" +
             "    -fx-font-style: italic;\n" +
             "}\n" +
-            ".annotation {\n" +
+            ".code-area .annotation {\n" +
             "    -fx-fill: %s;\n" +
             "}\n" +
-            ".paragraph-graphic {\n" +
+            ".code-area .paragraph-graphic {\n" +
             "    -fx-background-color: %s;\n" +
             "    -fx-padding: 0 5 0 5;\n" +
             "}\n" +
-            ".lineno {\n" +
+            ".code-area .lineno {\n" +
             "    -fx-text-fill: %s;\n" +
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +

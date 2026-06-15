@@ -84,6 +84,7 @@ Toda a documentação técnica detalhada do projeto está organizada de forma mo
 
 ### Planejamento e Arquitetura
 * [Roadmap de Evolução](doc/MASTER_ROADMAP.md): Planejamento oficial de evolução da engine e fases de desenvolvimento.
+* [Paridade de Recursos JavaFX](doc/JAVAFX_MISSING_FEATURES_PLAN.md): Planejamento e status detalhado da migração e paridade de recursos com o editor Swing.
 * [Arquitetura do Sistema](doc/ARCHITECTURE.md): Estrutura de pacotes, ciclo de vida do editor/runtime e modelo de concorrência.
 * [Inventário do Projeto](doc/PROJECT_INVENTORY.md): Auditoria completa do estado dos arquivos e módulos do repositório.
 * [Guia de ADRs (Decisões de Arquitetura)](doc/ADR_GUIDE.md): Conceituação e modelo de documentação de escolhas técnicas.
