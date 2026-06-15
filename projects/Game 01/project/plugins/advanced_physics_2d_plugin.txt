@@ -1,0 +1,5 @@
+Name: Advanced Physics 2D
+Author: PhysTech
+Version: 2.1.0
+Git URL: https://github.com/PhysTech/advanced-physics-2d.git
+Install-Status: SUCCESSFUL_SANDBOXED

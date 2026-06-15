@@ -1,0 +1,10 @@
+{
+  "outputDir": "build",
+  "gameName": "Game 01",
+  "fullscreen": false,
+  "width": 1280,
+  "version": "1.0.0",
+  "targets": ["WINDOWS"],
+  "height": 720,
+  "platforms": {}
+}
