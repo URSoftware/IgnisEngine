@@ -1304,11 +1304,22 @@ public class IgnisEditorApp extends Application {
 
         assetTree = new TreeView<>();
         assetTree.setShowRoot(true);
-        assetTree.setCellFactory(tv -> new TreeCell<>() {
-            @Override protected void updateItem(File item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.getName());
-            }
+        assetTree.setCellFactory(tv -> {
+            TreeCell<File> cell = new TreeCell<>() {
+                @Override protected void updateItem(File item, boolean empty) {
+                    super.updateItem(item, empty);
+                    setText(empty || item == null ? null : item.getName());
+                }
+            };
+            // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
+            // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
+            // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
+            cell.setOnMousePressed(e -> {
+                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    tv.getSelectionModel().select(cell.getTreeItem());
+                }
+            });
+            return cell;
         });
         assetTree.setOnMouseClicked(ev -> {
             TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
