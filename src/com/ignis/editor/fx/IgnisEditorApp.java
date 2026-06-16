@@ -106,6 +106,9 @@ public class IgnisEditorApp extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
         seedSampleScene();
+        // O editor JavaFX renderiza via AnimationTimer (renderWorldTo). O pipeline
+        // AWT (repaint/BufferStrategy) e desnecessario e gera trabalho inutil.
+        game.setSuppressAwtRepaint(true);
 
         BorderPane root = new BorderPane();
 
@@ -160,7 +163,11 @@ public class IgnisEditorApp extends Application {
         game.addSelectionListener(go -> {
             Platform.runLater(() -> {
                 if (suppressSelectionEvents) return;
-                if (selected != go) {
+                // Rejeitar notificacoes obsoletas: so agir se o game AINDA aponta
+                // para 'go' no momento em que a lambda roda. Sem isso, lambdas
+                // enfileiradas por Platform.runLater podem operar com selecoes que
+                // ja mudaram, causando ping-pong infinito entre objetos sobrepostos.
+                if (game.getSelectedObject() == go && selected != go) {
                     selectEntity(go);
                 }
             });
@@ -428,9 +435,9 @@ public class IgnisEditorApp extends Application {
         MenuItem down = new MenuItem("Mover para baixo");
         down.setOnAction(e -> moveSelected(1));
         MenuItem top = new MenuItem("Mover para o topo");
-        top.setOnAction(e -> moveSelectedTo(0));
+        top.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
         MenuItem bottom = new MenuItem("Mover para o fundo");
-        bottom.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
+        bottom.setOnAction(e -> moveSelectedTo(0));
         scene.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
                 new SeparatorMenuItem(), up, down, top, bottom);
         return scene;
@@ -461,9 +468,9 @@ public class IgnisEditorApp extends Application {
         MenuItem down = new MenuItem("Mover para baixo");
         down.setOnAction(e -> moveSelected(1));
         MenuItem top = new MenuItem("Mover para o topo");
-        top.setOnAction(e -> moveSelectedTo(0));
+        top.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
         MenuItem bottom = new MenuItem("Mover para o fundo");
-        bottom.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
+        bottom.setOnAction(e -> moveSelectedTo(0));
         ordenar.getItems().addAll(up, down, top, bottom);
 
         menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
@@ -979,6 +986,10 @@ public class IgnisEditorApp extends Application {
             }
             viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
         });
+        // Ao dispensar o menu de contexto (ex: clique esquerdo fora), garantir que
+        // qualquer estado de arraste residual e limpo. Sem isso, o drag do AWT pode
+        // ficar preso em GizmoDragMode.CENTER e causar saltos de coordenadas.
+        viewportMenu.setOnHidden(e -> game.cancelDrag());
         // Selecao por clique esquerdo NAO e tratada aqui: o engine (handleMousePress, via
         // dispatchEvent) ja seleciona e notifica o selectionListener -> selectEntity. Tratar
         // tambem aqui causaria selecao dupla/concorrente.
@@ -1056,6 +1067,23 @@ public class IgnisEditorApp extends Application {
         refreshHierarchy();
         hierarchyRoot.setExpanded(true);
         TreeView<String> tree = new TreeView<>(hierarchyRoot);
+        // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
+        // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
+        // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
+        tree.setCellFactory(tv -> {
+            javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
+                @Override protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    setText(empty ? null : item);
+                }
+            };
+            cell.setOnMousePressed(e -> {
+                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    tv.getSelectionModel().select(cell.getTreeItem());
+                }
+            });
+            return cell;
+        });
         tree.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, item) -> {
             if (suppressSelectionEvents) return;
             suppressSelectionEvents = true;

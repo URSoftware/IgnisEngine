@@ -170,6 +170,20 @@ public class Game extends Canvas implements Runnable {
         this.transformListener = listener;
     }
 
+    // Quando true, chamadas a repaint() sao ignoradas. Usado pelo editor JavaFX,
+    // cujo AnimationTimer renderiza via renderWorldTo — o pipeline AWT seria desperdicio.
+    private boolean suppressAwtRepaint = false;
+
+    public void setSuppressAwtRepaint(boolean suppress) {
+        this.suppressAwtRepaint = suppress;
+    }
+
+    @Override
+    public void repaint() {
+        if (suppressAwtRepaint) return;
+        super.repaint();
+    }
+
     // Internal class to store initial state of an object
     public static class EntitySnapshot {
         public double x, y;
@@ -599,20 +613,17 @@ public class Game extends Canvas implements Runnable {
     }
 
     private void handleMouseRelease() {
-        // Notificar fim de transformação (para undo)
+        // Notificar fim de transformacao (para undo/auto-save)
         if (currentDragMode != GizmoDragMode.NONE && selectedObject != null && transformListener != null) {
             transformListener.onTransformEnd(selectedObject);
         }
         
         currentDragMode = GizmoDragMode.NONE;
         setCursor(Cursor.getDefaultCursor());
-
-        // Notify listeners now that drag is complete
-        // This ensures Inspector gets updated with final values after user finishes
-        // dragging
-        if (selectedObject != null) {
-            notifySelectionListeners();
-        }
+        // Notificacao de selecao NAO e necessaria aqui: o Inspector do editor FX ja
+        // sincroniza via AnimationTimer a 60fps (updateInspectorFields). Notificar
+        // redundantemente enfileirava lambdas extras em Platform.runLater, contribuindo
+        // para o loop de selecao infinita.
     }
 
     private void handleMouseDrag(int mouseX, int mouseY) {
@@ -1898,10 +1909,10 @@ public class Game extends Canvas implements Runnable {
         
         entities.remove(entity);
         
-        // Adjust index if removing shifted positions
-        if (newIndex > currentIndex) {
-            newIndex--;
-        }
+        // Nenhum ajuste de indice: newIndex indica a posicao FINAL desejada na lista
+        // resultante. O clamp abaixo garante que o valor fique no intervalo valido
+        // apos a remocao. O ajuste anterior (newIndex--) estava errado e fazia
+        // moveEntityUp ser um no-op.
         
         // Clamp to valid range
         newIndex = Math.max(0, Math.min(newIndex, entities.size()));
