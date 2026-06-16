@@ -109,5 +109,30 @@ public final class EditorPrefs {
         json.put("codeEditorTheme", themeName);
         write(json);
     }
+
+    /** Auto Save ligado? (scripts e projeto). Default: desligado. */
+    public static boolean isAutoSave() {
+        return read().optBoolean("autoSave", false);
+    }
+
+    /** Liga/desliga o Auto Save. */
+    public static void setAutoSave(boolean on) {
+        JSONObject json = read();
+        json.put("autoSave", on);
+        write(json);
+    }
+
+    /** Intervalo do Auto Save em segundos (default 30, minimo 5). */
+    public static int getAutoSaveIntervalSeconds() {
+        int v = read().optInt("autoSaveIntervalSeconds", 30);
+        return Math.max(5, v);
+    }
+
+    /** Define o intervalo do Auto Save em segundos (minimo 5). */
+    public static void setAutoSaveIntervalSeconds(int seconds) {
+        JSONObject json = read();
+        json.put("autoSaveIntervalSeconds", Math.max(5, seconds));
+        write(json);
+    }
 }
 

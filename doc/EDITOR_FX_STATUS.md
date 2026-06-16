@@ -41,6 +41,43 @@ A tabela abaixo exibe a paridade atual do Editor JavaFX em relação ao Editor S
 
 ---
 
+## 2.1. Correções e Melhorias — 2026-06-15
+
+Rodada de auditoria + correção de bugs de UX reportados, com revisão adversarial. Tudo compila (`mvnw compile` BUILD SUCCESS, 86 fontes). **Pendente de validação manual em GUI.**
+
+### Seleção, picking e clique direito (`IgnisEditorApp.wireFxInputToEngine`, `Game.getObjectAt`/`handleMousePress`/`renderWorldTo`)
+- **Inspector agora atualiza ao clicar no viewport.** Causa-raiz: `selectEntity()` delegava a escrita do Inspector ao listener da árvore, que abortava por `suppressSelectionEvents`. Agora `selectEntity` é a **fonte única** e chama `setSelected()` sempre (Hierarchy vira só efeito visual).
+- **Clique direito** não aciona mais seleção/drag do engine — o botão `SECONDARY` não é encaminhado a `game.dispatchEvent`; o menu de contexto é tratado só em `setOnContextMenuRequested`. O `Input` (scripts em Play) continua recebendo todos os botões.
+- **Seleção duplicada eliminada:** removido o `setOnMouseClicked` que selecionava em paralelo ao engine (`handleMousePress`). O core é a fonte única no botão esquerdo, propagando via `selectionListener`.
+- **Seleção de objetos sobrepostos:** `getObjectAt(x,y,afterCurrent)` coleta todos os objetos sob o ponto e **cicla** entre os empilhados a cada clique; o hit-test passou a respeitar a **rotação** do objeto (antes era AABB não-rotacionado).
+- **Indicador visual restaurado:** `renderWorldTo` desenha borda **tracejada** + 4 **alças de canto** (espelha o `renderSelection` do editor Swing), no lugar do retângulo verde fino.
+- **Regressão corrigida (review):** clicar-e-arrastar um objeto não-selecionado num único gesto não cancela mais o drag (`setSelected` só chama `cancelDrag` quando a seleção **não** veio do próprio engine).
+
+### Editor de Scripts (`FxCodeEditor`)
+- **Números de linha sempre pretos** sobre gutter claro fixo (`#d8d8d8`), independente do tema — forçado por CSS `!important` **e** por estilo inline na `paragraphGraphicFactory` (vence o `.lineno{#666}` default do RichTextFX). Antes usavam o foreground do tema com 50% de alpha e sumiam em temas escuros.
+
+### Auto Save (`EditorPrefs`, `FxCodeEditor`, `IgnisEditorApp`)
+- **`☑ Auto Save` no menu Arquivo** (persistido em `EditorPrefs`, `~/.ignis/editor-prefs.json`).
+- **Scripts:** autosave religado (estava morto — dependia de `editor != null`); agora lê `EditorPrefs.isAutoSave()`, com intervalo configurável e save on-blur/on-close; só salva quando há mudança (`modified`).
+- **Projeto:** novo autosave com *dirty-flag* (`markProjectDirty` em criar/duplicar/deletar/renomear/reordenar/editar-Inspector + fim de drag via `TransformListener`); só salva com projeto aberto, sujo e **fora do Play**; usa caminho silencioso (sem `Alert` modal a cada intervalo).
+
+## 2.2. Roadmap priorizado (levantamento de paridade)
+
+**Faltando — alta prioridade (destravam o uso real):**
+1. **Undo/Redo** de cena (Ctrl+Z/Y) — modelo de Command (o core já tem `TransformListener`).
+2. **Inspector completo** — seções Cor/Aparência, Sprite, Collider, Câmera, Scripts (hoje só nome/x/y/w/h/rot/visível).
+3. **Scripts em objetos** — anexar/criar/remover script + editar variáveis `@public` (GameObject picker com pick-mode no viewport).
+4. **Import de imagem → sprite** no objeto (copiar para `assets/sprites`, caminho relativo).
+5. **Prefabs** (salvar/instanciar) — core já tem `PrefabManager`.
+
+**Backlog médio:** multi-seleção, merge de objetos, drag-and-drop na Hierarchy/Asset Browser, asset context menu (New Folder/Compile), persistência de layout (dividers), Markdown viewer FX, copiar/colar entre cenas.
+
+**Estratégico (faltam em ambos os editores):** painel de Console/erros de compilação, multi-cena no UI, parentesco/aninhamento na hierarquia, multi-aba.
+
+**Polimento pendente:** tema escuro CSS global unificado (`ignis-dark.css` substituindo ~96 `setStyle` inline) — amplo, requer validação visual; tirar `updateInspectorFields()` do loop 60fps; parar/pausar o `AnimationTimer` da ponte de render.
+
+---
+
 ## 3. A Ponte de Renderização (`SwingFXUtils`)
 
 A cena do jogo é renderizada no motor clássico `AWT/Graphics2D` em uma thread de simulação em segundo plano. 

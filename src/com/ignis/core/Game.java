@@ -567,8 +567,8 @@ public class Game extends Canvas implements Runnable {
             }
         }
 
-        // Check if clicked on any object
-        GameObject clicked = getObjectAt(mouseX, mouseY);
+        // Check if clicked on any object (cicla entre objetos sobrepostos a cada clique)
+        GameObject clicked = getObjectAt(mouseX, mouseY, selectedObject);
         if (clicked != null) {
             setSelectedObject(clicked);
             // Start drag from center (move mode)
@@ -859,23 +859,57 @@ public class Game extends Canvas implements Runnable {
      * Converts screen coordinates to world coordinates for proper picking.
      */
     public GameObject getObjectAt(int screenX, int screenY) {
-        // Convert screen coordinates to world coordinates
+        return getObjectAt(screenX, screenY, null);
+    }
+
+    /**
+     * Picking ciente de z-order, rotacao e sobreposicao. Coleta todos os objetos
+     * sob o ponto, do topo para o fundo (ordem inversa de render). Se {@code afterCurrent}
+     * estiver entre eles, retorna o PROXIMO (cicla entre objetos empilhados a cada clique
+     * no mesmo ponto); caso contrario, retorna o do topo.
+     */
+    public GameObject getObjectAt(int screenX, int screenY, GameObject afterCurrent) {
         Point2D.Double worldPos = screenToWorld(screenX, screenY);
         double wx = worldPos.x;
         double wy = worldPos.y;
-        
-        // Iterate from back to front (objects rendered last are "on top")
+
+        java.util.List<GameObject> hits = new java.util.ArrayList<>();
+        // Iterate from front to back (objects rendered last are "on top")
         for (int i = entities.size() - 1; i >= 0; i--) {
             GameObject obj = entities.get(i);
-            // Skip camera objects from selection
-            if (obj instanceof Camera) continue;
-            
-            if (wx >= obj.getX() && wx <= obj.getX() + obj.getWidth() &&
-                    wy >= obj.getY() && wy <= obj.getY() + obj.getHeight()) {
-                return obj;
-            }
+            if (obj instanceof Camera) continue; // cameras nao sao selecionaveis por clique
+            if (hitTest(obj, wx, wy)) hits.add(obj);
         }
-        return null;
+        if (hits.isEmpty()) return null;
+        if (afterCurrent != null) {
+            int idx = hits.indexOf(afterCurrent);
+            if (idx >= 0) return hits.get((idx + 1) % hits.size());
+        }
+        return hits.get(0);
+    }
+
+    /**
+     * Testa se um ponto em coordenadas de mundo cai sobre o objeto, respeitando a
+     * rotacao (mesma convencao do render: {@code g2d.rotate(+rotation)} em torno do
+     * centro). Para objetos sem rotacao recai num teste de AABB simples.
+     */
+    private boolean hitTest(GameObject obj, double wx, double wy) {
+        double w = obj.getWidth();
+        double h = obj.getHeight();
+        double lx = wx;
+        double ly = wy;
+        double rot = obj.getRotation();
+        if (rot != 0) {
+            double cx = obj.getX() + w / 2.0;
+            double cy = obj.getY() + h / 2.0;
+            double rad = Math.toRadians(-rot); // desfaz a rotacao aplicada no render
+            double dx = wx - cx;
+            double dy = wy - cy;
+            lx = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+            ly = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+        }
+        return lx >= obj.getX() && lx <= obj.getX() + w
+                && ly >= obj.getY() && ly <= obj.getY() + h;
     }
 
     // ==================== SELECTION ====================
@@ -1333,10 +1367,30 @@ public class Game extends Canvas implements Runnable {
                 double cy = selected.getY() + selected.getHeight() / 2.0;
                 g2d.rotate(Math.toRadians(selected.getRotation()), cx, cy);
             }
-            g2d.setColor(new Color(46, 204, 113));
-            g2d.setStroke(new java.awt.BasicStroke(2f));
-            g2d.drawRect((int) selected.getX() - 2, (int) selected.getY() - 2,
-                    selected.getWidth() + 4, selected.getHeight() + 4);
+            int sx = (int) selected.getX();
+            int sy = (int) selected.getY();
+            int sw = selected.getWidth();
+            int sh = selected.getHeight();
+            Color selColor = selected.getNameColor() != null
+                    ? selected.getNameColor() : new Color(0, 150, 255);
+            // Borda tracejada (espelha renderSelection do editor Swing)
+            g2d.setColor(selColor);
+            g2d.setStroke(new java.awt.BasicStroke(2f, java.awt.BasicStroke.CAP_ROUND,
+                    java.awt.BasicStroke.JOIN_ROUND, 1.0f, new float[] { 5.0f, 5.0f }, 0.0f));
+            g2d.drawRect(sx - 2, sy - 2, sw + 4, sh + 4);
+            // Alcas de canto (preenchidas brancas com borda da cor de selecao)
+            int hs = 6;
+            g2d.setStroke(new java.awt.BasicStroke(1));
+            g2d.setColor(Color.WHITE);
+            g2d.fillRect(sx - hs / 2 - 2, sy - hs / 2 - 2, hs, hs);
+            g2d.fillRect(sx + sw - hs / 2 + 2, sy - hs / 2 - 2, hs, hs);
+            g2d.fillRect(sx - hs / 2 - 2, sy + sh - hs / 2 + 2, hs, hs);
+            g2d.fillRect(sx + sw - hs / 2 + 2, sy + sh - hs / 2 + 2, hs, hs);
+            g2d.setColor(selColor);
+            g2d.drawRect(sx - hs / 2 - 2, sy - hs / 2 - 2, hs, hs);
+            g2d.drawRect(sx + sw - hs / 2 + 2, sy - hs / 2 - 2, hs, hs);
+            g2d.drawRect(sx - hs / 2 - 2, sy + sh - hs / 2 + 2, hs, hs);
+            g2d.drawRect(sx + sw - hs / 2 + 2, sy + sh - hs / 2 + 2, hs, hs);
             g2d.setTransform(selTransform);
         }
 

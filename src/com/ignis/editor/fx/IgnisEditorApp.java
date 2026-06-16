@@ -76,6 +76,8 @@ public class IgnisEditorApp extends Application {
     private Project currentProject;
     private Stage primaryStage;
     private Menu recentMenu;
+    private boolean projectDirty = false;
+    private javafx.animation.Timeline projectAutoSaveTimer;
     private Button playButton;
     private Button stopButton;
     private boolean playing = false;
@@ -163,6 +165,8 @@ public class IgnisEditorApp extends Application {
                 }
             });
         });
+
+        setupProjectAutoSave();
 
         // ---- Viewport central ----
         Pane viewportPane = new Pane();
@@ -309,10 +313,18 @@ public class IgnisEditorApp extends Application {
         salvarComo.setOnAction(e -> saveProjectAs(stage));
         MenuItem fechar = new MenuItem("Fechar projeto");
         fechar.setOnAction(e -> closeProject(stage));
+        CheckMenuItem autoSaveItem = new CheckMenuItem("Auto Save");
+        autoSaveItem.setSelected(EditorPrefs.isAutoSave());
+        autoSaveItem.setOnAction(e -> {
+            EditorPrefs.setAutoSave(autoSaveItem.isSelected());
+            setStatus(autoSaveItem.isSelected()
+                    ? "Auto Save ligado (projeto e scripts)."
+                    : "Auto Save desligado.");
+        });
         MenuItem exit = new MenuItem("Sair");
         exit.setOnAction(e -> { stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
         file.getItems().addAll(novo, open, recentMenu, selecionar, new SeparatorMenuItem(),
-                salvar, salvarComo, new SeparatorMenuItem(), fechar, exit);
+                salvar, salvarComo, autoSaveItem, new SeparatorMenuItem(), fechar, exit);
 
         Menu tools = new Menu("Ferramentas");
         MenuItem miAudio = new MenuItem("Editor de Audio (DAW)");
@@ -611,6 +623,7 @@ public class IgnisEditorApp extends Application {
             IgnisProjectIO.save(currentProject, currentIgnisFile);
             if (currentProject.getProjectFile() != null) currentIgnisFile = currentProject.getProjectFile();
             EditorPrefs.addRecent(currentIgnisFile);
+            projectDirty = false;
             setStatus("Projeto salvo: " + currentProject.getProjectName());
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao salvar:\n" + ex.getMessage()).showAndWait();
@@ -638,6 +651,7 @@ public class IgnisEditorApp extends Application {
             currentIgnisFile = currentProject.getProjectFile() != null ? currentProject.getProjectFile() : dest;
             projectFolder = IgnisProjectIO.getProjectFolder(currentIgnisFile);
             EditorPrefs.addRecent(currentIgnisFile);
+            projectDirty = false;
             rebuildRecentMenu(stage);
             stage.setTitle("IgnisEngine — " + currentProject.getProjectName() + " (JavaFX)");
             // O core sempre grava em projects/<nome>/; informar o destino real, nao o escolhido.
@@ -921,16 +935,19 @@ public class IgnisEditorApp extends Application {
     private void wireFxInputToEngine(Canvas canvas) {
         canvas.setFocusTraversable(true);
 
+        // O botao direito NAO e encaminhado ao engine (game.dispatchEvent) para nao acionar
+        // selecao/drag do editor; ele e tratado so em setOnContextMenuRequested. O Input
+        // (estado para scripts em Play) continua recebendo todos os botoes.
         canvas.setOnMousePressed(e -> {
             canvas.requestFocus();
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED);
             com.ignis.core.Input.getInstance().mousePressed(awtEvent);
-            game.dispatchEvent(awtEvent);
+            if (e.getButton() != javafx.scene.input.MouseButton.SECONDARY) game.dispatchEvent(awtEvent);
         });
         canvas.setOnMouseReleased(e -> {
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_RELEASED);
             com.ignis.core.Input.getInstance().mouseReleased(awtEvent);
-            game.dispatchEvent(awtEvent);
+            if (e.getButton() != javafx.scene.input.MouseButton.SECONDARY) game.dispatchEvent(awtEvent);
         });
         canvas.setOnMouseMoved(e -> {
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_MOVED);
@@ -940,7 +957,7 @@ public class IgnisEditorApp extends Application {
         canvas.setOnMouseDragged(e -> {
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_DRAGGED);
             com.ignis.core.Input.getInstance().mouseDragged(awtEvent);
-            game.dispatchEvent(awtEvent);
+            if (e.getButton() != javafx.scene.input.MouseButton.SECONDARY) game.dispatchEvent(awtEvent);
         });
 
         canvas.setOnScroll(e -> {
@@ -962,16 +979,9 @@ public class IgnisEditorApp extends Application {
             }
             viewportMenu.show(canvas, e.getScreenX(), e.getScreenY());
         });
-        canvas.setOnMouseClicked(e -> {
-            if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
-                if (clicked != null) {
-                    selectEntity(clicked);
-                } else {
-                    selectEntity(null);
-                }
-            }
-        });
+        // Selecao por clique esquerdo NAO e tratada aqui: o engine (handleMousePress, via
+        // dispatchEvent) ja seleciona e notifica o selectionListener -> selectEntity. Tratar
+        // tambem aqui causaria selecao dupla/concorrente.
 
         canvas.setOnKeyPressed(e -> {
             if (!playing) return;
@@ -1103,6 +1113,7 @@ public class IgnisEditorApp extends Application {
             if (obj instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) obj);
             refreshHierarchy();
             selectEntity(obj);
+            markProjectDirty();
             setStatus("Objeto criado: " + obj.getName());
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao criar objeto:\n" + ex.getMessage()).showAndWait();
@@ -1125,6 +1136,7 @@ public class IgnisEditorApp extends Application {
             game.addEntity(copy);
             refreshHierarchy();
             selectEntity(copy);
+            markProjectDirty();
             setStatus("Duplicado: " + copy.getName());
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao duplicar:\n" + ex.getMessage()).showAndWait();
@@ -1141,6 +1153,7 @@ public class IgnisEditorApp extends Application {
         game.removeEntity(toDelete);
         setSelected(null);
         refreshHierarchy();
+        markProjectDirty();
         setStatus("Deletado: " + toDelete.getName());
     }
 
@@ -1156,6 +1169,7 @@ public class IgnisEditorApp extends Application {
         go.setName(uniqueNameExcept(opt.get().trim(), go));
         refreshHierarchy();
         selectEntity(go);
+        markProjectDirty();
         setStatus("Renomeado para: " + go.getName());
     }
 
@@ -1166,6 +1180,7 @@ public class IgnisEditorApp extends Application {
         else game.moveEntityDown(toReselect);
         refreshHierarchy();
         selectEntity(toReselect);
+        markProjectDirty();
     }
 
     private void moveSelectedTo(int index) {
@@ -1176,6 +1191,7 @@ public class IgnisEditorApp extends Application {
         game.moveEntityToIndex(toReselect, target);
         refreshHierarchy();
         selectEntity(toReselect);
+        markProjectDirty();
     }
 
     // Nome unico entre as entidades (ignora 'except', util ao renomear o proprio objeto).
@@ -1189,21 +1205,65 @@ public class IgnisEditorApp extends Application {
         return n;
     }
 
-    // Seleciona uma entidade na Hierarchy (dispara o listener que atualiza o Inspector).
+    // Fonte UNICA de selecao: atualiza a Hierarchy (efeito visual) E o Inspector (setSelected),
+    // venha o clique do viewport, da arvore, ou de criar/duplicar/colar. Antes o Inspector nao
+    // atualizava ao clicar no viewport porque setSelected so era chamado pelo listener da arvore,
+    // que aborta quando suppressSelectionEvents ja esta true.
     private void selectEntity(GameObject go) {
         if (suppressSelectionEvents) return;
         suppressSelectionEvents = true;
         try {
-            if (go == null) { setSelected(null); return; }
-            int idx = game.getEntities().indexOf(go);
-            if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
-                hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
+            if (go == null) {
+                if (hierarchy != null) hierarchy.getSelectionModel().clearSelection();
             } else {
-                setSelected(go);
+                int idx = game.getEntities().indexOf(go);
+                if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
+                    hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
+                }
             }
+            setSelected(go); // SEMPRE — atualiza o Inspector (fonte unica de verdade)
         } finally {
             suppressSelectionEvents = false;
         }
+    }
+
+    // ---------------- Auto Save do projeto ----------------
+
+    private void setupProjectAutoSave() {
+        // Marca o projeto como "sujo" ao fim de um arraste (mover/rotacionar/escalar).
+        game.setTransformListener(new com.ignis.core.Game.TransformListener() {
+            @Override public void onTransformStart(GameObject o, double x, double y, double rotation, int w, int h) { }
+            @Override public void onTransformEnd(GameObject o) { markProjectDirty(); }
+        });
+        projectAutoSaveTimer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
+                javafx.util.Duration.seconds(EditorPrefs.getAutoSaveIntervalSeconds()), e -> {
+            if (EditorPrefs.isAutoSave() && currentProject != null && currentIgnisFile != null
+                    && projectDirty && !playing) {
+                saveProjectSilently();
+            }
+        }));
+        projectAutoSaveTimer.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        projectAutoSaveTimer.play();
+    }
+
+    // Salvamento usado pelo Auto Save: nunca abre Alert modal (uma falha persistente de
+    // gravacao geraria um dialogo a cada intervalo). Erros vao so para a barra de status.
+    private void saveProjectSilently() {
+        if (currentProject == null || currentIgnisFile == null) return;
+        try {
+            syncEntitiesToScene();
+            IgnisProjectIO.save(currentProject, currentIgnisFile);
+            if (currentProject.getProjectFile() != null) currentIgnisFile = currentProject.getProjectFile();
+            projectDirty = false;
+            setStatus("Auto-saved: " + currentProject.getProjectName());
+        } catch (Exception ex) {
+            setStatus("Auto-save falhou: " + ex.getMessage());
+        }
+    }
+
+    // Marca alteracoes nao salvas no projeto (consumido pelo Auto Save).
+    private void markProjectDirty() {
+        projectDirty = true;
     }
 
     // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
@@ -1384,11 +1444,15 @@ public class IgnisEditorApp extends Application {
 
     private void applyIfEditing(Runnable action) {
         if (suppressInspectorEvents || selected == null) return;
-        try { action.run(); } catch (Exception ignore) { /* entrada invalida */ }
+        try { action.run(); markProjectDirty(); } catch (Exception ignore) { /* entrada invalida */ }
     }
 
     private void setSelected(GameObject go) {
-        if (this.selected != go) {
+        // So cancela um drag em andamento se a selecao NAO veio do proprio engine. Quando
+        // game.getSelectedObject()==go, o handleMousePress ja selecionou e ARMOU o drag deste
+        // objeto no mesmo gesto; cancelar aqui (via selectionListener->runLater) abortaria um
+        // clicar-e-arrastar de objeto nao-selecionado.
+        if (this.selected != go && game.getSelectedObject() != go) {
             game.cancelDrag();
         }
         this.selected = go;

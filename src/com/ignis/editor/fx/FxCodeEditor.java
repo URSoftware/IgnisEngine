@@ -357,7 +357,14 @@ public class FxCodeEditor extends Stage {
 
         // --- Code Area ---
         codeArea = new CodeArea();
-        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        // Numeros de linha pretos sobre gutter claro, forcado inline (vence o .lineno{#666}
+        // default do RichTextFX) para garantir legibilidade em qualquer tema.
+        java.util.function.IntFunction<javafx.scene.Node> lineFactory = LineNumberFactory.get(codeArea);
+        codeArea.setParagraphGraphicFactory(i -> {
+            javafx.scene.Node node = lineFactory.apply(i);
+            node.setStyle("-fx-text-fill: black; -fx-fill: black; -fx-background-color: #d8d8d8;");
+            return node;
+        });
 
         // Read script content
         String content = scriptManager.readScriptContent(scriptName);
@@ -770,10 +777,17 @@ public class FxCodeEditor extends Stage {
         return methods;
     }
 
+    // Auto Save ligado por EditorPrefs (casca FX passa editor=null, entao a flag global
+    // de EditorPrefs e a fonte de verdade; mantem compat com o editor Swing legado).
+    private boolean autoSaveOn() {
+        return EditorPrefs.isAutoSave() || (editor != null && editor.isAutoSaveScriptsEnabled());
+    }
+
     private void setupAutoSave() {
-        autoSaveTimer = new Timeline(new KeyFrame(Duration.seconds(30), e -> {
-            if (editor != null && editor.isAutoSaveScriptsEnabled() && modified) {
-                saveScriptSilently();
+        autoSaveTimer = new Timeline(new KeyFrame(
+                Duration.seconds(EditorPrefs.getAutoSaveIntervalSeconds()), e -> {
+            if (autoSaveOn() && modified) {
+                saveScriptSilently(); // salva so quando ha mudanca; mostra indicador no status
             }
         }));
         autoSaveTimer.setCycleCount(Animation.INDEFINITE);
@@ -783,7 +797,7 @@ public class FxCodeEditor extends Stage {
     private void setupWindowListeners() {
         setOnCloseRequest(e -> {
             if (modified) {
-                if (editor != null && editor.isAutoSaveScriptsEnabled()) {
+                if (autoSaveOn()) {
                     saveScript();
                     closeEditor();
                 } else {
@@ -822,7 +836,7 @@ public class FxCodeEditor extends Stage {
 
         focusedProperty().addListener((obs, oldVal, newVal) -> {
             if (!newVal) {
-                if (editor != null && editor.isAutoSaveScriptsEnabled() && modified) {
+                if (autoSaveOn() && modified) {
                     saveScriptSilently();
                 }
             }
@@ -897,8 +911,10 @@ public class FxCodeEditor extends Stage {
         String commentHex = toCssColor(theme.comment);
         String annotationHex = toCssColor(theme.annotation);
         
-        Color linenoFg = Color.color(theme.foreground.getRed(), theme.foreground.getGreen(), theme.foreground.getBlue(), 0.5);
-        Color linenoBg = theme.background.darker();
+        // Numeros de linha SEMPRE pretos sobre um gutter claro fixo — legiveis em qualquer
+        // tema (antes usavam o foreground do tema com 50% de alpha e sumiam/perdiam contraste).
+        Color linenoFg = Color.BLACK;
+        Color linenoBg = Color.rgb(216, 216, 216);
         String linenoFgHex = toCssColor(linenoFg);
         String linenoBgHex = toCssColor(linenoBg);
 
@@ -955,6 +971,8 @@ public class FxCodeEditor extends Stage {
             "}\n" +
             ".code-area .lineno, .code-area .line-number {\n" +
             "    -fx-text-fill: " + linenoFgHex + " !important;\n" +
+            "    -fx-fill: " + linenoFgHex + " !important;\n" +
+            "    -fx-opacity: 1;\n" +
             "    -fx-font-family: 'Consolas';\n" +
             "    -fx-font-size: 14px;\n" +
             "}\n" +
