@@ -15,7 +15,11 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.ColorPicker;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -38,6 +42,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.input.KeyCode;
@@ -96,6 +101,9 @@ public class IgnisEditorApp extends Application {
     // Campos do Inspector
     private TextField nameField, xField, yField, wField, hField, rotField;
     private CheckBox visibleCheck;
+    // Seções do Inspector dependentes do tipo do objeto (cor/sprite/collider/camera/scripts),
+    // reconstruídas a cada seleção (ver rebuildInspectorExtras).
+    private VBox inspectorExtras;
 
     private Label cameraPosLabel;
     private Label cameraZoomLabel;
@@ -201,7 +209,7 @@ public class IgnisEditorApp extends Application {
         leftSplit.setDividerPositions(0.6);
 
         // ---- Inspector (direita) ----
-        VBox inspector = buildInspector();
+        javafx.scene.Node inspector = buildInspector();
 
         mainSplit = new SplitPane();
         mainSplit.getItems().addAll(leftSplit, viewportPane, inspector);
@@ -1518,7 +1526,7 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Inspector ----------------
 
-    private VBox buildInspector() {
+    private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
         box.getStyleClass().add("ignis-panel");
         box.setPadding(new Insets(12));
@@ -1560,9 +1568,14 @@ public class IgnisEditorApp extends Application {
         rotField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setRotation(parseD(b, selected.getRotation()))));
         visibleCheck.selectedProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setVisible(b)));
 
-        box.getChildren().addAll(title, grid);
+        inspectorExtras = new VBox(8);
+        box.getChildren().addAll(title, grid, inspectorExtras);
         setInspectorEnabled(false);
-        return box;
+
+        ScrollPane scroll = new ScrollPane(box);
+        scroll.setFitToWidth(true);
+        scroll.getStyleClass().add("ignis-panel");
+        return scroll;
     }
 
     private void addRow(GridPane grid, int row, String label, TextField field) {
@@ -1607,6 +1620,8 @@ public class IgnisEditorApp extends Application {
             game.setSelectedObject(go);
         }
 
+        rebuildInspectorExtras(go);
+
         suppressInspectorEvents = false;
     }
 
@@ -1618,6 +1633,242 @@ public class IgnisEditorApp extends Application {
         hField.setDisable(!enabled);
         rotField.setDisable(!enabled);
         visibleCheck.setDisable(!enabled);
+    }
+
+    // ---------------- Inspector: secoes por tipo (Cor/Sprite/Collider/Camera/Scripts) ----------------
+    // Reconstruidas a cada selecao para refletir o tipo do objeto. Os handlers sao
+    // ligados APOS definir o valor inicial, para que o setup nao dispare escritas.
+
+    private void rebuildInspectorExtras(GameObject go) {
+        if (inspectorExtras == null) return;
+        inspectorExtras.getChildren().clear();
+        if (go == null) return;
+        javafx.scene.Node appearance = buildAppearanceSection(go);
+        if (appearance != null) inspectorExtras.getChildren().add(appearance);
+        inspectorExtras.getChildren().add(buildColliderSection(go));
+        if (go instanceof com.ignis.core.Camera) {
+            inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
+        }
+        inspectorExtras.getChildren().add(buildScriptsSection(go));
+    }
+
+    private Label sectionTitle(String text) {
+        Label l = new Label(text);
+        l.getStyleClass().add("panel-title");
+        VBox.setMargin(l, new Insets(8, 0, 2, 0));
+        return l;
+    }
+
+    // Cor (so para objetos que expoem getColor/setColor via reflexao) + Sprite.
+    private javafx.scene.Node buildAppearanceSection(GameObject go) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Aparencia"));
+
+        java.lang.reflect.Method getColor = methodOrNull(go, "getColor");
+        java.lang.reflect.Method setColor = setColorMethodOrNull(go);
+        if (getColor != null && setColor != null) {
+            ColorPicker picker = new ColorPicker();
+            try {
+                Object c = getColor.invoke(go);
+                if (c instanceof java.awt.Color) picker.setValue(awtToFx((java.awt.Color) c));
+            } catch (Exception ignore) { /* sem cor inicial */ }
+            picker.setOnAction(e -> {
+                try { setColor.invoke(go, fxToAwt(picker.getValue())); markProjectDirty(); }
+                catch (Exception ignore) { /* falha ao aplicar cor */ }
+            });
+            sec.getChildren().add(labeledInspectorRow("Cor", picker));
+        }
+
+        Label spriteVal = new Label(spriteLabel(go.getSpritePath()));
+        spriteVal.getStyleClass().add("field-label");
+        spriteVal.setWrapText(true);
+        Button pick = new Button("Escolher…");
+        pick.setOnAction(e -> {
+            File f = chooseSpriteFile();
+            if (f != null) {
+                String rel = com.ignis.core.AssetResolver.relativize(f);
+                go.setSpritePath(rel != null ? rel : f.getAbsolutePath());
+                spriteVal.setText(spriteLabel(go.getSpritePath()));
+                markProjectDirty();
+            }
+        });
+        Button clear = new Button("Limpar");
+        clear.setOnAction(e -> {
+            go.setSpritePath(null);
+            spriteVal.setText(spriteLabel(null));
+            markProjectDirty();
+        });
+        Label spriteLbl = new Label("Sprite");
+        spriteLbl.getStyleClass().add("field-label");
+        sec.getChildren().add(new VBox(4, spriteLbl, spriteVal, new HBox(6, pick, clear)));
+        return sec;
+    }
+
+    private javafx.scene.Node buildColliderSection(GameObject go) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Collider"));
+
+        ComboBox<com.ignis.core.IgnisSampleCollisions.ColliderType> typeBox = new ComboBox<>();
+        typeBox.getItems().addAll(com.ignis.core.IgnisSampleCollisions.ColliderType.values());
+        typeBox.setValue(go.getColliderType());
+
+        ComboBox<com.ignis.core.IgnisSampleCollisions.CollisionMode> modeBox = new ComboBox<>();
+        modeBox.getItems().addAll(com.ignis.core.IgnisSampleCollisions.CollisionMode.values());
+        modeBox.setValue(go.getCollisionMode());
+
+        CheckBox enabled = new CheckBox("Habilitado");
+        enabled.setSelected(go.hasCollider());
+
+        boolean none = go.getColliderType() == com.ignis.core.IgnisSampleCollisions.ColliderType.NONE;
+        modeBox.setDisable(none);
+        enabled.setDisable(none);
+
+        typeBox.setOnAction(e -> {
+            go.setColliderType(typeBox.getValue());
+            boolean isNone = typeBox.getValue() == com.ignis.core.IgnisSampleCollisions.ColliderType.NONE;
+            modeBox.setDisable(isNone);
+            enabled.setDisable(isNone);
+            if (!isNone) {
+                go.setCollisionMode(modeBox.getValue());
+                go.setColliderEnabled(enabled.isSelected());
+            }
+            markProjectDirty();
+        });
+        modeBox.setOnAction(e -> { go.setCollisionMode(modeBox.getValue()); markProjectDirty(); });
+        enabled.selectedProperty().addListener((o, a, b) -> { go.setColliderEnabled(b); markProjectDirty(); });
+
+        sec.getChildren().addAll(labeledInspectorRow("Tipo", typeBox),
+                labeledInspectorRow("Modo", modeBox), enabled);
+        return sec;
+    }
+
+    private javafx.scene.Node buildCameraSection(com.ignis.core.Camera cam) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Camera"));
+
+        TextField zoom = new TextField(String.valueOf(cam.getZoom()));
+        Runnable applyZoom = () -> { cam.setZoom(parseD(zoom.getText(), cam.getZoom())); markProjectDirty(); };
+        zoom.setOnAction(e -> applyZoom.run());
+        zoom.focusedProperty().addListener((o, a, focused) -> { if (!focused) applyZoom.run(); });
+
+        CheckBox active = new CheckBox("Camera ativa");
+        active.setSelected(cam.isActiveCamera());
+        active.selectedProperty().addListener((o, a, b) -> { cam.setActive(b); markProjectDirty(); });
+
+        sec.getChildren().addAll(labeledInspectorRow("Zoom", zoom), active);
+        return sec;
+    }
+
+    private javafx.scene.Node buildScriptsSection(GameObject go) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Scripts"));
+
+        ListView<String> list = new ListView<>();
+        list.getItems().setAll(go.getScriptNames());
+        list.setPrefHeight(90);
+
+        Button attach = new Button("Anexar…");
+        attach.setOnAction(e -> { attachScriptTo(go); list.getItems().setAll(go.getScriptNames()); });
+        Button remove = new Button("Remover");
+        remove.setOnAction(e -> {
+            String sel = list.getSelectionModel().getSelectedItem();
+            if (sel != null) { go.removeScriptByName(sel); list.getItems().setAll(go.getScriptNames()); markProjectDirty(); }
+        });
+        Button open = new Button("Abrir");
+        open.setOnAction(e -> {
+            String sel = list.getSelectionModel().getSelectedItem();
+            if (sel != null) openScriptByName(sel);
+        });
+
+        sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
+        return sec;
+    }
+
+    // Anexa um script (da pasta do projeto) ao objeto — espelha o editor Swing:
+    // registra o nome em getScriptNames() e (se compilavel) adiciona a instancia.
+    private void attachScriptTo(GameObject go) {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) { sm = new com.ignis.core.ScriptManager(projectFolder); game.setScriptManager(sm); }
+            java.util.List<String> available = new java.util.ArrayList<>(sm.listAvailableScripts());
+            available.removeAll(go.getScriptNames());
+            if (available.isEmpty()) { setStatus("Nenhum script disponivel para anexar."); return; }
+
+            ChoiceDialog<String> dlg = new ChoiceDialog<>(available.get(0), available);
+            dlg.setTitle("Anexar script");
+            dlg.setHeaderText(null);
+            dlg.setContentText("Script:");
+            java.util.Optional<String> choice = dlg.showAndWait();
+            if (choice.isEmpty()) return;
+
+            String name = choice.get();
+            if (!go.getScriptNames().contains(name)) {
+                go.getScriptNames().add(name);
+                try {
+                    com.ignis.core.IgnisScript inst = sm.createScriptInstance(name, go, game);
+                    if (inst != null) go.getScripts().add(inst);
+                } catch (Exception ignore) { /* compila no Play se falhar agora */ }
+                markProjectDirty();
+                setStatus("Script anexado: " + name);
+            }
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao anexar script:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private void openScriptByName(String scriptName) {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) { sm = new com.ignis.core.ScriptManager(projectFolder); game.setScriptManager(sm); }
+            new FxCodeEditor(null, sm, scriptName).show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir script:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    private File chooseSpriteFile() {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Escolher sprite");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                "Imagens", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp"));
+        if (projectFolder != null && projectFolder.isDirectory()) {
+            File assets = new File(projectFolder, "assets");
+            fc.setInitialDirectory(assets.isDirectory() ? assets : projectFolder);
+        }
+        return fc.showOpenDialog(primaryStage);
+    }
+
+    private HBox labeledInspectorRow(String label, javafx.scene.Node control) {
+        Label l = new Label(label);
+        l.getStyleClass().add("field-label");
+        l.setMinWidth(70);
+        HBox row = new HBox(8, l, control);
+        row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        return row;
+    }
+
+    private static String spriteLabel(String path) {
+        return (path == null || path.isEmpty()) ? "(nenhum)" : path;
+    }
+
+    private static java.lang.reflect.Method methodOrNull(Object o, String name) {
+        try { return o.getClass().getMethod(name); } catch (Exception e) { return null; }
+    }
+
+    private static java.lang.reflect.Method setColorMethodOrNull(Object o) {
+        try { return o.getClass().getMethod("setColor", java.awt.Color.class); } catch (Exception e) { return null; }
+    }
+
+    private static javafx.scene.paint.Color awtToFx(java.awt.Color c) {
+        return new javafx.scene.paint.Color(
+                c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0, c.getAlpha() / 255.0);
+    }
+
+    private static java.awt.Color fxToAwt(javafx.scene.paint.Color c) {
+        return new java.awt.Color(
+                (float) c.getRed(), (float) c.getGreen(), (float) c.getBlue(), (float) c.getOpacity());
     }
 
     private static double parseD(String s, double fallback) {
