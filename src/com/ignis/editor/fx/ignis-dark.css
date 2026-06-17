@@ -141,6 +141,18 @@
     -fx-padding: 0 1;
 }
 
+/* ---------------- ScrollPane ---------------- */
+/* Sem isto, o viewport do ScrollPane fica branco (default do modena) e aparece
+   "atras" do conteudo quando ele nao preenche toda a area. */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-border-color: transparent;
+}
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
 /* ---------------- ScrollBar ---------------- */
 
 .scroll-bar { -fx-background-color: -ignis-panel; }

@@ -199,7 +199,9 @@ public class FxCodeEditor extends Stage {
     // Master Regex for Java highlighting (sequential priority to avoid overlap)
     private static final Pattern JAVA_PATTERN = Pattern.compile(
         "(?<MULTICOMMENT>/\\*.*?\\*/)" +
-        "|(?<SINGLECOMMENT>//.*)" +
+        // [^\n] (e nao .) para o comentario de linha parar no fim da linha: com
+        // Pattern.DOTALL o '.' casaria newlines e '//' engoliria o resto do arquivo.
+        "|(?<SINGLECOMMENT>//[^\\n]*)" +
         "|(?<STRING>\"[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*\")" +
         "|(?<KEYWORD>\\b(abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null)\\b)" +
         "|(?<TYPE>\\b(String|Integer|Double|Float|Long|Short|Byte|Char|Boolean|GameObject|Input|IgnisScript|Animator|Camera|Color|Vector2|Game|Scene|Sound|Sprite)\\b)" +
