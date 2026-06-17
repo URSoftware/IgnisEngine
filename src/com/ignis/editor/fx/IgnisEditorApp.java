@@ -89,6 +89,16 @@ public class IgnisEditorApp extends Application {
     private SplitPane mainSplit;
     private SplitPane leftSplit;
     private FxSettingsWindow settingsWindow;
+
+    // Desfazer/Refazer (padrao Command). Cobre criar/deletar/duplicar/colar/
+    // renomear/reordenar e transformacoes por gizmo (via TransformListener).
+    private final UndoManager undoManager = new UndoManager();
+    private MenuItem undoItem;
+    private MenuItem redoItem;
+    // Estado capturado no inicio de um arraste de gizmo (para o comando de transformacao).
+    private GameObject transformObj;
+    private double txStartX, txStartY, txStartRot;
+    private int txStartW, txStartH;
     // Fonte AWT (nao exibida) usada apenas como 'source' nao-nulo ao fabricar
     // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
     private final java.awt.Component awtEventSource = new java.awt.Canvas();
@@ -233,6 +243,10 @@ public class IgnisEditorApp extends Application {
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN), () -> saveProjectAs(stage));
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), this::playWorld);
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), this::stopWorld);
+        // Refazer tambem por Ctrl+Shift+Z (alem de Ctrl+Y no menu Editar).
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN),
+                this::doRedo);
 
         // Scene key event filter for tools, selection controls, camera resets
         scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
@@ -442,7 +456,61 @@ public class IgnisEditorApp extends Application {
                 "IgnisEngine — editor JavaFX (Fase 3 da migracao).").showAndWait());
         help.getItems().add(about);
 
-        return new MenuBar(file, buildSceneMenu(), tools, view, help);
+        return new MenuBar(file, buildEditMenu(), buildSceneMenu(), tools, view, help);
+    }
+
+    // Menu "Editar": desfazer/refazer. Os rotulos/estado sao mantidos por
+    // updateUndoRedoUi (via UndoManager.onChange).
+    private Menu buildEditMenu() {
+        Menu edit = new Menu("Editar");
+        undoItem = new MenuItem("Desfazer");
+        undoItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN));
+        undoItem.setOnAction(e -> doUndo());
+        redoItem = new MenuItem("Refazer");
+        redoItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.CONTROL_DOWN));
+        redoItem.setOnAction(e -> doRedo());
+        edit.getItems().addAll(undoItem, redoItem);
+        undoManager.setOnChange(this::updateUndoRedoUi);
+        updateUndoRedoUi();
+        return edit;
+    }
+
+    private void doUndo() {
+        if (!undoManager.canUndo()) { setStatus("Nada para desfazer."); return; }
+        String name = undoManager.peekUndoName();
+        undoManager.undo();
+        setStatus("Desfeito: " + name);
+    }
+
+    private void doRedo() {
+        if (!undoManager.canRedo()) { setStatus("Nada para refazer."); return; }
+        String name = undoManager.peekRedoName();
+        undoManager.redo();
+        setStatus("Refeito: " + name);
+    }
+
+    private void updateUndoRedoUi() {
+        if (undoItem != null) {
+            undoItem.setDisable(!undoManager.canUndo());
+            undoItem.setText(undoManager.canUndo() ? "Desfazer: " + undoManager.peekUndoName() : "Desfazer");
+        }
+        if (redoItem != null) {
+            redoItem.setDisable(!undoManager.canRedo());
+            redoItem.setText(undoManager.canRedo() ? "Refazer: " + undoManager.peekRedoName() : "Refazer");
+        }
+    }
+
+    // Adiciona/remove uma entidade tratando o caso especial de Camera (lista propria).
+    private void addEntityTracked(GameObject o) {
+        game.addEntity(o);
+        if (o instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) o);
+    }
+
+    private void removeEntityTracked(GameObject o) {
+        game.removeEntity(o);
+        if (o instanceof com.ignis.core.Camera) {
+            try { game.getCameras().remove(o); } catch (Exception ignore) { /* best-effort */ }
+        }
     }
 
     // Menu "Cena": criar/duplicar/renomear/deletar/reordenar entidades.
@@ -585,6 +653,7 @@ public class IgnisEditorApp extends Application {
             }
             refreshHierarchy();
             refreshAssetBrowser();
+            undoManager.clear();
             EditorPrefs.addRecent(ignisFile);
             rebuildRecentMenu(primaryStage);
             stage().setTitle("IgnisEngine — " + project.getProjectName() + " (JavaFX)");
@@ -639,6 +708,7 @@ public class IgnisEditorApp extends Application {
             } catch (Exception ignore) { /* scripts opcionais */ }
             refreshHierarchy();
             refreshAssetBrowser();
+            undoManager.clear();
             EditorPrefs.addRecent(this.currentIgnisFile);
             rebuildRecentMenu(stage);
             stage.setTitle("IgnisEngine — " + name + " (JavaFX)");
@@ -735,6 +805,7 @@ public class IgnisEditorApp extends Application {
         setSelected(null);
         refreshHierarchy();
         refreshAssetBrowser();
+        undoManager.clear();
         stage.setTitle("IgnisEngine — Editor (JavaFX)");
         setStatus("Projeto fechado.");
         // Editor ja aberto: cancelar a selecao mantem o editor vazio (nao encerra).
@@ -1236,13 +1307,14 @@ public class IgnisEditorApp extends Application {
             obj.setY(-25);
             obj.setWidth(50);
             obj.setHeight(50);
-            game.addEntity(obj);
-            // Camera precisa ser registrada na lista de cameras do Game, alem de virar entidade.
-            if (obj instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) obj);
+            addEntityTracked(obj);
             refreshHierarchy();
             selectEntity(obj);
             markProjectDirty();
             setStatus("Objeto criado: " + obj.getName());
+            undoManager.push("Criar " + obj.getName(),
+                    () -> { removeEntityTracked(obj); refreshHierarchy(); selectEntity(null); markProjectDirty(); },
+                    () -> { addEntityTracked(obj); refreshHierarchy(); selectEntity(obj); markProjectDirty(); });
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao criar objeto:\n" + ex.getMessage()).showAndWait();
         }
@@ -1261,11 +1333,14 @@ public class IgnisEditorApp extends Application {
             copy.setSpritePath(original.getSpritePath());
             try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) { /* props opcionais */ }
             copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
-            game.addEntity(copy);
+            addEntityTracked(copy);
             refreshHierarchy();
             selectEntity(copy);
             markProjectDirty();
             setStatus("Duplicado: " + copy.getName());
+            undoManager.push("Duplicar " + copy.getName(),
+                    () -> { removeEntityTracked(copy); refreshHierarchy(); selectEntity(null); markProjectDirty(); },
+                    () -> { addEntityTracked(copy); refreshHierarchy(); selectEntity(copy); markProjectDirty(); });
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao duplicar:\n" + ex.getMessage()).showAndWait();
         }
@@ -1278,11 +1353,19 @@ public class IgnisEditorApp extends Application {
                 "Deletar '" + toDelete.getName() + "'?", ButtonType.YES, ButtonType.NO);
         confirm.setHeaderText(null);
         if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
-        game.removeEntity(toDelete);
+        int idx = game.getEntities().indexOf(toDelete);
+        removeEntityTracked(toDelete);
         setSelected(null);
         refreshHierarchy();
         markProjectDirty();
         setStatus("Deletado: " + toDelete.getName());
+        undoManager.push("Deletar " + toDelete.getName(),
+                () -> {
+                    addEntityTracked(toDelete);
+                    if (idx >= 0) game.moveEntityToIndex(toDelete, idx);
+                    refreshHierarchy(); selectEntity(toDelete); markProjectDirty();
+                },
+                () -> { removeEntityTracked(toDelete); refreshHierarchy(); selectEntity(null); markProjectDirty(); });
     }
 
     private void renameSelected() {
@@ -1294,32 +1377,56 @@ public class IgnisEditorApp extends Application {
         dlg.setContentText("Novo nome:");
         java.util.Optional<String> opt = dlg.showAndWait();
         if (opt.isEmpty() || opt.get().trim().isEmpty()) return;
-        go.setName(uniqueNameExcept(opt.get().trim(), go));
+        String oldName = go.getName();
+        String newName = uniqueNameExcept(opt.get().trim(), go);
+        if (newName.equals(oldName)) return;
+        go.setName(newName);
         refreshHierarchy();
         selectEntity(go);
         markProjectDirty();
         setStatus("Renomeado para: " + go.getName());
+        undoManager.push("Renomear",
+                () -> { go.setName(oldName); refreshHierarchy(); selectEntity(go); markProjectDirty(); },
+                () -> { go.setName(newName); refreshHierarchy(); selectEntity(go); markProjectDirty(); });
     }
 
     private void moveSelected(int delta) {
         if (selected == null) return;
         GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
+        int oldIdx = game.getEntities().indexOf(toReselect);
         if (delta < 0) game.moveEntityUp(toReselect);
         else game.moveEntityDown(toReselect);
+        int newIdx = game.getEntities().indexOf(toReselect);
         refreshHierarchy();
         selectEntity(toReselect);
-        markProjectDirty();
+        if (newIdx != oldIdx) { markProjectDirty(); pushReorder(toReselect, oldIdx, newIdx); }
     }
 
     private void moveSelectedTo(int index) {
         if (selected == null) return;
         GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
+        int oldIdx = game.getEntities().indexOf(toReselect);
         int target = (index == Integer.MAX_VALUE) ? game.getEntities().size() - 1 : index;
         if (target < 0) target = 0;
         game.moveEntityToIndex(toReselect, target);
+        int newIdx = game.getEntities().indexOf(toReselect);
         refreshHierarchy();
         selectEntity(toReselect);
+        if (newIdx != oldIdx) { markProjectDirty(); pushReorder(toReselect, oldIdx, newIdx); }
+    }
+
+    // Aplica um estado de transformacao a um objeto (usado por desfazer/refazer de gizmo).
+    private void applyTransform(GameObject o, double x, double y, double rot, int w, int h) {
+        o.setX(x); o.setY(y); o.setRotation(rot); o.setWidth(w); o.setHeight(h);
+        refreshHierarchy();
+        selectEntity(o);
         markProjectDirty();
+    }
+
+    private void pushReorder(GameObject o, int oldIdx, int newIdx) {
+        undoManager.push("Reordenar " + o.getName(),
+                () -> { game.moveEntityToIndex(o, oldIdx); refreshHierarchy(); selectEntity(o); markProjectDirty(); },
+                () -> { game.moveEntityToIndex(o, newIdx); refreshHierarchy(); selectEntity(o); markProjectDirty(); });
     }
 
     // Nome unico entre as entidades (ignora 'except', util ao renomear o proprio objeto).
@@ -1358,10 +1465,25 @@ public class IgnisEditorApp extends Application {
     // ---------------- Auto Save do projeto ----------------
 
     private void setupProjectAutoSave() {
-        // Marca o projeto como "sujo" ao fim de um arraste (mover/rotacionar/escalar).
+        // Marca o projeto como "sujo" ao fim de um arraste (mover/rotacionar/escalar) e
+        // registra um comando de Desfazer com o estado antes/depois da transformacao.
         game.setTransformListener(new com.ignis.core.Game.TransformListener() {
-            @Override public void onTransformStart(GameObject o, double x, double y, double rotation, int w, int h) { }
-            @Override public void onTransformEnd(GameObject o) { markProjectDirty(); }
+            @Override public void onTransformStart(GameObject o, double x, double y, double rotation, int w, int h) {
+                transformObj = o;
+                txStartX = x; txStartY = y; txStartRot = rotation; txStartW = w; txStartH = h;
+            }
+            @Override public void onTransformEnd(GameObject o) {
+                markProjectDirty();
+                if (o == null || o != transformObj) { transformObj = null; return; }
+                double sx = txStartX, sy = txStartY, srot = txStartRot; int sw = txStartW, sh = txStartH;
+                double ex = o.getX(), ey = o.getY(), erot = o.getRotation(); int ew = o.getWidth(), eh = o.getHeight();
+                transformObj = null;
+                // Ignora se nada mudou (ex: clique sem arraste).
+                if (sx == ex && sy == ey && srot == erot && sw == ew && sh == eh) return;
+                undoManager.push("Transformar " + o.getName(),
+                        () -> applyTransform(o, sx, sy, srot, sw, sh),
+                        () -> applyTransform(o, ex, ey, erot, ew, eh));
+            }
         });
         projectAutoSaveTimer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
                 javafx.util.Duration.seconds(EditorPrefs.getAutoSaveIntervalSeconds()), e -> {
@@ -1988,12 +2110,15 @@ public class IgnisEditorApp extends Application {
                 copy.setSpritePath(original.getSpritePath());
                 try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) {}
                 copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
-                game.addEntity(copy);
-                if (copy instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) copy);
+                addEntityTracked(copy);
 
                 refreshHierarchy();
                 selectEntity(copy);
+                markProjectDirty();
                 setStatus("Colado: " + copy.getName());
+                undoManager.push("Colar " + copy.getName(),
+                        () -> { removeEntityTracked(copy); refreshHierarchy(); selectEntity(null); markProjectDirty(); },
+                        () -> { addEntityTracked(copy); refreshHierarchy(); selectEntity(copy); markProjectDirty(); });
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Erro ao colar objeto:\n" + ex.getMessage()).showAndWait();
             }
