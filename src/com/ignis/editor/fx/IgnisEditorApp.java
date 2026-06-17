@@ -1824,8 +1824,7 @@ public class IgnisEditorApp extends Application {
         pick.setOnAction(e -> {
             File f = chooseSpriteFile();
             if (f != null) {
-                String rel = com.ignis.core.AssetResolver.relativize(f);
-                go.setSpritePath(rel != null ? rel : f.getAbsolutePath());
+                go.setSpritePath(importSpriteToProject(f));
                 spriteVal.setText(spriteLabel(go.getSpritePath()));
                 markProjectDirty();
             }
@@ -1964,6 +1963,41 @@ public class IgnisEditorApp extends Application {
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir script:\n" + ex.getMessage()).showAndWait();
         }
+    }
+
+    // Importa a imagem para assets/sprites do projeto (se ainda estiver fora dele)
+    // e retorna o caminho RELATIVO ao projeto — sprites passam a viver no projeto e
+    // ficam portateis. Se ja estiver dentro, apenas relativiza. Fallback para
+    // caminho absoluto se nao houver projeto ou a copia falhar.
+    private String importSpriteToProject(File src) {
+        try {
+            String existingRel = com.ignis.core.AssetResolver.relativize(src);
+            if (existingRel != null) return existingRel; // ja dentro do projeto
+            if (projectFolder == null) return src.getAbsolutePath();
+            File spritesDir = new File(projectFolder, "assets/sprites");
+            if (!spritesDir.exists()) spritesDir.mkdirs();
+            File dest = uniqueDestFile(spritesDir, src.getName());
+            java.nio.file.Files.copy(src.toPath(), dest.toPath());
+            refreshAssetBrowser();
+            String rel = com.ignis.core.AssetResolver.relativize(dest);
+            setStatus("Sprite importado: " + (rel != null ? rel : dest.getName()));
+            return rel != null ? rel : dest.getAbsolutePath();
+        } catch (Exception ex) {
+            setStatus("Falha ao importar sprite: " + ex.getMessage());
+            return src.getAbsolutePath();
+        }
+    }
+
+    // Gera um destino que nao sobrescreve arquivos existentes (nome, nome_1, nome_2…).
+    private static File uniqueDestFile(File dir, String name) {
+        File dest = new File(dir, name);
+        if (!dest.exists()) return dest;
+        String base = name, ext = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) { base = name.substring(0, dot); ext = name.substring(dot); }
+        int i = 1;
+        do { dest = new File(dir, base + "_" + i++ + ext); } while (dest.exists());
+        return dest;
     }
 
     private File chooseSpriteFile() {
