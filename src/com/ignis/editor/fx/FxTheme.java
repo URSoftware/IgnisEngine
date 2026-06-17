@@ -49,19 +49,33 @@ public final class FxTheme {
         return cachedUrl;
     }
 
+    private static final String LIGHT_CLASS = "ignis-light";
+
     /**
-     * Aplica (ou remove) o tema na cena conforme a preferencia atual. Idempotente.
-     * Marca a cena para que {@link #refreshAllWindows()} possa retematiza-la depois.
+     * Aplica o tema na cena. O stylesheet fica SEMPRE adicionado (define a paleta
+     * e as regras de controle); a escolha escuro/claro e feita pela presenca da
+     * styleClass {@code ignis-light} na raiz. Assim as variaveis -ignis-* sempre
+     * resolvem e qualquer uso delas responde ao tema. Idempotente. Marca a cena
+     * para que {@link #refreshAllWindows()} possa retematiza-la depois.
      */
     public static void apply(Scene scene) {
         if (scene == null) return;
         scene.getProperties().put(MARK, Boolean.TRUE);
         String ss = stylesheet();
-        if (ss == null) return;
+        if (ss != null && !scene.getStylesheets().contains(ss)) {
+            scene.getStylesheets().add(ss);
+        }
+        applyPalette(scene);
+    }
+
+    // Liga/desliga a paleta clara conforme a preferencia, na raiz da cena.
+    private static void applyPalette(Scene scene) {
+        if (scene == null || scene.getRoot() == null) return;
+        var classes = scene.getRoot().getStyleClass();
         if (isDark()) {
-            if (!scene.getStylesheets().contains(ss)) scene.getStylesheets().add(ss);
-        } else {
-            scene.getStylesheets().remove(ss);
+            classes.remove(LIGHT_CLASS);
+        } else if (!classes.contains(LIGHT_CLASS)) {
+            classes.add(LIGHT_CLASS);
         }
     }
 
@@ -73,7 +87,7 @@ public final class FxTheme {
         for (Window w : Window.getWindows()) {
             Scene s = w.getScene();
             if (s != null && Boolean.TRUE.equals(s.getProperties().get(MARK))) {
-                apply(s);
+                applyPalette(s);
             }
         }
     }

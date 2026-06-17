@@ -64,7 +64,7 @@ public class FxImageEditor extends Stage {
 
             @Override
             public void onColorPicked(java.awt.Color picked) {
-                Platform.runLater(() -> colorPreview.setStyle("-fx-background-color: " + toHex(picked) + "; -fx-border-color: gray; -fx-border-width: 1px;"));
+                Platform.runLater(() -> colorPreview.setStyle("-fx-background-color: " + toHex(picked) + "; -fx-border-color: -ignis-border; -fx-border-width: 1px;"));
             }
 
             @Override
@@ -79,7 +79,7 @@ public class FxImageEditor extends Stage {
         });
 
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #2b2b2b;");
+        root.setStyle("-fx-background-color: -ignis-bg;");
 
         // Menu and Toolbar
         VBox topContainer = new VBox(buildMenuBar(), buildToolBar());
@@ -87,11 +87,11 @@ public class FxImageEditor extends Stage {
 
         // Center canvas wrapper
         StackPane canvasWrapper = new StackPane(canvas);
-        canvasWrapper.setStyle("-fx-background-color: #232323;");
+        canvasWrapper.setStyle("-fx-background-color: -ignis-bg;");
         canvasWrapper.setPadding(new Insets(10));
 
         ScrollPane canvasScroll = new ScrollPane(canvasWrapper);
-        canvasScroll.setStyle("-fx-background: #232323; -fx-border-color: transparent;");
+        canvasScroll.setStyle("-fx-background: -ignis-bg; -fx-border-color: transparent;");
         canvasScroll.setFitToWidth(true);
         canvasScroll.setFitToHeight(true);
 
@@ -113,7 +113,7 @@ public class FxImageEditor extends Stage {
         VBox sidebar = new VBox(10);
         sidebar.setPadding(new Insets(10));
         sidebar.setPrefWidth(220);
-        sidebar.setStyle("-fx-background-color: #2d2d2d;");
+        sidebar.setStyle("-fx-background-color: -ignis-panel;");
         VBox.setVgrow(sidebar, Priority.ALWAYS);
 
         TitledPane layersPane = new TitledPane("Layers", buildLayersPanel());
@@ -130,8 +130,8 @@ public class FxImageEditor extends Stage {
         // Status bar
         HBox statusPanel = new HBox(10);
         statusPanel.setPadding(new Insets(6, 12, 6, 12));
-        statusPanel.setStyle("-fx-background-color: #2d2d2d; -fx-border-color: #3c3c3c; -fx-border-width: 1 0 0 0;");
-        statusLabel.setStyle("-fx-text-fill: lightgray;");
+        statusPanel.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 1 0 0 0;");
+        statusLabel.setStyle("-fx-text-fill: -ignis-text-dim;");
         statusPanel.getChildren().add(statusLabel);
         root.setBottom(statusPanel);
 
@@ -199,7 +199,7 @@ public class FxImageEditor extends Stage {
         // Color selector
         colorPreview.setPrefSize(24, 24);
         java.awt.Color awtCol = canvas.getColor();
-        colorPreview.setStyle("-fx-background-color: " + toHex(awtCol) + "; -fx-border-color: gray; -fx-border-width: 1px;");
+        colorPreview.setStyle("-fx-background-color: " + toHex(awtCol) + "; -fx-border-color: -ignis-border; -fx-border-width: 1px;");
 
         Button colorButton = new Button("Color");
         colorButton.setOnAction(e -> {
@@ -217,10 +217,12 @@ public class FxImageEditor extends Stage {
                 Color c = picker.getValue();
                 java.awt.Color newAwt = new java.awt.Color((float)c.getRed(), (float)c.getGreen(), (float)c.getBlue(), (float)c.getOpacity());
                 canvas.setColor(newAwt);
-                colorPreview.setStyle("-fx-background-color: " + toHex(newAwt) + "; -fx-border-color: gray; -fx-border-width: 1px;");
+                colorPreview.setStyle("-fx-background-color: " + toHex(newAwt) + "; -fx-border-color: -ignis-border; -fx-border-width: 1px;");
             });
 
-            pickerStage.setScene(new Scene(box));
+            Scene pickerScene = new Scene(box);
+            FxTheme.apply(pickerScene);
+            pickerStage.setScene(pickerScene);
             pickerStage.showAndWait();
         });
 
@@ -228,7 +230,7 @@ public class FxImageEditor extends Stage {
 
         // Brush size
         Label sizeLbl = new Label(" Size: ");
-        sizeLbl.setStyle("-fx-text-fill: white;");
+        sizeLbl.setStyle("-fx-text-fill: -ignis-text;");
         Spinner<Integer> sizeSpinner = new Spinner<>(1, 128, 4);
         sizeSpinner.setPrefWidth(70);
         sizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -239,7 +241,7 @@ public class FxImageEditor extends Stage {
 
         // Zoom
         Label zoomLbl = new Label(" Zoom: ");
-        zoomLbl.setStyle("-fx-text-fill: white;");
+        zoomLbl.setStyle("-fx-text-fill: -ignis-text;");
         zoomCombo = new ComboBox<>();
         zoomCombo.getItems().addAll("25%", "50%", "100%", "200%", "400%", "800%", "1600%", "3200%");
         zoomCombo.setValue("100%");
@@ -255,7 +257,7 @@ public class FxImageEditor extends Stage {
 
         // Grid size
         Label gridLbl = new Label(" Grid: ");
-        gridLbl.setStyle("-fx-text-fill: white;");
+        gridLbl.setStyle("-fx-text-fill: -ignis-text;");
         ComboBox<String> gridCombo = new ComboBox<>();
         gridCombo.getItems().addAll("None", "Pixel (1x1)", "8x8", "16x16", "32x32");
         gridCombo.setValue("Pixel (1x1)");
@@ -273,7 +275,7 @@ public class FxImageEditor extends Stage {
         // Stabilizer
         CheckBox stabilizerBox = new CheckBox("Stabilizer");
         stabilizerBox.setSelected(true);
-        stabilizerBox.setStyle("-fx-text-fill: white;");
+        stabilizerBox.setStyle("-fx-text-fill: -ignis-text;");
         stabilizerBox.setOnAction(e -> canvas.setUseStabilizer(stabilizerBox.isSelected()));
         toolbar.getItems().add(stabilizerBox);
 
@@ -329,7 +331,7 @@ public class FxImageEditor extends Stage {
 
     private VBox buildLayersPanel() {
         VBox vbox = new VBox(6);
-        vbox.setStyle("-fx-background-color: #2d2d2d;");
+        vbox.setStyle("-fx-background-color: -ignis-panel;");
         VBox.setVgrow(vbox, Priority.ALWAYS);
 
         layerList.setCellFactory(lv -> new ListCell<>() {
@@ -418,7 +420,7 @@ public class FxImageEditor extends Stage {
 
     private VBox buildHistoryPanel() {
         VBox vbox = new VBox(6);
-        vbox.setStyle("-fx-background-color: #2d2d2d;");
+        vbox.setStyle("-fx-background-color: -ignis-panel;");
         VBox.setVgrow(vbox, Priority.ALWAYS);
 
         historyList.getSelectionModel().selectedIndexProperty().addListener((obs, oldIdx, newIdx) -> {
@@ -521,7 +523,9 @@ public class FxImageEditor extends Stage {
         });
         g.add(btnOk, 1, 2);
 
-        sizeStage.setScene(new Scene(g));
+        Scene sizeScene = new Scene(g);
+        FxTheme.apply(sizeScene);
+        sizeStage.setScene(sizeScene);
         sizeStage.showAndWait();
     }
 

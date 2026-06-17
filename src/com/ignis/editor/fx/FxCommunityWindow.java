@@ -44,37 +44,37 @@ public class FxCommunityWindow extends Stage {
         }
 
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #1e1e1e;");
+        root.setStyle("-fx-background-color: -ignis-bg;");
 
         // --- Top Header ---
         BorderPane headerPanel = new BorderPane();
-        headerPanel.setStyle("-fx-background-color: #2d2d2d; -fx-border-color: #3c3c3c; -fx-border-width: 0 0 1 0;");
+        headerPanel.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 0 0 1 0;");
         headerPanel.setPadding(new Insets(12, 16, 12, 16));
 
         Label titleLabel = new Label("👥 Community & Marketplace");
-        titleLabel.setStyle("-fx-font-family: 'Arial'; -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;");
+        titleLabel.setStyle("-fx-font-family: 'Arial'; -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: -ignis-text;");
         headerPanel.setLeft(titleLabel);
 
         HBox actions = new HBox(8);
         actions.setAlignment(Pos.CENTER_RIGHT);
 
         Button btnPublishSite = new Button("🌐 Publicar no site");
-        styleActionButton(btnPublishSite, "#4682b4");
+        styleActionButton(btnPublishSite, "-ignis-info");
         btnPublishSite.setTooltip(new Tooltip("Abre o marketplace no navegador para publicar com login GitHub."));
         btnPublishSite.setOnAction(e -> openInBrowser(marketplace.getPublishUrl()));
 
         Button btnPublishLocal = new Button("💻 Publicar com token");
-        styleActionButton(btnPublishLocal, "#2e8b57");
+        styleActionButton(btnPublishLocal, "-ignis-primary");
         btnPublishLocal.setTooltip(new Tooltip("Publica direto do editor usando seu token (sem abrir o navegador)."));
         btnPublishLocal.setOnAction(e -> openLocalPublishDialog());
 
         Button btnToken = new Button("🔑 Token");
-        styleActionButton(btnToken, "#5a5a5a");
+        styleActionButton(btnToken, "-ignis-secondary");
         btnToken.setTooltip(new Tooltip("Configurar o token de publicacao."));
         btnToken.setOnAction(e -> openTokenDialog());
 
         Button btnHelp = new Button("❓");
-        styleActionButton(btnHelp, "#5a5a5a");
+        styleActionButton(btnHelp, "-ignis-secondary");
         btnHelp.setTooltip(new Tooltip("Como publicar funciona."));
         btnHelp.setOnAction(e -> showPublishHelp());
 
@@ -84,7 +84,7 @@ public class FxCommunityWindow extends Stage {
 
         // --- Tabs Container (Center) ---
         TabPane tabbedPane = new TabPane();
-        tabbedPane.setStyle("-fx-background-color: #232323;");
+        tabbedPane.setStyle("-fx-background-color: -ignis-bg;");
         
         List<MarketplaceItem> catalog = marketplace.fetchCatalog();
 
@@ -101,12 +101,12 @@ public class FxCommunityWindow extends Stage {
         // --- Status Bar (Bottom) ---
         HBox statusBar = new HBox(12);
         statusBar.setPadding(new Insets(6, 12, 6, 12));
-        statusBar.setStyle("-fx-background-color: #282828; -fx-border-color: #3c3c3c; -fx-border-width: 1 0 0 0;");
+        statusBar.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 1 0 0 0;");
         
         statusLabel = new Label(marketplace.isLastFetchOnline()
                 ? "Online catalog loaded from " + marketplace.getBaseUrl()
                 : "Offline: showing built-in catalog (marketplace API unreachable).");
-        statusLabel.setStyle("-fx-text-fill: lightgray; -fx-font-size: 11px;");
+        statusLabel.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-size: 11px;");
         statusBar.getChildren().add(statusLabel);
         root.setBottom(statusBar);
 
@@ -118,7 +118,7 @@ public class FxCommunityWindow extends Stage {
     private ScrollPane createCatalogPanel(List<MarketplaceItem> catalog, String filterType) {
         VBox listPanel = new VBox(10);
         listPanel.setPadding(new Insets(12));
-        listPanel.setStyle("-fx-background-color: #1e1e1e;");
+        listPanel.setStyle("-fx-background-color: -ignis-bg;");
 
         for (MarketplaceItem item : catalog) {
             if (item.type.equals(filterType)) {
@@ -128,21 +128,21 @@ public class FxCommunityWindow extends Stage {
 
         ScrollPane scrollPane = new ScrollPane(listPanel);
         scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background: #1e1e1e; -fx-border-color: transparent;");
+        scrollPane.setStyle("-fx-background: -ignis-bg; -fx-border-color: transparent;");
         return scrollPane;
     }
 
     private BorderPane createItemCard(MarketplaceItem item) {
         BorderPane card = new BorderPane();
-        card.setStyle("-fx-background-color: #2d2d2d; -fx-border-color: #4b4b4b; -fx-border-width: 1px; -fx-border-radius: 4px;");
+        card.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 1px; -fx-border-radius: 4px;");
         card.setPadding(new Insets(12));
 
         // Visual Preview Thumbnail (Left)
         StackPane thumbnail = new StackPane();
         thumbnail.setPrefSize(80, 60);
-        thumbnail.setStyle("-fx-background-color: #3c3c3c; -fx-border-color: #646464; -fx-border-width: 1px;");
+        thumbnail.setStyle("-fx-background-color: -ignis-control; -fx-border-color: -ignis-border; -fx-border-width: 1px;");
         Label thumbLabel = new Label(item.coverImageText);
-        thumbLabel.setStyle("-fx-text-fill: lightgray; -fx-font-family: 'Arial'; -fx-font-size: 10px; -fx-font-weight: bold;");
+        thumbLabel.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-family: 'Arial'; -fx-font-size: 10px; -fx-font-weight: bold;");
         thumbnail.getChildren().add(thumbLabel);
         BorderPane.setMargin(thumbnail, new Insets(0, 15, 0, 0));
         card.setLeft(thumbnail);
@@ -150,14 +150,14 @@ public class FxCommunityWindow extends Stage {
         // Center Content Info
         VBox infoPanel = new VBox(4);
         Label nameLabel = new Label(item.name + "  v" + item.version + "  by " + item.author);
-        nameLabel.setStyle("-fx-text-fill: white; -fx-font-family: 'Arial'; -fx-font-size: 12px; -fx-font-weight: bold;");
-        
+        nameLabel.setStyle("-fx-text-fill: -ignis-text; -fx-font-family: 'Arial'; -fx-font-size: 12px; -fx-font-weight: bold;");
+
         Label descLabel = new Label(item.description);
         descLabel.setWrapText(true);
-        descLabel.setStyle("-fx-text-fill: lightgray; -fx-font-family: 'Arial'; -fx-font-size: 11px;");
+        descLabel.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-family: 'Arial'; -fx-font-size: 11px;");
 
         Label depLabel = new Label("Git: " + item.gitUrl + "  |  Deps: " + item.dependencies);
-        depLabel.setStyle("-fx-text-fill: #78b4dc; -fx-font-family: 'Courier New'; -fx-font-size: 10px;");
+        depLabel.setStyle("-fx-text-fill: -ignis-info; -fx-font-family: 'Courier New'; -fx-font-size: 10px;");
 
         infoPanel.getChildren().addAll(nameLabel, descLabel, depLabel);
         card.setCenter(infoPanel);
@@ -166,7 +166,7 @@ public class FxCommunityWindow extends Stage {
         StackPane btnPanel = new StackPane();
         btnPanel.setPadding(new Insets(0, 0, 0, 10));
         Button btnInstall = new Button("⚡ 1-Click Install");
-        btnInstall.setStyle("-fx-background-color: #2e8b57; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 14; -fx-background-radius: 4px;");
+        btnInstall.setStyle("-fx-background-color: -ignis-primary; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 14; -fx-background-radius: 4px;");
         btnInstall.setOnAction(e -> installPackage(item, btnInstall));
         btnPanel.getChildren().add(btnInstall);
         card.setRight(btnPanel);
@@ -187,18 +187,20 @@ public class FxCommunityWindow extends Stage {
 
         VBox p = new VBox(8);
         p.setPadding(new Insets(16));
-        p.setStyle("-fx-background-color: #2d2d2d;");
+        p.setStyle("-fx-background-color: -ignis-panel;");
         p.setPrefWidth(350);
 
         Label stepLabel = new Label("1. Downloading package from Git...");
-        stepLabel.setStyle("-fx-text-fill: white; -fx-font-size: 12px;");
-        
+        stepLabel.setStyle("-fx-text-fill: -ignis-text; -fx-font-size: 12px;");
+
         ProgressBar bar = new ProgressBar(0);
         bar.setPrefWidth(320);
-        bar.setStyle("-fx-accent: #2e8b57;");
+        bar.setStyle("-fx-accent: -ignis-accent;");
 
         p.getChildren().addAll(stepLabel, bar);
-        progressDialog.setScene(new Scene(p));
+        Scene progressScene = new Scene(p);
+        FxTheme.apply(progressScene);
+        progressDialog.setScene(progressScene);
 
         new Thread(() -> {
             try {
@@ -244,7 +246,7 @@ public class FxCommunityWindow extends Stage {
                 Platform.runLater(() -> {
                     progressDialog.close();
                     installBtn.setText("✓ Installed");
-                    installBtn.setStyle("-fx-background-color: #646464; -fx-text-fill: white; -fx-padding: 8 14; -fx-background-radius: 4px;");
+                    installBtn.setStyle("-fx-background-color: -ignis-secondary; -fx-text-fill: white; -fx-padding: 8 14; -fx-background-radius: 4px;");
                     statusLabel.setText("✓ " + item.name + " installed successfully to " + targetDir.getName() + ".");
                     
                     Alert success = new Alert(Alert.AlertType.INFORMATION);
@@ -333,24 +335,24 @@ public class FxCommunityWindow extends Stage {
 
         VBox panel = new VBox(8);
         panel.setPadding(new Insets(12));
-        panel.setStyle("-fx-background-color: #2d2d2d;");
+        panel.setStyle("-fx-background-color: -ignis-panel;");
         panel.setPrefWidth(380);
 
         Label info = new Label("O token permite publicar direto do editor.\nGere no site (logado com GitHub), copie e cole abaixo.");
-        info.setStyle("-fx-text-fill: #ddd; -fx-font-size: 11px;");
+        info.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-size: 11px;");
 
         TextField txtToken = new TextField(marketplace.hasToken() ? marketplace.getToken() : "");
-        txtToken.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white;");
+        txtToken.setStyle("-fx-background-color: -ignis-control; -fx-text-fill: -ignis-text;");
 
         Button btnGen = new Button("Gerar token no site ↗");
-        btnGen.setStyle("-fx-background-color: #5a5a5a; -fx-text-fill: white;");
+        btnGen.getStyleClass().add("btn-secondary");
         btnGen.setOnAction(e -> openInBrowser(marketplace.getAccountUrl()));
 
         HBox buttons = new HBox(8);
         buttons.setAlignment(Pos.CENTER_RIGHT);
         
         Button btnSave = new Button("Salvar");
-        btnSave.setStyle("-fx-background-color: #2e8b57; -fx-text-fill: white;");
+        btnSave.getStyleClass().add("btn-primary");
         btnSave.setOnAction(e -> {
             marketplace.setToken(txtToken.getText().trim());
             statusLabel.setText(marketplace.hasToken() ? "Token salvo." : "Token vazio (nada salvo).");
@@ -358,7 +360,7 @@ public class FxCommunityWindow extends Stage {
         });
 
         Button btnClear = new Button("Limpar token");
-        btnClear.setStyle("-fx-background-color: #b22222; -fx-text-fill: white;");
+        btnClear.getStyleClass().add("btn-danger");
         btnClear.setOnAction(e -> {
             marketplace.clearToken();
             statusLabel.setText("Token removido.");
@@ -366,13 +368,15 @@ public class FxCommunityWindow extends Stage {
         });
 
         Button btnCancel = new Button("Cancelar");
-        btnCancel.setStyle("-fx-background-color: #5a5a5a; -fx-text-fill: white;");
+        btnCancel.getStyleClass().add("btn-secondary");
         btnCancel.setOnAction(e -> dlg.close());
 
         buttons.getChildren().addAll(btnSave, btnClear, btnCancel);
         panel.getChildren().addAll(info, txtToken, btnGen, buttons);
 
-        dlg.setScene(new Scene(panel));
+        Scene tokenScene = new Scene(panel);
+        FxTheme.apply(tokenScene);
+        dlg.setScene(tokenScene);
         dlg.showAndWait();
     }
 
@@ -403,7 +407,7 @@ public class FxCommunityWindow extends Stage {
         grid.setPadding(new Insets(12));
         grid.setHgap(8);
         grid.setVgap(8);
-        grid.setStyle("-fx-background-color: #2d2d2d;");
+        grid.setStyle("-fx-background-color: -ignis-panel;");
 
         grid.add(lightLabel("Tipo:"), 0, 0);
         ComboBox<String> typeCombo = new ComboBox<>();
@@ -432,9 +436,9 @@ public class FxCommunityWindow extends Stage {
         grid.add(txtVer, 1, 5);
 
         CheckBox chkTerms = new CheckBox("Aceito os Termos e Privacidade");
-        chkTerms.setStyle("-fx-text-fill: lightgray;");
+        chkTerms.setStyle("-fx-text-fill: -ignis-text-dim;");
         Button btnTerms = new Button("ver termos ↗");
-        btnTerms.setStyle("-fx-background-color: #5a5a5a; -fx-text-fill: white; -fx-font-size: 10px;");
+        btnTerms.setStyle("-fx-background-color: -ignis-secondary; -fx-text-fill: white; -fx-font-size: 10px;");
         btnTerms.setOnAction(e -> openInBrowser(marketplace.getBaseUrl() + "/terms"));
 
         HBox termsBox = new HBox(8, chkTerms, btnTerms);
@@ -444,7 +448,7 @@ public class FxCommunityWindow extends Stage {
         buttons.setAlignment(Pos.CENTER_RIGHT);
         
         Button btnSubmit = new Button("Publicar");
-        btnSubmit.setStyle("-fx-background-color: #2e8b57; -fx-text-fill: white;");
+        btnSubmit.getStyleClass().add("btn-primary");
         btnSubmit.setOnAction(e -> {
             String name = txtName.getText().trim();
             String git = txtGit.getText().trim();
@@ -495,19 +499,21 @@ public class FxCommunityWindow extends Stage {
         });
 
         Button btnCancel = new Button("Cancelar");
-        btnCancel.setStyle("-fx-background-color: #5a5a5a; -fx-text-fill: white;");
+        btnCancel.getStyleClass().add("btn-secondary");
         btnCancel.setOnAction(e -> dlg.close());
 
         buttons.getChildren().addAll(btnSubmit, btnCancel);
         grid.add(buttons, 1, 7);
 
-        dlg.setScene(new Scene(grid));
+        Scene publishScene = new Scene(grid);
+        FxTheme.apply(publishScene);
+        dlg.setScene(publishScene);
         dlg.showAndWait();
     }
 
     private Label lightLabel(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
+        l.setStyle("-fx-text-fill: -ignis-text; -fx-font-weight: bold;");
         return l;
     }
 }

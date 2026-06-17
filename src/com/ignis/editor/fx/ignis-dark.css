@@ -11,6 +11,11 @@
  */
 
 .root {
+    /* Paleta ESCURA (default). A paleta CLARA esta em .root.ignis-light abaixo;
+       o stylesheet fica SEMPRE aplicado e a troca de tema apenas adiciona/remove
+       a styleClass "ignis-light" na raiz (FxTheme), entao as variaveis -ignis-*
+       sempre resolvem (sem warnings) e todo uso delas — inclusive setStyle inline
+       nos subeditores — responde ao tema selecionado. */
     -ignis-bg:           #252526;  /* fundo da janela */
     -ignis-panel:        #2d2d2d;  /* paineis (Hierarchy/Inspector/Assets) */
     -ignis-control:      #1e1e1e;  /* campos e controles */
@@ -21,12 +26,32 @@
     -ignis-text-dim:     #b0b0b0;  /* texto secundario */
     -ignis-border:       #3c3c3c;
 
+    /* Cores semanticas (iguais nos dois temas; texto branco contrasta em ambas). */
+    -ignis-primary:      #2e8b57;  /* acao primaria (salvar/instalar) */
+    -ignis-secondary:    #5a5a5a;  /* acao neutra (cancelar) */
+    -ignis-danger:       #b22222;  /* acao destrutiva (limpar/sair) */
+    -ignis-info:         #4682b4;  /* acao informativa (novo/link) */
+
     -fx-background-color: -ignis-bg;
     -fx-font-family: "Segoe UI", "Tahoma", sans-serif;
     /* Cores literais (nao looked-up): evita o warning benigno
        'String cannot be cast to Paint' do modena ao abrir ComboBox/ListView. */
     -fx-focus-color: #3cb371;
     -fx-faint-focus-color: #3cb37133;
+}
+
+/* Paleta CLARA — ativada quando a raiz tem a styleClass "ignis-light". As regras
+   de controle abaixo usam as variaveis, entao mudam de cor automaticamente. */
+.root.ignis-light {
+    -ignis-bg:           #f3f3f3;
+    -ignis-panel:        #e6e6e6;
+    -ignis-control:      #ffffff;
+    -ignis-control-hover:#d8d8d8;
+    -ignis-accent:       #2e8b57;
+    -ignis-accent-bright:#20724a;
+    -ignis-text:         #1e1e1e;
+    -ignis-text-dim:     #555555;
+    -ignis-border:       #c0c0c0;
 }
 
 /* ---------------- Texto base ---------------- */
@@ -212,6 +237,17 @@
 .field-label {
     -fx-text-fill: -ignis-text-dim;
 }
+
+/* Botoes semanticos (acoes coloridas dos subeditores/dialogos). Texto branco
+   contrasta nas duas paletas. Usar via styleClass em vez de setStyle inline. */
+.btn-primary   { -fx-background-color: -ignis-primary;   -fx-text-fill: white; -fx-font-weight: bold; -fx-border-color: transparent; }
+.btn-secondary { -fx-background-color: -ignis-secondary; -fx-text-fill: white; -fx-border-color: transparent; }
+.btn-danger    { -fx-background-color: -ignis-danger;    -fx-text-fill: white; -fx-border-color: transparent; }
+.btn-info      { -fx-background-color: -ignis-info;      -fx-text-fill: white; -fx-border-color: transparent; }
+.btn-primary:hover   { -fx-background-color: derive(-ignis-primary, 12%); }
+.btn-secondary:hover { -fx-background-color: derive(-ignis-secondary, 15%); }
+.btn-danger:hover    { -fx-background-color: derive(-ignis-danger, 12%); }
+.btn-info:hover      { -fx-background-color: derive(-ignis-info, 12%); }
 
 /* Item de navegacao da janela de Configuracoes (sidebar) */
 .nav-item {

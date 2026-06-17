@@ -1,6 +1,7 @@
 package com.ignis.editor.fx;
 
 import com.ignis.editor.AIIntegration;
+import com.ignis.editor.fx.FxTheme;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -73,12 +74,12 @@ public class FxNotesWindow extends Stage {
 
         // --- Left Sidebar (TreeView for Pages hierarchy) ---
         BorderPane sidebarPanel = new BorderPane();
-        sidebarPanel.setStyle("-fx-background-color: #2d2d2d;");
+        sidebarPanel.setStyle("-fx-background-color: -ignis-panel;");
 
         rootNode = new TreeItem<>("Ignis Project Wiki");
         rootNode.setExpanded(true);
         pageTree = new TreeView<>(rootNode);
-        pageTree.setStyle("-fx-background-color: #2d2d2d;");
+        pageTree.setStyle("-fx-background-color: -ignis-panel;");
 
         // Custom tree cell factory to support clean NotePage title labels
         pageTree.setCellFactory(tv -> new TreeCell<>() {
@@ -97,7 +98,7 @@ public class FxNotesWindow extends Stage {
 
         HBox sidebarButtons = new HBox(4);
         sidebarButtons.setPadding(new Insets(6));
-        sidebarButtons.setStyle("-fx-background-color: #282828;");
+        sidebarButtons.setStyle("-fx-background-color: -ignis-panel;");
         sidebarButtons.setAlignment(Pos.CENTER);
 
         Button btnAdd = new Button("📄 New Page");
@@ -107,8 +108,8 @@ public class FxNotesWindow extends Stage {
         btnAdd.setMaxWidth(Double.MAX_VALUE);
         btnDelete.setMaxWidth(Double.MAX_VALUE);
 
-        styleBtn(btnAdd, "#4682b4");
-        styleBtn(btnDelete, "#b22222");
+        styleBtn(btnAdd, "-ignis-info");
+        styleBtn(btnDelete, "-ignis-danger");
 
         sidebarButtons.getChildren().addAll(btnAdd, btnDelete);
         sidebarPanel.setBottom(sidebarButtons);
@@ -117,15 +118,15 @@ public class FxNotesWindow extends Stage {
 
         // --- Right Editor Panel ---
         BorderPane editorPanel = new BorderPane();
-        editorPanel.setStyle("-fx-background-color: #1e1e1e;");
+        editorPanel.setStyle("-fx-background-color: -ignis-bg;");
 
         // Title and controls toolbar
         BorderPane titlePanel = new BorderPane();
         titlePanel.setPadding(new Insets(8, 12, 8, 12));
-        titlePanel.setStyle("-fx-background-color: #232323;");
+        titlePanel.setStyle("-fx-background-color: -ignis-panel;");
 
         titleField = new TextField("Welcome Page");
-        titleField.setStyle("-fx-background-color: #373737; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
+        titleField.setStyle("-fx-background-color: -ignis-control; -fx-text-fill: -ignis-text; -fx-font-weight: bold; -fx-font-size: 14px;");
         titlePanel.setCenter(titleField);
 
         HBox editorButtons = new HBox(6);
@@ -136,8 +137,8 @@ public class FxNotesWindow extends Stage {
         Button btnExport = new Button("📥 Export HTML");
         Button btnAskAI = new Button("✨ Ask AI Assistant");
 
-        styleBtn(btnSave, "#2e8b57");
-        styleBtn(btnExport, "#646464");
+        styleBtn(btnSave, "-ignis-primary");
+        styleBtn(btnExport, "-ignis-secondary");
         styleBtn(btnAskAI, "#7b68ee");
 
         editorButtons.getChildren().addAll(btnSave, btnExport, btnAskAI);
@@ -154,9 +155,9 @@ public class FxNotesWindow extends Stage {
         // Status bar
         HBox statusBar = new HBox(12);
         statusBar.setPadding(new Insets(6, 12, 6, 12));
-        statusBar.setStyle("-fx-background-color: #282828; -fx-border-color: #3c3c3c; -fx-border-width: 1 0 0 0;");
+        statusBar.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 1 0 0 0;");
         statusLabel = new Label("Wiki system initialized.");
-        statusLabel.setStyle("-fx-text-fill: lightgray; -fx-font-size: 11px;");
+        statusLabel.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-size: 11px;");
         statusBar.getChildren().add(statusLabel);
         editorPanel.setBottom(statusBar);
 
@@ -164,6 +165,7 @@ public class FxNotesWindow extends Stage {
         splitPane.setDividerPositions(0.25);
 
         Scene scene = new Scene(splitPane, 850, 550);
+        FxTheme.apply(scene);
         setScene(scene);
 
         // --- Load Notes ---

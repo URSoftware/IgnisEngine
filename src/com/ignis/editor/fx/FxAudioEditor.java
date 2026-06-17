@@ -178,13 +178,13 @@ public class FxAudioEditor extends Stage {
         tracks.add(new AudioTrack("Voiceover Track"));
 
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #282828;");
+        root.setStyle("-fx-background-color: -ignis-bg;");
 
         // --- Controls Panel (Top) ---
         VBox topContainer = new VBox();
         
         ToolBar controlsToolbar = new ToolBar();
-        controlsToolbar.setStyle("-fx-background-color: #2d2d2d;");
+        controlsToolbar.setStyle("-fx-background-color: -ignis-panel;");
         
         Button btnPlay = new Button("Play");
         styleButton(btnPlay, "#2e8b57");
@@ -198,14 +198,14 @@ public class FxAudioEditor extends Stage {
         styleButton(btnExport, "#646464");
 
         Label masterLbl = new Label("  Master Volume: ");
-        masterLbl.setStyle("-fx-text-fill: white;");
+        masterLbl.setStyle("-fx-text-fill: -ignis-text;");
         masterVolumeSlider.setPrefWidth(120);
 
         controlsToolbar.getItems().addAll(btnPlay, btnPause, btnStop, new Separator(), btnAddTrack, new Separator(), masterLbl, masterVolumeSlider, new Separator(), btnExport);
 
         // DAW Edit Toolbar
         ToolBar editToolbar = new ToolBar();
-        editToolbar.setStyle("-fx-background-color: #282828;");
+        editToolbar.setStyle("-fx-background-color: -ignis-panel;");
 
         Button btnImport = new Button("Import WAV");
         styleButton(btnImport, "#7850a0");
@@ -244,9 +244,9 @@ public class FxAudioEditor extends Stage {
         root.setTop(topContainer);
 
         // --- Central Timeline Area ---
-        timelineContainer.setStyle("-fx-background-color: #1e1e1e;");
+        timelineContainer.setStyle("-fx-background-color: -ignis-bg;");
         ScrollPane scrollPane = new ScrollPane(timelineContainer);
-        scrollPane.setStyle("-fx-background: #1e1e1e; -fx-border-color: transparent;");
+        scrollPane.setStyle("-fx-background: -ignis-bg; -fx-border-color: transparent;");
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
         root.setCenter(scrollPane);
@@ -254,10 +254,10 @@ public class FxAudioEditor extends Stage {
         // --- Status Bar (Bottom) ---
         BorderPane statusBar = new BorderPane();
         statusBar.setPadding(new Insets(6, 12, 6, 12));
-        statusBar.setStyle("-fx-background-color: #282828; -fx-border-color: #3c3c3c; -fx-border-width: 1 0 0 0;");
+        statusBar.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 1 0 0 0;");
         
         statusLabel.setText("Status: Stopped  |  Time: 00:00.00  |  Master: 80%  (Shift+Drag timeline to select range)");
-        statusLabel.setStyle("-fx-text-fill: lightgray; -fx-font-size: 11px;");
+        statusLabel.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-size: 11px;");
         statusBar.setLeft(statusLabel);
 
         // Visualizer spectrum
@@ -340,7 +340,7 @@ public class FxAudioEditor extends Stage {
 
         // 1. Timeline Ruler Row
         HBox rulerRow = new HBox();
-        rulerRow.setStyle("-fx-background-color: #262626;");
+        rulerRow.setStyle("-fx-background-color: -ignis-panel;");
         Region rulerSpacer = new Region();
         rulerSpacer.setPrefWidth(180);
         rulerSpacer.setMinWidth(180);
@@ -449,7 +449,7 @@ public class FxAudioEditor extends Stage {
         
         public TrackRow(AudioTrack track) {
             this.track = track;
-            setStyle("-fx-border-color: #323232; -fx-border-width: 0 0 1 0; -fx-background-color: #1e1e1e;");
+            setStyle("-fx-border-color: -ignis-border; -fx-border-width: 0 0 1 0; -fx-background-color: -ignis-control;");
             setPrefHeight(95);
             setMinHeight(95);
 
@@ -460,10 +460,10 @@ public class FxAudioEditor extends Stage {
             faderPanel.setVgap(4);
             faderPanel.setPrefWidth(180);
             faderPanel.setMinWidth(180);
-            faderPanel.setStyle("-fx-background-color: #2d2d2d; -fx-border-color: #3c3c3c; -fx-border-width: 0 1 0 0;");
+            faderPanel.setStyle("-fx-background-color: -ignis-panel; -fx-border-color: -ignis-border; -fx-border-width: 0 1 0 0;");
 
             Label nameLbl = new Label(track.name);
-            nameLbl.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px;");
+            nameLbl.setStyle("-fx-text-fill: -ignis-text; -fx-font-weight: bold; -fx-font-size: 11px;");
             faderPanel.add(nameLbl, 0, 0, 3, 1);
 
             Slider volSlider = new Slider(0, 100, track.volume * 100);
@@ -981,7 +981,9 @@ public class FxAudioEditor extends Stage {
         });
 
         grid.add(btnGen, 1, 3);
-        dlg.setScene(new Scene(grid));
+        Scene toneScene = new Scene(grid);
+        FxTheme.apply(toneScene);
+        dlg.setScene(toneScene);
         dlg.showAndWait();
     }
 

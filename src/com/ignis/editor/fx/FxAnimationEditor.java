@@ -70,16 +70,16 @@ public class FxAnimationEditor extends Stage {
         this.targetObject = targetObject;
 
         loopCheck.setSelected(true);
-        loopCheck.setStyle("-fx-text-fill: white;");
+        loopCheck.setStyle("-fx-text-fill: -ignis-text;");
 
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #282828;");
+        root.setStyle("-fx-background-color: -ignis-bg;");
 
         root.setTop(buildToolBar());
 
         // Center preview
         StackPane previewContainer = new StackPane(previewCanvas);
-        previewContainer.setStyle("-fx-background-color: #1e1e1e;");
+        previewContainer.setStyle("-fx-background-color: -ignis-bg;");
         root.setCenter(previewContainer);
 
         // South timeline and controls
@@ -88,7 +88,7 @@ public class FxAnimationEditor extends Stage {
         timelineScroll.setPrefViewportHeight(120);
         timelineScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.ALWAYS);
         timelineScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        timelineScroll.setStyle("-fx-background: #1e1e1e; -fx-border-color: transparent;");
+        timelineScroll.setStyle("-fx-background: -ignis-bg; -fx-border-color: transparent;");
 
         southPanel.getChildren().addAll(timelineScroll, buildBottomBar());
         root.setBottom(southPanel);
@@ -146,18 +146,18 @@ public class FxAnimationEditor extends Stage {
 
     private ToolBar buildToolBar() {
         Label nameLbl = new Label(" Name: ");
-        nameLbl.setStyle("-fx-text-fill: white;");
+        nameLbl.setStyle("-fx-text-fill: -ignis-text;");
         nameField.setPrefWidth(120);
 
         Label fpsLbl = new Label(" FPS: ");
-        fpsLbl.setStyle("-fx-text-fill: white;");
+        fpsLbl.setStyle("-fx-text-fill: -ignis-text;");
         fpsSpinner.setPrefWidth(70);
 
         Button applyFps = new Button("Apply FPS to all");
         applyFps.setOnAction(e -> applyFpsToAll());
 
         Label curveLbl = new Label(" Easing Curve: ");
-        curveLbl.setStyle("-fx-text-fill: white;");
+        curveLbl.setStyle("-fx-text-fill: -ignis-text;");
 
         curveCombo = new ComboBox<>();
         curveCombo.getItems().addAll(SpriteAnimation.CurveType.values());
@@ -181,7 +181,7 @@ public class FxAnimationEditor extends Stage {
     private HBox buildBottomBar() {
         HBox bar = new HBox(8);
         bar.setPadding(new Insets(8));
-        bar.setStyle("-fx-background-color: #2d2d2d;");
+        bar.setStyle("-fx-background-color: -ignis-panel;");
         bar.setAlignment(Pos.CENTER_LEFT);
 
         Button btnPlay = new Button("Play");
@@ -190,7 +190,7 @@ public class FxAnimationEditor extends Stage {
         btnStop.setOnAction(e -> stopPreview());
 
         Label sep1 = new Label("  |  ");
-        sep1.setStyle("-fx-text-fill: #888;");
+        sep1.setStyle("-fx-text-fill: -ignis-text-dim;");
 
         Button btnAdd = new Button("Add Frame...");
         btnAdd.setOnAction(e -> addFrames());
@@ -200,7 +200,7 @@ public class FxAnimationEditor extends Stage {
         btnDuplicate.setOnAction(e -> duplicateFrame());
 
         Label sep2 = new Label("  |  ");
-        sep2.setStyle("-fx-text-fill: #888;");
+        sep2.setStyle("-fx-text-fill: -ignis-text-dim;");
 
         Button btnSave = new Button("Save");
         btnSave.setOnAction(e -> save());

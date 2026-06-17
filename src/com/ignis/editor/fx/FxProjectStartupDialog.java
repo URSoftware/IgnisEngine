@@ -56,13 +56,13 @@ public class FxProjectStartupDialog {
         dlg.initModality(Modality.APPLICATION_MODAL);
 
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #1e1e1e;");
+        root.setStyle("-fx-background-color: -ignis-bg;");
         root.setPadding(new Insets(16));
 
         Label title = new Label("Bem-vindo ao IgnisEngine");
-        title.setStyle("-fx-text-fill: #2e8b57; -fx-font-size: 18px; -fx-font-weight: bold;");
+        title.setStyle("-fx-text-fill: -ignis-accent-bright; -fx-font-size: 18px; -fx-font-weight: bold;");
         Label subtitle = new Label("Escolha um projeto para abrir ou crie um novo.");
-        subtitle.setStyle("-fx-text-fill: #b0b0b0; -fx-font-size: 12px;");
+        subtitle.setStyle("-fx-text-fill: -ignis-text-dim; -fx-font-size: 12px;");
         VBox header = new VBox(4, title, subtitle);
         header.setPadding(new Insets(0, 0, 12, 0));
         root.setTop(header);
@@ -75,7 +75,7 @@ public class FxProjectStartupDialog {
 
         ListView<File> list = new ListView<>();
         list.getItems().addAll(ordered);
-        list.setStyle("-fx-control-inner-background: #232323; -fx-background-color: #232323;");
+        list.setStyle("-fx-control-inner-background: -ignis-panel; -fx-background-color: -ignis-panel;");
         list.setCellFactory(lv -> new ListCell<>() {
             @Override protected void updateItem(File item, boolean empty) {
                 super.updateItem(item, empty);
@@ -85,7 +85,7 @@ public class FxProjectStartupDialog {
                     String nome = item.getName().replaceFirst("(?i)\\.ignis$", "");
                     String prefixo = recentSet.contains(item) ? "★  " : "    ";
                     setText(prefixo + nome + "      —  " + item.getParent());
-                    setStyle("-fx-text-fill: #e0e0e0;");
+                    setStyle("-fx-text-fill: -ignis-text;");
                 }
             }
         });
@@ -99,16 +99,16 @@ public class FxProjectStartupDialog {
 
         if (list.getItems().isEmpty()) {
             Label vazio = new Label("Nenhum projeto encontrado em 'projects/'.\nClique em 'Novo projeto…' para comecar.");
-            vazio.setStyle("-fx-text-fill: #888; -fx-text-alignment: center;");
+            vazio.setStyle("-fx-text-fill: -ignis-text-dim; -fx-text-alignment: center;");
             StackPane ph = new StackPane(vazio);
-            ph.setStyle("-fx-background-color: #232323;");
+            ph.setStyle("-fx-background-color: -ignis-panel;");
             root.setCenter(ph);
         } else {
             root.setCenter(list);
         }
 
         Button btnOpen = new Button("Abrir selecionado");
-        btnOpen.setStyle("-fx-background-color: #2e8b57; -fx-text-fill: white; -fx-font-weight: bold;");
+        btnOpen.getStyleClass().add("btn-primary");
         btnOpen.setDefaultButton(true);
         btnOpen.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
         btnOpen.setOnAction(e -> {
@@ -117,15 +117,15 @@ public class FxProjectStartupDialog {
         });
 
         Button btnNew = new Button("Novo projeto…");
-        btnNew.setStyle("-fx-background-color: #4682b4; -fx-text-fill: white;");
+        btnNew.getStyleClass().add("btn-info");
         btnNew.setOnAction(e -> { result[0] = new Choice(Kind.NEW, null); dlg.close(); });
 
         Button btnImport = new Button("Abrir de arquivo…");
-        btnImport.setStyle("-fx-background-color: #5a5a5a; -fx-text-fill: white;");
+        btnImport.getStyleClass().add("btn-secondary");
         btnImport.setOnAction(e -> { result[0] = new Choice(Kind.IMPORT, null); dlg.close(); });
 
         Button btnExit = new Button("Sair");
-        btnExit.setStyle("-fx-background-color: #8b2e2e; -fx-text-fill: white;");
+        btnExit.getStyleClass().add("btn-danger");
         btnExit.setOnAction(e -> { result[0] = new Choice(Kind.EXIT, null); dlg.close(); });
 
         Region spacer = new Region();
