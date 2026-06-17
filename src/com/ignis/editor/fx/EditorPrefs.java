@@ -135,6 +135,76 @@ public final class EditorPrefs {
         write(json);
     }
 
+    // ---------------- Preferencias centralizadas (janela de Configuracoes) ----------------
+    // Acessadas pela FxSettingsWindow; cada uma persiste de imediato (estilo VSCode).
+
+    /** Tema da interface do editor: "dark" (Ignis) ou "default" (JavaFX). */
+    public static String getEditorTheme() {
+        return read().optString("editorTheme", "dark");
+    }
+
+    public static void setEditorTheme(String theme) {
+        JSONObject json = read();
+        json.put("editorTheme", theme);
+        write(json);
+    }
+
+    /** Lembrar tamanho/posicao da janela e divisores entre sessoes (default: ligado). */
+    public static boolean isRememberLayout() {
+        return read().optBoolean("rememberLayout", true);
+    }
+
+    public static void setRememberLayout(boolean on) {
+        JSONObject json = read();
+        json.put("rememberLayout", on);
+        write(json);
+    }
+
+    /** Tamanho da fonte do editor de codigo, em px (default 14, faixa 8..40). */
+    public static int getCodeEditorFontSize() {
+        int v = read().optInt("codeEditorFontSize", 14);
+        return Math.max(8, Math.min(40, v));
+    }
+
+    public static void setCodeEditorFontSize(int px) {
+        JSONObject json = read();
+        json.put("codeEditorFontSize", Math.max(8, Math.min(40, px)));
+        write(json);
+    }
+
+    /** Grade visivel por padrao no viewport (usa {@code def} se nunca definido). */
+    public static boolean getGridVisible(boolean def) {
+        return read().optBoolean("gridVisible", def);
+    }
+
+    public static void setGridVisible(boolean on) {
+        JSONObject json = read();
+        json.put("gridVisible", on);
+        write(json);
+    }
+
+    /** Tamanho da grade em px (usa {@code def} se nunca definido). */
+    public static int getGridSize(int def) {
+        return read().optInt("gridSize", def);
+    }
+
+    public static void setGridSize(int size) {
+        JSONObject json = read();
+        json.put("gridSize", size);
+        write(json);
+    }
+
+    /** Mostrar colliders por padrao no viewport (usa {@code def} se nunca definido). */
+    public static boolean getShowColliders(boolean def) {
+        return read().optBoolean("showColliders", def);
+    }
+
+    public static void setShowColliders(boolean on) {
+        JSONObject json = read();
+        json.put("showColliders", on);
+        write(json);
+    }
+
     // ---------------- Layout da janela (Fase F4-B) ----------------
     // Persistencia estilo VSCode do tamanho/posicao da janela principal e das
     // posicoes dos divisores dos SplitPane. Tudo opcional: se ausente, o editor

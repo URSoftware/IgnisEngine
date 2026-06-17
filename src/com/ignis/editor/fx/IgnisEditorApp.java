@@ -84,6 +84,7 @@ public class IgnisEditorApp extends Application {
     private Canvas viewportCanvas;
     private SplitPane mainSplit;
     private SplitPane leftSplit;
+    private FxSettingsWindow settingsWindow;
     // Fonte AWT (nao exibida) usada apenas como 'source' nao-nulo ao fabricar
     // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
     private final java.awt.Component awtEventSource = new java.awt.Canvas();
@@ -111,6 +112,12 @@ public class IgnisEditorApp extends Application {
         // O editor JavaFX renderiza via AnimationTimer (renderWorldTo). O pipeline
         // AWT (repaint/BufferStrategy) e desnecessario e gera trabalho inutil.
         game.setSuppressAwtRepaint(true);
+
+        // Defaults de viewport persistidos nas Configuracoes (1a execucao mantem o
+        // default atual do Game, pois passa o valor corrente como fallback).
+        game.setShowGrid(EditorPrefs.getGridVisible(game.isShowGrid()));
+        game.setGridSize(EditorPrefs.getGridSize(game.getGridSize()));
+        game.setShowColliders(EditorPrefs.getShowColliders(game.isShowColliders()));
 
         BorderPane root = new BorderPane();
 
@@ -206,8 +213,9 @@ public class IgnisEditorApp extends Application {
         status.getStyleClass().add("status-bar");
         root.setBottom(status);
 
-        // F4-B: restaura tamanho da janela salvo (default 1100x700).
-        double[] savedBounds = EditorPrefs.getWindowBounds();
+        // F4-B: restaura tamanho da janela salvo (default 1100x700). Respeita a
+        // preferencia "Lembrar layout" (Configuracoes > Geral).
+        double[] savedBounds = EditorPrefs.isRememberLayout() ? EditorPrefs.getWindowBounds() : null;
         double initW = (savedBounds != null && !Double.isNaN(savedBounds[2])) ? savedBounds[2] : 1100;
         double initH = (savedBounds != null && !Double.isNaN(savedBounds[3])) ? savedBounds[3] : 700;
         javafx.scene.Scene scene = new javafx.scene.Scene(root, initW, initH);
@@ -297,7 +305,7 @@ public class IgnisEditorApp extends Application {
             stage.setX(savedBounds[0]);
             stage.setY(savedBounds[1]);
         }
-        if (EditorPrefs.isWindowMaximized()) stage.setMaximized(true);
+        if (EditorPrefs.isRememberLayout() && EditorPrefs.isWindowMaximized()) stage.setMaximized(true);
 
         stage.setOnCloseRequest(e -> {
             saveLayout();
@@ -340,18 +348,13 @@ public class IgnisEditorApp extends Application {
         salvarComo.setOnAction(e -> saveProjectAs(stage));
         MenuItem fechar = new MenuItem("Fechar projeto");
         fechar.setOnAction(e -> closeProject(stage));
-        CheckMenuItem autoSaveItem = new CheckMenuItem("Auto Save");
-        autoSaveItem.setSelected(EditorPrefs.isAutoSave());
-        autoSaveItem.setOnAction(e -> {
-            EditorPrefs.setAutoSave(autoSaveItem.isSelected());
-            setStatus(autoSaveItem.isSelected()
-                    ? "Auto Save ligado (projeto e scripts)."
-                    : "Auto Save desligado.");
-        });
+        MenuItem prefs = new MenuItem("Configuracoes…");
+        prefs.setAccelerator(new KeyCodeCombination(KeyCode.COMMA, KeyCombination.CONTROL_DOWN));
+        prefs.setOnAction(e -> openSettings());
         MenuItem exit = new MenuItem("Sair");
         exit.setOnAction(e -> { saveLayout(); stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
         file.getItems().addAll(novo, open, recentMenu, selecionar, new SeparatorMenuItem(),
-                salvar, salvarComo, autoSaveItem, new SeparatorMenuItem(), fechar, exit);
+                salvar, salvarComo, prefs, new SeparatorMenuItem(), fechar, exit);
 
         Menu tools = new Menu("Ferramentas");
         MenuItem miAudio = new MenuItem("Editor de Audio (DAW)");
@@ -787,6 +790,7 @@ public class IgnisEditorApp extends Application {
     // preservar o tamanho "janela" anterior; apenas grava o flag de maximizacao.
     private void saveLayout() {
         try {
+            if (!EditorPrefs.isRememberLayout()) return;
             Stage s = primaryStage;
             if (s == null) return;
             boolean max = s.isMaximized();
@@ -803,6 +807,7 @@ public class IgnisEditorApp extends Application {
     // Aplica as posicoes salvas dos divisores (apos o primeiro layout da cena).
     private void restoreDividers() {
         try {
+            if (!EditorPrefs.isRememberLayout()) return;
             double[] main = EditorPrefs.getDividers("main");
             if (main != null && main.length > 0 && mainSplit != null
                     && mainSplit.getDividers().size() == main.length) {
@@ -950,6 +955,22 @@ public class IgnisEditorApp extends Application {
             codeEditor.show();
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    // Janela de Configuracoes centralizada (tema, Auto Save, editor de codigo, viewport).
+    // Reusa a instancia se ja aberta (apenas traz ao foco).
+    private void openSettings() {
+        try {
+            if (settingsWindow != null && settingsWindow.isShowing()) {
+                settingsWindow.toFront();
+                settingsWindow.requestFocus();
+                return;
+            }
+            settingsWindow = new FxSettingsWindow(primaryStage, game);
+            settingsWindow.show();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Configuracoes:\n" + ex.getMessage()).showAndWait();
         }
     }
 

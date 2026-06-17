@@ -940,7 +940,7 @@ public class FxCodeEditor extends Stage {
             ".styled-text-area .text, .code-area .text {\n" +
             "    -fx-fill: " + fgHex + ";\n" +
             "    -fx-font-family: 'Consolas';\n" +
-            "    -fx-font-size: 14px;\n" +
+            "    -fx-font-size: " + EditorPrefs.getCodeEditorFontSize() + "px;\n" +
             "}\n" +
             ".code-area .caret {\n" +
             "    -fx-stroke: " + caretHex + ";\n" +

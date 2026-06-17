@@ -23,8 +23,10 @@
 
     -fx-background-color: -ignis-bg;
     -fx-font-family: "Segoe UI", "Tahoma", sans-serif;
-    -fx-focus-color: -ignis-accent;
-    -fx-faint-focus-color: transparent;
+    /* Cores literais (nao looked-up): evita o warning benigno
+       'String cannot be cast to Paint' do modena ao abrir ComboBox/ListView. */
+    -fx-focus-color: #3cb371;
+    -fx-faint-focus-color: #3cb37133;
 }
 
 /* ---------------- Texto base ---------------- */
@@ -197,4 +199,22 @@
 /* Rotulos de campo do Inspector */
 .field-label {
     -fx-text-fill: -ignis-text-dim;
+}
+
+/* Item de navegacao da janela de Configuracoes (sidebar) */
+.nav-item {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 4;
+    -fx-text-fill: -ignis-text;
+    -fx-padding: 8 12;
+    -fx-font-size: 13px;
+}
+.nav-item:hover {
+    -fx-background-color: -ignis-control-hover;
+}
+.nav-item:selected {
+    -fx-background-color: -ignis-accent;
+    -fx-text-fill: white;
+    -fx-border-color: transparent;
 }
