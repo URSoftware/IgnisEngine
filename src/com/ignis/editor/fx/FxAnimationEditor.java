@@ -9,7 +9,6 @@ import com.ignis.core.GameObject;
 import javafx.animation.AnimationTimer;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -358,7 +357,7 @@ public class FxAnimationEditor extends Stage {
             return;
         }
 
-        Image image = SwingFXUtils.toFXImage(bufferedImage, null);
+        Image image = FxImageBridge.toFXImage(bufferedImage, null);
 
         double canvasW = previewCanvas.getWidth();
         double canvasH = previewCanvas.getHeight();

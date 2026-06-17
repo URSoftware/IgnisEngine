@@ -11,7 +11,6 @@ import com.ignis.core.Square;
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
@@ -1662,7 +1661,7 @@ public class IgnisEditorApp extends Application {
                     g2d.dispose();
                 }
 
-                SwingFXUtils.toFXImage(buffer, fxImage);
+                fxImage = FxImageBridge.toFXImage(buffer, fxImage);
                 GraphicsContext gc = canvas.getGraphicsContext2D();
                 gc.clearRect(0, 0, w, h);
                 gc.drawImage(fxImage, 0, 0);

@@ -30,8 +30,9 @@
             <version>20231013</version>
         </dependency>
 
-        <!-- JavaFX (migracao da UI do editor — branch main). SwingFXUtils (modulo
-             javafx-swing) faz a ponte BufferedImage <-> JavaFX usada no viewport. -->
+        <!-- JavaFX (migracao da UI do editor — branch main). A ponte BufferedImage
+             -> JavaFX usa FxImageBridge (PixelWriter), sem o modulo javafx-swing
+             (removido na F4-C; SwingFXUtils eliminado). -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -40,11 +41,6 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
-            <version>${javafx.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-swing</artifactId>
             <version>${javafx.version}</version>
         </dependency>
         <dependency>

@@ -1319,7 +1319,7 @@ public class Game extends Canvas implements Runnable {
     /**
      * Renderiza o "mundo" (fundo + camera + grid + entidades) em um Graphics2D
      * arbitrario de tamanho width x height. Base da PONTE DE RENDER do editor
-     * JavaFX (offscreen BufferedImage -> SwingFXUtils -> Canvas JavaFX), sem
+     * JavaFX (offscreen BufferedImage -> FxImageBridge -> Canvas JavaFX), sem
      * depender de BufferStrategy/AWT Canvas. Aditivo: NAO altera render() (usado
      * pelo editor Swing). Ver doc/JAVAFX_MIGRATION_PLAN.md (ponte de render).
      */

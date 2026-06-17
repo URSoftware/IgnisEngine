@@ -5,7 +5,6 @@ import com.ignis.imageeditor.PaintCanvas.ToolType;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.WritableImage;
@@ -666,10 +665,7 @@ public class FxPaintCanvas extends Canvas {
 
         // Composite image render
         BufferedImage composite = document.composite();
-        if (fxImage == null || fxImage.getWidth() != composite.getWidth() || fxImage.getHeight() != composite.getHeight()) {
-            fxImage = new WritableImage(composite.getWidth(), composite.getHeight());
-        }
-        SwingFXUtils.toFXImage(composite, fxImage);
+        fxImage = FxImageBridge.toFXImage(composite, fxImage);
         gc.setImageSmoothing(false);
         gc.drawImage(fxImage, 0, 0, w, h);
 
