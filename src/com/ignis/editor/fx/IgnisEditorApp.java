@@ -1671,6 +1671,16 @@ public class IgnisEditorApp extends Application {
         GridPane grid = new GridPane();
         grid.setHgap(6);
         grid.setVgap(6);
+        grid.setMaxWidth(Double.MAX_VALUE);
+        // Coluna 0 (rotulos) com largura fixa; coluna 1 (campos) cresce para ocupar
+        // todo o espaco disponivel quando o painel do Inspector e alargado.
+        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
+        labelCol.setMinWidth(64);
+        labelCol.setHalignment(javafx.geometry.HPos.LEFT);
+        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        fieldCol.setFillWidth(true);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
         int r = 0;
         addRow(grid, r++, "Nome", nameField);
         addRow(grid, r++, "X", xField);
@@ -1707,6 +1717,8 @@ public class IgnisEditorApp extends Application {
     private void addRow(GridPane grid, int row, String label, TextField field) {
         Label l = new Label(label);
         l.getStyleClass().add("field-label");
+        field.setMaxWidth(Double.MAX_VALUE);
+        GridPane.setHgrow(field, Priority.ALWAYS);
         grid.add(l, 0, row);
         grid.add(field, 1, row);
     }
@@ -1970,8 +1982,13 @@ public class IgnisEditorApp extends Application {
         Label l = new Label(label);
         l.getStyleClass().add("field-label");
         l.setMinWidth(70);
+        if (control instanceof javafx.scene.layout.Region) {
+            ((javafx.scene.layout.Region) control).setMaxWidth(Double.MAX_VALUE);
+        }
+        HBox.setHgrow(control, Priority.ALWAYS);
         HBox row = new HBox(8, l, control);
         row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        row.setMaxWidth(Double.MAX_VALUE);
         return row;
     }
 

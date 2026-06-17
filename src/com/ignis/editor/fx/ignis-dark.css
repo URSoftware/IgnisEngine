@@ -159,6 +159,26 @@
     -fx-text-fill: white;
 }
 
+/* ---------------- ColorPicker (Inspector > Aparencia) ---------------- */
+.color-picker {
+    -fx-background-color: -ignis-control;
+    -fx-border-color: -ignis-border;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+}
+.color-picker > .label, .color-picker .color-picker-label .text {
+    -fx-text-fill: -ignis-text;
+    -fx-fill: -ignis-text;
+}
+.color-picker .arrow { -fx-background-color: -ignis-text-dim; }
+.color-palette {
+    -fx-background-color: -ignis-panel;
+    -fx-border-color: -ignis-border;
+}
+.color-palette .label { -fx-text-fill: -ignis-text; }
+.custom-color-dialog { -fx-background-color: -ignis-panel; }
+.custom-color-dialog .label { -fx-text-fill: -ignis-text; }
+
 /* ---------------- ListView generico ---------------- */
 .list-view { -fx-background-color: -ignis-control; }
 .list-view .list-cell {
