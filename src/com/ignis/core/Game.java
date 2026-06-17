@@ -1370,6 +1370,14 @@ public class Game extends Canvas implements Runnable {
             g2d.setTransform(entityTransform);
         }
 
+        // Debug de colliders (espaco do mundo) — espelha o render() do editor Swing.
+        // Independe de selecao; respeita 'showColliders'.
+        if (gameState == GameState.EDITING && showColliders && collisionManager != null) {
+            AffineTransform colliderTransform = g2d.getTransform();
+            collisionManager.debugRender(g2d);
+            g2d.setTransform(colliderTransform);
+        }
+
         // Contorno de selecao (espaco do mundo, com a transform da camera aplicada)
         if (selected != null && selected.isVisible() && !(selected instanceof Camera)) {
             AffineTransform selTransform = g2d.getTransform();
@@ -1403,6 +1411,17 @@ public class Game extends Canvas implements Runnable {
             g2d.drawRect(sx - hs / 2 - 2, sy + sh - hs / 2 + 2, hs, hs);
             g2d.drawRect(sx + sw - hs / 2 + 2, sy + sh - hs / 2 + 2, hs, hs);
             g2d.setTransform(selTransform);
+        }
+
+        // Gizmos da ferramenta atual (Mover/Rotacionar/Escalar) para o objeto
+        // selecionado — espaco do mundo. renderGizmo ja faz o feedback de hover/drag
+        // via hoveredGizmoMode/currentDragMode (atualizados pelos eventos de mouse
+        // roteados ao engine pelo viewport FX). So no modo de edicao.
+        if (gameState == GameState.EDITING && selectedObject != null
+                && !(selectedObject instanceof Camera)) {
+            AffineTransform gizmoTransform = g2d.getTransform();
+            renderGizmo(g2d);
+            g2d.setTransform(gizmoTransform);
         }
 
         g2d.setTransform(originalTransform);

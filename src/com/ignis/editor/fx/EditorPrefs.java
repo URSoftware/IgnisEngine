@@ -172,6 +172,30 @@ public final class EditorPrefs {
         write(json);
     }
 
+    /** Auto-complete do editor de codigo ligado? (default: ligado). */
+    public static boolean isAutoComplete() {
+        return read().optBoolean("codeAutoComplete", true);
+    }
+
+    public static void setAutoComplete(boolean on) {
+        JSONObject json = read();
+        json.put("codeAutoComplete", on);
+        write(json);
+    }
+
+    /** JSON do tema de sintaxe customizado importado (ou null se nenhum). */
+    public static String getCodeEditorCustomThemeJson() {
+        String v = read().optString("codeEditorCustomTheme", "");
+        return (v == null || v.isEmpty()) ? null : v;
+    }
+
+    public static void setCodeEditorCustomThemeJson(String json) {
+        JSONObject root = read();
+        if (json == null || json.isEmpty()) root.remove("codeEditorCustomTheme");
+        else root.put("codeEditorCustomTheme", json);
+        write(root);
+    }
+
     /** Grade visivel por padrao no viewport (usa {@code def} se nunca definido). */
     public static boolean getGridVisible(boolean def) {
         return read().optBoolean("gridVisible", def);

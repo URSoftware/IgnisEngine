@@ -6,6 +6,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -18,6 +19,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
@@ -180,8 +182,13 @@ public class FxSettingsWindow extends Stage {
     private Node buildScriptsPane() {
         VBox box = section("Editor de Scripts");
 
+        CheckBox autoComplete = new CheckBox("Auto-complete");
+        autoComplete.setSelected(EditorPrefs.isAutoComplete());
+        autoComplete.selectedProperty().addListener((o, a, b) -> EditorPrefs.setAutoComplete(b));
+
         ComboBox<String> syntax = new ComboBox<>();
         syntax.getItems().addAll("Dracula", "Monokai", "One Dark", "Solarized Dark", "Classic Dark", "Classic Light");
+        if (EditorPrefs.getCodeEditorCustomThemeJson() != null) syntax.getItems().add("Custom");
         syntax.setValue(EditorPrefs.getCodeEditorTheme());
         syntax.valueProperty().addListener((o, a, b) -> { if (b != null) EditorPrefs.setCodeEditorTheme(b); });
 
@@ -189,12 +196,63 @@ public class FxSettingsWindow extends Stage {
         fontSize.setEditable(true);
         fontSize.valueProperty().addListener((o, a, b) -> EditorPrefs.setCodeEditorFontSize(b));
 
+        Button importBtn = new Button("Importar tema…");
+        importBtn.setOnAction(e -> importCodeTheme(syntax));
+        Button exportBtn = new Button("Exportar tema…");
+        exportBtn.setOnAction(e -> exportCodeTheme(syntax.getValue()));
+        HBox themeButtons = new HBox(8, importBtn, exportBtn);
+
         box.getChildren().addAll(
+                autoComplete,
                 labeledRow("Tema de sintaxe", syntax),
                 labeledRow("Tamanho da fonte (px)", fontSize),
+                themeButtons,
                 hint("Aplicado aos editores de codigo abertos a partir de agora.")
         );
         return box;
+    }
+
+    // Importa um tema de sintaxe (JSON) e o define como tema customizado ativo.
+    private void importCodeTheme(ComboBox<String> syntax) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Importar tema (JSON)");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON (*.json)", "*.json"));
+        File f = fc.showOpenDialog(this);
+        if (f == null) return;
+        try {
+            String json = java.nio.file.Files.readString(f.toPath());
+            FxCodeEditor.importThemeFromJson(json); // valida o JSON
+            EditorPrefs.setCodeEditorCustomThemeJson(json);
+            EditorPrefs.setCodeEditorTheme("Custom");
+            if (!syntax.getItems().contains("Custom")) syntax.getItems().add("Custom");
+            syntax.setValue("Custom");
+            new Alert(Alert.AlertType.INFORMATION,
+                    "Tema importado. Sera aplicado aos editores abertos a partir de agora.").showAndWait();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao importar tema:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    // Exporta o tema de sintaxe selecionado (nomeado ou customizado) para JSON.
+    private void exportCodeTheme(String name) {
+        try {
+            FxCodeEditor.EditorTheme theme;
+            if ("Custom".equals(name) && EditorPrefs.getCodeEditorCustomThemeJson() != null) {
+                theme = FxCodeEditor.importThemeFromJson(EditorPrefs.getCodeEditorCustomThemeJson());
+            } else {
+                theme = FxCodeEditor.themeByName(name);
+            }
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Exportar tema (JSON)");
+            fc.setInitialFileName((name == null ? "tema" : name.toLowerCase().replace(" ", "_")) + "_theme.json");
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON (*.json)", "*.json"));
+            File f = fc.showSaveDialog(this);
+            if (f == null) return;
+            java.nio.file.Files.writeString(f.toPath(), FxCodeEditor.exportThemeToJson(theme));
+            new Alert(Alert.AlertType.INFORMATION, "Tema exportado: " + f.getName()).showAndWait();
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao exportar tema:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private Node buildViewportPane() {

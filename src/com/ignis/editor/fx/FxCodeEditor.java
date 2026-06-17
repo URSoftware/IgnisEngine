@@ -217,7 +217,6 @@ public class FxCodeEditor extends Stage {
     private CodeArea codeArea;
     private Label statusLabel;
     private Label cursorLabel;
-    private ToggleButton autocompleteToggle;
     
     private Popup autocompletePopup;
     private ListView<String> autocompleteList;
@@ -277,84 +276,10 @@ public class FxCodeEditor extends Stage {
             }
         });
 
-        autocompleteToggle = new ToggleButton("Auto Complete");
-        autocompleteToggle.setSelected(true);
-        autocompleteToggle.getStyleClass().add("btn-autocomplete");
-        autocompleteToggle.setOnAction(e -> {
-            boolean active = autocompleteToggle.isSelected();
-            statusLabel.setText(active ? " Auto-complete active" : " Auto-complete disabled");
-            statusLabel.setTextFill(Color.LIGHTGRAY);
-            if (!active) {
-                hideAutocompletePopup();
-            }
-        });
-
-        ComboBox<String> themeBox = new ComboBox<>();
-        themeBox.getItems().addAll("Dracula", "Monokai", "One Dark", "Solarized Dark", "Classic Dark", "Classic Light");
-        themeBox.setValue("Classic Dark");
-        themeBox.getStyleClass().add("theme-box");
-        themeBox.setOnAction(evt -> {
-            String selected = themeBox.getValue();
-            if (selected == null) return;
-            switch (selected) {
-                case "Dracula" -> { applyTheme(DRACULA); EditorPrefs.setCodeEditorTheme("Dracula"); }
-                case "Monokai" -> { applyTheme(MONOKAI); EditorPrefs.setCodeEditorTheme("Monokai"); }
-                case "One Dark" -> { applyTheme(ONE_DARK); EditorPrefs.setCodeEditorTheme("One Dark"); }
-                case "Solarized Dark" -> { applyTheme(SOLARIZED_DARK); EditorPrefs.setCodeEditorTheme("Solarized Dark"); }
-                case "Classic Dark" -> { applyTheme(CLASSIC_DARK); EditorPrefs.setCodeEditorTheme("Classic Dark"); }
-                case "Classic Light" -> { applyTheme(CLASSIC_LIGHT); EditorPrefs.setCodeEditorTheme("Classic Light"); }
-            }
-        });
-
-        Button importThemeBtn = new Button("Import Theme");
-        importThemeBtn.getStyleClass().add("btn-theme-action");
-        importThemeBtn.setOnAction(evt -> {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Import Theme JSON");
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files (*.json)", "*.json"));
-            File file = fileChooser.showOpenDialog(this);
-            if (file != null) {
-                try {
-                    String json = Files.readString(file.toPath());
-                    EditorTheme customTheme = importThemeFromJson(json);
-                    applyTheme(customTheme);
-                    statusLabel.setText(" ✓ Custom theme '" + customTheme.name + "' loaded");
-                    statusLabel.setTextFill(Color.web("#64c864"));
-                } catch (Exception ex) {
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Error loading theme: " + ex.getMessage());
-                    alert.showAndWait();
-                }
-            }
-        });
-
-        Button exportThemeBtn = new Button("Export Theme");
-        exportThemeBtn.getStyleClass().add("btn-theme-action");
-        exportThemeBtn.setOnAction(evt -> {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Export Theme JSON");
-            fileChooser.setInitialFileName(activeTheme.name.toLowerCase().replace(" ", "_") + "_theme.json");
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files (*.json)", "*.json"));
-            File file = fileChooser.showSaveDialog(this);
-            if (file != null) {
-                try {
-                    String json = exportThemeToJson(activeTheme);
-                    Files.writeString(file.toPath(), json);
-                    statusLabel.setText(" ✓ Theme exported to " + file.getName());
-                    statusLabel.setTextFill(Color.web("#64c864"));
-                } catch (Exception ex) {
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Error exporting theme: " + ex.getMessage());
-                    alert.showAndWait();
-                }
-            }
-        });
-
-        toolbar.getItems().addAll(
-            saveBtn, compileBtn, saveAndCompileBtn,
-            new Separator(Orientation.VERTICAL),
-            autocompleteToggle,
-            new Separator(Orientation.VERTICAL),
-            themeBox, importThemeBtn, exportThemeBtn
-        );
+        // Auto-Complete, tema de sintaxe e importar/exportar tema foram movidos para
+        // Configuracoes > Editor de Scripts (declutter da barra do editor). O editor
+        // aplica o tema salvo ao abrir e le o estado do auto-complete do EditorPrefs.
+        toolbar.getItems().addAll(saveBtn, compileBtn, saveAndCompileBtn);
         root.setTop(toolbar);
 
         // --- Code Area ---
@@ -450,15 +375,31 @@ public class FxCodeEditor extends Stage {
         Scene scene = new Scene(root, 800, 600);
         setScene(scene);
         
-        String savedTheme = EditorPrefs.getCodeEditorTheme();
-        themeBox.setValue(savedTheme);
-        switch (savedTheme) {
-            case "Dracula" -> applyTheme(DRACULA);
-            case "Monokai" -> applyTheme(MONOKAI);
-            case "One Dark" -> applyTheme(ONE_DARK);
-            case "Solarized Dark" -> applyTheme(SOLARIZED_DARK);
-            case "Classic Light" -> applyTheme(CLASSIC_LIGHT);
-            default -> applyTheme(CLASSIC_DARK);
+        applyTheme(resolveSavedTheme());
+    }
+
+    /** Resolve o tema salvo (nomeado ou customizado importado) do EditorPrefs. */
+    public static EditorTheme resolveSavedTheme() {
+        String saved = EditorPrefs.getCodeEditorTheme();
+        if ("Custom".equals(saved)) {
+            String json = EditorPrefs.getCodeEditorCustomThemeJson();
+            if (json != null) {
+                try { return importThemeFromJson(json); } catch (Exception ignore) { /* fallback abaixo */ }
+            }
+        }
+        return themeByName(saved);
+    }
+
+    /** Mapeia o nome de um tema embutido para o objeto EditorTheme (default: Classic Dark). */
+    public static EditorTheme themeByName(String name) {
+        if (name == null) return CLASSIC_DARK;
+        switch (name) {
+            case "Dracula": return DRACULA;
+            case "Monokai": return MONOKAI;
+            case "One Dark": return ONE_DARK;
+            case "Solarized Dark": return SOLARIZED_DARK;
+            case "Classic Light": return CLASSIC_LIGHT;
+            default: return CLASSIC_DARK;
         }
     }
 
@@ -596,7 +537,7 @@ public class FxCodeEditor extends Stage {
     }
 
     private void checkAutocomplete() {
-        if (!autocompleteToggle.isSelected()) {
+        if (!EditorPrefs.isAutoComplete()) {
             hideAutocompletePopup();
             return;
         }
