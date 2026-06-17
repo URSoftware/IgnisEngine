@@ -140,6 +140,7 @@ public class FxImageEditor extends Stage {
         updateStatus(null);
 
         Scene scene = new Scene(root, 1100, 750);
+        FxTheme.apply(scene);
         setupKeyboardShortcuts(scene);
         setScene(scene);
     }

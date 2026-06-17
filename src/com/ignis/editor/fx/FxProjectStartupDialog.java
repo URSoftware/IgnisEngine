@@ -135,7 +135,9 @@ public class FxProjectStartupDialog {
         buttons.setAlignment(Pos.CENTER_LEFT);
         root.setBottom(buttons);
 
-        dlg.setScene(new Scene(root, 580, 440));
+        Scene scene = new Scene(root, 580, 440);
+        FxTheme.apply(scene);
+        dlg.setScene(scene);
         dlg.showAndWait();
         return result[0];
     }

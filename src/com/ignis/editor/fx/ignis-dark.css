@@ -1,0 +1,200 @@
+/*
+ * ignis-dark.css — Tema escuro unificado do editor IgnisEngine (JavaFX).
+ *
+ * Fase F4-A da migracao (ver doc/JAVAFX_MIGRATION_PLAN.md e a nota do vault
+ * ignisengine-javafx-migracao). Substitui os setStyle inline da casca do editor
+ * (IgnisEditorApp) por classes/seletores reutilizaveis, e da uma base escura
+ * coerente para todas as janelas JavaFX (aplicado via FxTheme.apply(Scene)).
+ *
+ * Paleta derivada das cores ja usadas no codigo:
+ *   painel #2d2d2d, acento verde-mar #2e8b57, texto claro #d8d8d8 / #b0b0b0.
+ */
+
+.root {
+    -ignis-bg:           #252526;  /* fundo da janela */
+    -ignis-panel:        #2d2d2d;  /* paineis (Hierarchy/Inspector/Assets) */
+    -ignis-control:      #1e1e1e;  /* campos e controles */
+    -ignis-control-hover:#333334;
+    -ignis-accent:       #2e8b57;  /* verde-mar (identidade Ignis) */
+    -ignis-accent-bright:#3cb371;
+    -ignis-text:         #d8d8d8;  /* texto principal */
+    -ignis-text-dim:     #b0b0b0;  /* texto secundario */
+    -ignis-border:       #3c3c3c;
+
+    -fx-background-color: -ignis-bg;
+    -fx-font-family: "Segoe UI", "Tahoma", sans-serif;
+    -fx-focus-color: -ignis-accent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* ---------------- Texto base ---------------- */
+
+.label {
+    -fx-text-fill: -ignis-text;
+}
+
+/* ---------------- Menu bar ---------------- */
+
+.menu-bar {
+    -fx-background-color: -ignis-panel;
+    -fx-border-color: transparent transparent -ignis-border transparent;
+}
+.menu-bar > .container > .menu-button > .label { -fx-text-fill: -ignis-text; }
+.menu-bar > .container > .menu-button:hover,
+.menu-bar > .container > .menu-button:showing {
+    -fx-background-color: -ignis-control-hover;
+}
+
+/* ---------------- Tool bar ---------------- */
+
+.tool-bar {
+    -fx-background-color: -ignis-panel;
+    -fx-border-color: transparent transparent -ignis-border transparent;
+    -fx-padding: 4 8;
+}
+.tool-bar .separator .line {
+    -fx-border-color: -ignis-border;
+}
+
+/* ---------------- Botoes ---------------- */
+
+.button, .toggle-button {
+    -fx-background-color: -ignis-control;
+    -fx-text-fill: -ignis-text;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-border-color: -ignis-border;
+    -fx-padding: 4 10;
+    -fx-cursor: hand;
+}
+.button:hover, .toggle-button:hover {
+    -fx-background-color: -ignis-control-hover;
+}
+.button:pressed {
+    -fx-background-color: -ignis-accent;
+}
+.toggle-button:selected {
+    -fx-background-color: -ignis-accent;
+    -fx-text-fill: white;
+    -fx-border-color: -ignis-accent-bright;
+}
+.button:disabled, .toggle-button:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* ---------------- Campos de texto ---------------- */
+
+.text-field, .text-area, .combo-box, .choice-box {
+    -fx-background-color: -ignis-control;
+    -fx-text-fill: -ignis-text;
+    -fx-prompt-text-fill: -ignis-text-dim;
+    -fx-background-radius: 3;
+    -fx-border-radius: 3;
+    -fx-border-color: -ignis-border;
+}
+.text-field:focused, .text-area:focused {
+    -fx-border-color: -ignis-accent;
+}
+.text-area .content { -fx-background-color: -ignis-control; }
+
+/* ---------------- Check box ---------------- */
+
+.check-box { -fx-text-fill: -ignis-text; }
+.check-box .box {
+    -fx-background-color: -ignis-control;
+    -fx-border-color: -ignis-border;
+    -fx-border-radius: 3;
+}
+.check-box:selected .mark { -fx-background-color: -ignis-accent-bright; }
+
+/* ---------------- TreeView (Hierarchy / Assets) ---------------- */
+
+.tree-view {
+    -fx-background-color: -ignis-panel;
+    -fx-border-color: transparent;
+}
+.tree-view .tree-cell {
+    -fx-background-color: -ignis-panel;
+    -fx-text-fill: -ignis-text;
+    -fx-padding: 2 6;
+}
+.tree-view .tree-cell:hover {
+    -fx-background-color: -ignis-control-hover;
+}
+.tree-view .tree-cell:selected,
+.tree-view .tree-cell:filled:selected {
+    -fx-background-color: -ignis-accent;
+    -fx-text-fill: white;
+}
+.tree-view .tree-cell .arrow,
+.tree-view .tree-cell:expanded .arrow {
+    -fx-background-color: -ignis-text-dim;
+}
+
+/* ---------------- SplitPane ---------------- */
+
+.split-pane { -fx-background-color: -ignis-bg; -fx-padding: 0; }
+.split-pane > .split-pane-divider {
+    -fx-background-color: -ignis-border;
+    -fx-padding: 0 1;
+}
+
+/* ---------------- ScrollBar ---------------- */
+
+.scroll-bar { -fx-background-color: -ignis-panel; }
+.scroll-bar .thumb {
+    -fx-background-color: #4a4a4a;
+    -fx-background-radius: 4;
+}
+.scroll-bar .thumb:hover { -fx-background-color: #5a5a5a; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+}
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow {
+    -fx-background-color: -ignis-text-dim;
+}
+
+/* ---------------- Context menu / Menu items ---------------- */
+
+.context-menu, .menu-item {
+    -fx-background-color: -ignis-panel;
+}
+.context-menu { -fx-border-color: -ignis-border; }
+.menu-item .label { -fx-text-fill: -ignis-text; }
+.menu-item:focused, .menu-item:hovered {
+    -fx-background-color: -ignis-accent;
+}
+.menu-item:focused .label { -fx-text-fill: white; }
+
+/* ================= Classes utilitarias da casca ================= */
+
+/* Painel lateral escuro (Hierarchy, Assets, Inspector) */
+.ignis-panel {
+    -fx-background-color: -ignis-panel;
+}
+
+/* Titulo de painel em verde-mar, negrito */
+.panel-title {
+    -fx-text-fill: -ignis-accent-bright;
+    -fx-font-weight: bold;
+    -fx-padding: 4 8;
+}
+
+/* Barra de status inferior */
+.status-bar {
+    -fx-text-fill: -ignis-text-dim;
+    -fx-background-color: -ignis-panel;
+    -fx-padding: 4 10;
+    -fx-border-color: -ignis-border transparent transparent transparent;
+}
+
+/* Rotulos da ToolBar (Cam Pos / Zoom) */
+.toolbar-label {
+    -fx-text-fill: -ignis-text;
+    -fx-padding: 0 10;
+}
+
+/* Rotulos de campo do Inspector */
+.field-label {
+    -fx-text-fill: -ignis-text-dim;
+}

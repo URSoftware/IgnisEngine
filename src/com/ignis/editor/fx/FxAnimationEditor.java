@@ -133,7 +133,8 @@ public class FxAnimationEditor extends Stage {
         setupTimelineListeners();
 
         Scene scene = new Scene(root, 900, 650);
-        
+        FxTheme.apply(scene);
+
         // Ctrl+D duplicate shortcut
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.D, KeyCombination.CONTROL_DOWN), this::duplicateFrame);
         

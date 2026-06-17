@@ -111,6 +111,7 @@ public class FxCommunityWindow extends Stage {
         root.setBottom(statusBar);
 
         Scene scene = new Scene(root, 900, 600);
+        FxTheme.apply(scene);
         setScene(scene);
     }
 

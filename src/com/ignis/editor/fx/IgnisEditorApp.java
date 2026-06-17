@@ -82,6 +82,8 @@ public class IgnisEditorApp extends Application {
     private Button stopButton;
     private boolean playing = false;
     private Canvas viewportCanvas;
+    private SplitPane mainSplit;
+    private SplitPane leftSplit;
     // Fonte AWT (nao exibida) usada apenas como 'source' nao-nulo ao fabricar
     // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
     private final java.awt.Component awtEventSource = new java.awt.Canvas();
@@ -146,9 +148,9 @@ public class IgnisEditorApp extends Application {
         btnFocusSelected.setOnAction(e -> focusCameraOnSelected());
 
         cameraPosLabel = new Label("Cam Pos: (0.0, 0.0)");
-        cameraPosLabel.setStyle("-fx-text-fill: white; -fx-padding: 0 10;");
+        cameraPosLabel.getStyleClass().add("toolbar-label");
         cameraZoomLabel = new Label("Zoom: 100%");
-        cameraZoomLabel.setStyle("-fx-text-fill: white; -fx-padding: 0 10;");
+        cameraZoomLabel.getStyleClass().add("toolbar-label");
 
         ToolBar toolBar = new ToolBar(
             btnOpen, btnBuild, new Separator(),
@@ -187,7 +189,7 @@ public class IgnisEditorApp extends Application {
         // ---- Hierarchy + Asset Browser (esquerda) ----
         hierarchy = buildHierarchy();
         javafx.scene.Node assetBrowser = buildAssetBrowser();
-        SplitPane leftSplit = new SplitPane();
+        leftSplit = new SplitPane();
         leftSplit.setOrientation(Orientation.VERTICAL);
         leftSplit.getItems().addAll(hierarchy, assetBrowser);
         leftSplit.setDividerPositions(0.6);
@@ -195,16 +197,21 @@ public class IgnisEditorApp extends Application {
         // ---- Inspector (direita) ----
         VBox inspector = buildInspector();
 
-        SplitPane split = new SplitPane();
-        split.getItems().addAll(leftSplit, viewportPane, inspector);
-        split.setDividerPositions(0.2, 0.78);
-        root.setCenter(split);
+        mainSplit = new SplitPane();
+        mainSplit.getItems().addAll(leftSplit, viewportPane, inspector);
+        mainSplit.setDividerPositions(0.2, 0.78);
+        root.setCenter(mainSplit);
 
         status = new Label(" Editor JavaFX (Fase 2) — abra um projeto .ignis (Arquivo > Abrir projeto)");
-        status.setStyle("-fx-text-fill: #b0b0b0; -fx-padding: 4 10; -fx-background-color: #2d2d2d;");
+        status.getStyleClass().add("status-bar");
         root.setBottom(status);
 
-        javafx.scene.Scene scene = new javafx.scene.Scene(root, 1100, 700);
+        // F4-B: restaura tamanho da janela salvo (default 1100x700).
+        double[] savedBounds = EditorPrefs.getWindowBounds();
+        double initW = (savedBounds != null && !Double.isNaN(savedBounds[2])) ? savedBounds[2] : 1100;
+        double initH = (savedBounds != null && !Double.isNaN(savedBounds[3])) ? savedBounds[3] : 700;
+        javafx.scene.Scene scene = new javafx.scene.Scene(root, initW, initH);
+        FxTheme.apply(scene);
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.O, KeyCombination.CONTROL_DOWN), () -> openProjectViaChooser(stage));
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.B, KeyCombination.CONTROL_DOWN), this::openBuildDialog);
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN), this::saveProject);
@@ -283,12 +290,25 @@ public class IgnisEditorApp extends Application {
             ex.printStackTrace();
         }
         stage.setScene(scene);
+
+        // F4-B: restaura posicao e estado de maximizacao salvos (com guarda de tela).
+        if (savedBounds != null && !Double.isNaN(savedBounds[0]) && !Double.isNaN(savedBounds[1])
+                && isOnScreen(savedBounds[0], savedBounds[1])) {
+            stage.setX(savedBounds[0]);
+            stage.setY(savedBounds[1]);
+        }
+        if (EditorPrefs.isWindowMaximized()) stage.setMaximized(true);
+
         stage.setOnCloseRequest(e -> {
+            saveLayout();
             stopGameLoop();
             Platform.exit();
             System.exit(0);
         });
         stage.show();
+
+        // Divisores so assumem a posicao salva apos o primeiro layout da cena.
+        Platform.runLater(this::restoreDividers);
 
         startRenderBridge(canvas);
 
@@ -329,7 +349,7 @@ public class IgnisEditorApp extends Application {
                     : "Auto Save desligado.");
         });
         MenuItem exit = new MenuItem("Sair");
-        exit.setOnAction(e -> { stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
+        exit.setOnAction(e -> { saveLayout(); stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
         file.getItems().addAll(novo, open, recentMenu, selecionar, new SeparatorMenuItem(),
                 salvar, salvarComo, autoSaveItem, new SeparatorMenuItem(), fechar, exit);
 
@@ -504,6 +524,7 @@ public class IgnisEditorApp extends Application {
                 case EXIT:
                 default:
                     if (exitOnCancel && currentProject == null) {
+                        saveLayout();
                         stopGameLoop();
                         Platform.exit();
                         System.exit(0);
@@ -757,6 +778,57 @@ public class IgnisEditorApp extends Application {
 
     private Stage stage() {
         return primaryStage;
+    }
+
+    // ---------------- Persistencia de layout (Fase F4-B) ----------------
+
+    // Salva tamanho/posicao da janela e posicoes dos divisores (best-effort).
+    // Quando maximizada, nao sobrescreve os bounds restaurados (passa NaN) para
+    // preservar o tamanho "janela" anterior; apenas grava o flag de maximizacao.
+    private void saveLayout() {
+        try {
+            Stage s = primaryStage;
+            if (s == null) return;
+            boolean max = s.isMaximized();
+            if (max) {
+                EditorPrefs.saveWindowState(Double.NaN, Double.NaN, Double.NaN, Double.NaN, true);
+            } else {
+                EditorPrefs.saveWindowState(s.getX(), s.getY(), s.getWidth(), s.getHeight(), false);
+            }
+            if (mainSplit != null) EditorPrefs.saveDividers("main", mainSplit.getDividerPositions());
+            if (leftSplit != null) EditorPrefs.saveDividers("left", leftSplit.getDividerPositions());
+        } catch (Exception ignore) { /* best-effort */ }
+    }
+
+    // Aplica as posicoes salvas dos divisores (apos o primeiro layout da cena).
+    private void restoreDividers() {
+        try {
+            double[] main = EditorPrefs.getDividers("main");
+            if (main != null && main.length > 0 && mainSplit != null
+                    && mainSplit.getDividers().size() == main.length) {
+                mainSplit.setDividerPositions(main);
+            }
+            double[] left = EditorPrefs.getDividers("left");
+            if (left != null && left.length > 0 && leftSplit != null
+                    && leftSplit.getDividers().size() == left.length) {
+                leftSplit.setDividerPositions(left);
+            }
+        } catch (Exception ignore) { /* best-effort */ }
+    }
+
+    // A posicao (x,y) cai dentro de algum monitor conectado? Evita restaurar a
+    // janela fora da area visivel (ex: monitor secundario removido).
+    private static boolean isOnScreen(double x, double y) {
+        try {
+            for (javafx.stage.Screen sc : javafx.stage.Screen.getScreens()) {
+                javafx.geometry.Rectangle2D b = sc.getVisualBounds();
+                if (x >= b.getMinX() - 50 && x <= b.getMaxX() - 50
+                        && y >= b.getMinY() && y <= b.getMaxY() - 50) {
+                    return true;
+                }
+            }
+        } catch (Exception ignore) { /* assume visivel em caso de erro */ return true; }
+        return false;
     }
 
     // ---------------- Ferramentas (janelas JavaFX) ----------------
@@ -1298,9 +1370,9 @@ public class IgnisEditorApp extends Application {
 
     private javafx.scene.Node buildAssetBrowser() {
         VBox box = new VBox(4);
-        box.setStyle("-fx-background-color: #2d2d2d;");
+        box.getStyleClass().add("ignis-panel");
         Label title = new Label("Assets");
-        title.setStyle("-fx-text-fill: #2e8b57; -fx-font-weight: bold; -fx-padding: 4 8;");
+        title.getStyleClass().add("panel-title");
 
         assetTree = new TreeView<>();
         assetTree.setShowRoot(true);
@@ -1428,11 +1500,11 @@ public class IgnisEditorApp extends Application {
 
     private VBox buildInspector() {
         VBox box = new VBox(8);
-        box.setStyle("-fx-background-color: #2d2d2d;");
+        box.getStyleClass().add("ignis-panel");
         box.setPadding(new Insets(12));
 
         Label title = new Label("Inspector");
-        title.setStyle("-fx-text-fill: #2e8b57; -fx-font-weight: bold;");
+        title.getStyleClass().add("panel-title");
 
         nameField = new TextField();
         xField = new TextField();
@@ -1441,7 +1513,6 @@ public class IgnisEditorApp extends Application {
         hField = new TextField();
         rotField = new TextField();
         visibleCheck = new CheckBox("Visivel");
-        visibleCheck.setStyle("-fx-text-fill: #d8d8d8;");
 
         GridPane grid = new GridPane();
         grid.setHgap(6);
@@ -1476,7 +1547,7 @@ public class IgnisEditorApp extends Application {
 
     private void addRow(GridPane grid, int row, String label, TextField field) {
         Label l = new Label(label);
-        l.setStyle("-fx-text-fill: #b0b0b0;");
+        l.getStyleClass().add("field-label");
         grid.add(l, 0, row);
         grid.add(field, 1, row);
     }

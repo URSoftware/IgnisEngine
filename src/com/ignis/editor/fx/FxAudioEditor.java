@@ -267,6 +267,7 @@ public class FxAudioEditor extends Stage {
         root.setBottom(statusBar);
 
         Scene scene = new Scene(root, 1000, 650);
+        FxTheme.apply(scene);
         setScene(scene);
 
         // Rebuild timeline UI

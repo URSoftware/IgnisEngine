@@ -134,5 +134,74 @@ public final class EditorPrefs {
         json.put("autoSaveIntervalSeconds", Math.max(5, seconds));
         write(json);
     }
+
+    // ---------------- Layout da janela (Fase F4-B) ----------------
+    // Persistencia estilo VSCode do tamanho/posicao da janela principal e das
+    // posicoes dos divisores dos SplitPane. Tudo opcional: se ausente, o editor
+    // usa os defaults atuais. Chaves agrupadas sob "layout".
+
+    private static JSONObject layout(JSONObject root) {
+        JSONObject l = root.optJSONObject("layout");
+        if (l == null) { l = new JSONObject(); root.put("layout", l); }
+        return l;
+    }
+
+    /** Bounds salvos da janela [x, y, largura, altura], ou {@code null} se nao houver. */
+    public static double[] getWindowBounds() {
+        JSONObject l = read().optJSONObject("layout");
+        if (l == null || !l.has("winW") || !l.has("winH")) return null;
+        return new double[] {
+                l.optDouble("winX", Double.NaN),
+                l.optDouble("winY", Double.NaN),
+                l.optDouble("winW", Double.NaN),
+                l.optDouble("winH", Double.NaN)
+        };
+    }
+
+    /** A janela estava maximizada no ultimo fechamento? */
+    public static boolean isWindowMaximized() {
+        JSONObject l = read().optJSONObject("layout");
+        return l != null && l.optBoolean("winMax", false);
+    }
+
+    /**
+     * Salva o estado da janela. Quando maximizada, preserva os ultimos bounds
+     * restaurados (passe {@code Double.NaN} para nao sobrescrever) e apenas marca
+     * o flag de maximizacao.
+     */
+    public static void saveWindowState(double x, double y, double w, double h, boolean maximized) {
+        JSONObject json = read();
+        JSONObject l = layout(json);
+        if (!Double.isNaN(w) && !Double.isNaN(h)) {
+            l.put("winX", x);
+            l.put("winY", y);
+            l.put("winW", w);
+            l.put("winH", h);
+        }
+        l.put("winMax", maximized);
+        write(json);
+    }
+
+    /** Posicoes salvas dos divisores de um SplitPane nomeado, ou {@code null}. */
+    public static double[] getDividers(String name) {
+        JSONObject l = read().optJSONObject("layout");
+        if (l == null) return null;
+        JSONArray arr = l.optJSONArray("div_" + name);
+        if (arr == null) return null;
+        double[] out = new double[arr.length()];
+        for (int i = 0; i < out.length; i++) out[i] = arr.optDouble(i, Double.NaN);
+        return out;
+    }
+
+    /** Salva as posicoes dos divisores de um SplitPane nomeado. */
+    public static void saveDividers(String name, double[] positions) {
+        if (positions == null) return;
+        JSONObject json = read();
+        JSONObject l = layout(json);
+        JSONArray arr = new JSONArray();
+        for (double p : positions) arr.put(p);
+        l.put("div_" + name, arr);
+        write(json);
+    }
 }
 

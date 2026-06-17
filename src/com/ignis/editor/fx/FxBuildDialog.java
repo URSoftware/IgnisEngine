@@ -123,7 +123,9 @@ public class FxBuildDialog extends Stage {
         root.setCenter(logPane);
         root.setBottom(buttons);
 
-        setScene(new Scene(root, 780, 580));
+        Scene scene = new Scene(root, 780, 580);
+        FxTheme.apply(scene);
+        setScene(scene);
     }
 
     private CheckBox targetCheck(BuildTarget target) {
