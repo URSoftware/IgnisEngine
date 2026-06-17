@@ -168,6 +168,13 @@ public class FxNotesWindow extends Stage {
         FxTheme.apply(scene);
         setScene(scene);
 
+        // A area de edicao do HTMLEditor e um WebView com pagina branca por padrao.
+        // Tematiza via user stylesheet (segue o tema atual) e re-aplica quando o
+        // tema troca (FxTheme alterna a styleClass "ignis-light" na raiz).
+        setOnShown(e -> Platform.runLater(this::applyEditorDarkStyle));
+        splitPane.getStyleClass().addListener(
+                (javafx.collections.ListChangeListener<String>) c -> Platform.runLater(this::applyEditorDarkStyle));
+
         // --- Load Notes ---
         loadNotesFromDisk();
 
@@ -334,6 +341,24 @@ public class FxNotesWindow extends Stage {
                 }
             }
         }
+    }
+
+    // Aplica um user stylesheet ao WebView interno do HTMLEditor para que a area
+    // de edicao siga o tema (fundo escuro/claro + texto contrastante), sem alterar
+    // o HTML salvo das notas. Re-chamavel (no show e ao trocar de tema).
+    private void applyEditorDarkStyle() {
+        javafx.scene.Node n = editorArea.lookup(".web-view");
+        if (!(n instanceof javafx.scene.web.WebView)) return;
+        javafx.scene.web.WebView wv = (javafx.scene.web.WebView) n;
+        boolean dark = FxTheme.isDark();
+        String bg = dark ? "#1e1e1e" : "#ffffff";
+        String fg = dark ? "#e0e0e0" : "#1e1e1e";
+        String link = dark ? "#5aa0ff" : "#1a5fb4";
+        String css = "html,body{background:" + bg + " !important;color:" + fg + " !important;}"
+                + "a{color:" + link + ";}";
+        String dataUri = "data:text/css;base64,"
+                + java.util.Base64.getEncoder().encodeToString(css.getBytes(StandardCharsets.UTF_8));
+        wv.getEngine().setUserStyleSheetLocation(dataUri);
     }
 
     private String ensureHtml(String content) {

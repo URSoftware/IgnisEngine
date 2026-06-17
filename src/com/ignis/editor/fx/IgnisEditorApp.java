@@ -250,6 +250,10 @@ public class IgnisEditorApp extends Application {
 
         // Scene key event filter for tools, selection controls, camera resets
         scene.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
+            // Durante o Play, os atalhos de ferramenta (W/E/R/F/etc.) NAO devem
+            // capturar teclas — elas pertencem ao jogo (ex: W = mover no script).
+            // O input do viewport ja roteia teclado ao Input da engine em Play.
+            if (playing) return;
             if (scene.getFocusOwner() instanceof javafx.scene.control.TextInputControl) {
                 return;
             }

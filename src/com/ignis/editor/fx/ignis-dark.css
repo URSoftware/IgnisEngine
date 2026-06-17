@@ -134,6 +134,50 @@
 }
 .check-box:selected .mark { -fx-background-color: -ignis-accent-bright; }
 
+/* ---------------- ComboBox / ChoiceBox (texto e popup) ---------------- */
+/* Sem isto o texto exibido e os itens do popup ficam escuros (modena) sobre
+   fundo escuro — baixo contraste (ex: combo de Tema, toolbar do editor de notas). */
+.combo-box .list-cell,
+.combo-box-base .list-cell,
+.choice-box .label {
+    -fx-text-fill: -ignis-text;
+    -fx-background-color: transparent;
+}
+.combo-box .arrow, .choice-box .arrow { -fx-background-color: -ignis-text-dim; }
+.combo-box-popup .list-view {
+    -fx-background-color: -ignis-control;
+    -fx-border-color: -ignis-border;
+}
+.combo-box-popup .list-view .list-cell {
+    -fx-background-color: -ignis-control;
+    -fx-text-fill: -ignis-text;
+    -fx-padding: 4 8;
+}
+.combo-box-popup .list-view .list-cell:filled:hover,
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: -ignis-accent;
+    -fx-text-fill: white;
+}
+
+/* ---------------- ListView generico ---------------- */
+.list-view { -fx-background-color: -ignis-control; }
+.list-view .list-cell {
+    -fx-background-color: -ignis-control;
+    -fx-text-fill: -ignis-text;
+}
+.list-view .list-cell:filled:hover { -fx-background-color: -ignis-control-hover; }
+.list-view .list-cell:filled:selected { -fx-background-color: -ignis-accent; -fx-text-fill: white; }
+
+/* ---------------- HTMLEditor (toolbar do editor de notas) ---------------- */
+/* A area de edicao (WebView) e tematizada via user stylesheet no FxNotesWindow;
+   aqui tratamos a barra de ferramentas e seus controles para contraste. */
+.html-editor { -fx-background-color: -ignis-panel; }
+.html-editor .tool-bar { -fx-background-color: -ignis-panel; }
+.html-editor .label { -fx-text-fill: -ignis-text; }
+.html-editor .font-menu-button > .label,
+.html-editor .html-editor-foreground,
+.html-editor .html-editor-background { -fx-text-fill: -ignis-text; }
+
 /* ---------------- TreeView (Hierarchy / Assets) ---------------- */
 
 .tree-view {

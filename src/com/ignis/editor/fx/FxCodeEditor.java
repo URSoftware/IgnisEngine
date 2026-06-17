@@ -497,7 +497,42 @@ public class FxCodeEditor extends Stage {
                     codeArea.insertText(codeArea.getCaretPosition(), "    ");
                     e.consume();
                 }
+            } else if (e.getCode() == KeyCode.ENTER && !e.isShiftDown() && !e.isControlDown()) {
+                handleAutoIndentNewline();
+                e.consume();
             }
+        }
+    }
+
+    private static final String INDENT_UNIT = "    "; // 4 espacos (igual ao Tab)
+
+    // Quebra de linha com auto-identacao: mantem a identacao da linha atual e, se a
+    // linha abre um bloco ('{' ao final), adiciona um nivel. Entre '{' e '}' cria
+    // a linha do meio identada e mantem o '}' alinhado ao bloco.
+    private void handleAutoIndentNewline() {
+        if (codeArea.getSelection().getLength() > 0) {
+            codeArea.replaceSelection("");
+        }
+        int caret = codeArea.getCaretPosition();
+        String text = codeArea.getText();
+        int lineStart = text.lastIndexOf('\n', caret - 1) + 1; // 0 quando e a 1a linha
+        String linePrefix = text.substring(lineStart, caret);
+
+        int i = 0;
+        while (i < linePrefix.length() && (linePrefix.charAt(i) == ' ' || linePrefix.charAt(i) == '\t')) i++;
+        String indent = linePrefix.substring(0, i);
+
+        boolean opensBlock = linePrefix.stripTrailing().endsWith("{");
+        char nextChar = caret < text.length() ? text.charAt(caret) : '\0';
+
+        if (opensBlock && nextChar == '}') {
+            String insertion = "\n" + indent + INDENT_UNIT + "\n" + indent;
+            codeArea.insertText(caret, insertion);
+            codeArea.moveTo(caret + 1 + indent.length() + INDENT_UNIT.length());
+        } else {
+            String insertion = "\n" + (opensBlock ? indent + INDENT_UNIT : indent);
+            codeArea.insertText(caret, insertion);
+            codeArea.moveTo(caret + insertion.length());
         }
     }
 
