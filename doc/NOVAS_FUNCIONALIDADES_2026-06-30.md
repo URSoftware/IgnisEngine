@@ -1,89 +1,69 @@
-# Relatório de Novas Funcionalidades e Melhorias no Editor FX (30/06/2026)
+# Relatório Detalhado de Implementações e Pendências no Editor FX (30/06/2026)
 
-Este documento detalha o conjunto de novas funcionalidades e melhorias de usabilidade implementadas no Ignis Engine, abrangendo o suporte a prefabs, painel de console integrado, desfazer (undo) no Inspector de propriedades e suporte inicial a multi-seleção.
-
-> [!NOTE]
-> **Autor das Alterações:** ThyagoToledo  
-> **Documentador:** Assistente IA Antigravity (Gemini)  
-> **Data:** 30 de Junho de 2026  
-> **Arquivos Afetados:**  
-> - [Game.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/core/Game.java)  
-> - [EditorPrefs.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/EditorPrefs.java)  
-> - [IgnisEditorApp.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/IgnisEditorApp.java)  
-> - [FxConsolePanel.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/FxConsolePanel.java) [NEW]
+Este relatório descreve detalhadamente o comportamento, o propósito técnico e as pendências de implementação (o que falta implementar) para as quatro tarefas do editor JavaFX do Ignis Engine.
 
 ---
 
 ## 1. Prefabs no Editor FX
 
-Os Prefabs funcionam como templates serializáveis (JSON) de GameObjects, permitindo salvar entidades configuradas (com transformações, sprites, colliders, scripts e variáveis customizadas) na pasta `<projeto>/prefabs/*.prefab.json` e reutilizá-las posteriormente.
+### O que faz:
+Permite a criação e instanciação de templates de GameObjects reutilizáveis. O editor serializa o objeto selecionado em formato JSON e o salva em `<projeto>/prefabs/[nome].prefab.json`. O navegador de assets monitora essa pasta e exibe os prefabs. A partir daí, o usuário pode instanciar o prefab na cena através do menu contextual (clique direito), da caixa de diálogo "Instanciar Prefab" ou por clique duplo direto no arquivo `.prefab.json` na árvore de assets.
 
-### Detalhes de Implementação:
-- **Gerenciador de Prefabs (`PrefabManager`):** Instanciado de forma lazy na aplicação em conformidade com o diretório ativo do projeto.
-- **Salvar como Prefab:** Adicionado ao menu contextual da viewport e da árvore de hierarquia. Apresenta uma caixa de diálogo (`TextInputDialog`) para nomeação do prefab, solicitando confirmação caso o arquivo já exista para evitar sobrescritas acidentais.
-- **Instanciar Prefabs:**
-  - Através da ação no menu contextual (exibe um `ChoiceDialog` com os prefabs existentes em ordem alfabética).
-  - Através do clique duplo em qualquer arquivo `.prefab.json` no navegador de assets.
-  - Através do menu contextual de arquivos `.prefab.json` no navegador de assets.
-- **Desfazer/Refazer (Undo/Redo):** A instanciação de prefabs registra uma transação no `UndoManager`, permitindo reverter completamente a criação do objeto e remover seus rastros na hierarquia e na seleção do editor.
+### Propósito Técnico:
+- **Reutilização de Design:** Evita que o designer de fases precise reconfigurar sprites, colisores, scripts e variáveis para objetos repetidos (como inimigos, moedas, blocos de cenário).
+- **Consistência de Dados:** Garante que todos os objetos criados a partir do mesmo template compartilhem a mesma estrutura inicial.
+- **Integração com Histórico:** A instanciação cria um GameObject completo e registra um comando no `UndoManager`, permitindo a remoção limpa em caso de desfazer (Undo).
+
+### O que faltou implementar (Pendências):
+- **Modo de Edição de Prefab (Prefab Mode):** Falta criar uma interface dedicada (estilo o Prefab Mode da Unity) para editar o arquivo `.prefab.json` isoladamente, sem precisar instanciá-lo na cena ativa para depois salvá-lo novamente.
+- **Vinculação Ativa (Prefab Connection):** Atualmente, os objetos instanciados são cópias independentes. Se o arquivo do prefab for atualizado, as instâncias já presentes na cena não sofrem atualização automática (herança de prefabs).
+- **Diferenciação Visual na Hierarquia:** Os itens da hierarquia que são instâncias de prefabs deveriam ser exibidos com uma cor de texto diferente (ex.: azul) ou um ícone indicando que são vinculados a um prefab.
 
 ---
 
 ## 2. Console de Erros Integrado
 
-Adicionado um terminal visual dentro do próprio editor para concentrar saídas de log do sistema, execuções de scripts e mensagens de erro do processo de compilação.
+### O que faz:
+Cria uma área de exibição de log no dock inferior do editor JavaFX (`FxConsolePanel`). O console captura e espelha em tempo real as saídas `System.out` e `System.err` através de um fluxo redirecionador personalizado (*tee*). Ele analisa as mensagens linha por linha, classificando-as visualmente em três categorias de severidade (INFO, WARNING, ERROR) com base em palavras-chave e no stream de origem.
 
-### Detalhes de Implementação:
-- **Nova Classe [FxConsolePanel.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/FxConsolePanel.java):**
-  - Implementa um fluxo "tee" que intercepta as saídas padrão e de erro do sistema (`System.out` e `System.err`) sem interromper a saída nativa no terminal de desenvolvimento.
-  - Classifica as linhas de log dinamicamente usando heurística em três níveis de severidade: `INFO` (cor padrão do tema), `WARN` (amarelo/dourado) e `ERROR` (vermelho).
-  - Inclui barra de ferramentas com botões alternáveis para filtrar visualmente os níveis de mensagens, contador em tempo real de erros e avisos, caixa de seleção para rolagem automática (Auto-scroll) e opção para limpar o buffer.
-- **Interface e Docking:**
-  - O console é inserido na janela principal sob um novo `SplitPane` vertical (`centerSplit`), dividindo a viewport e a parte inferior do editor.
-  - Adicionado atalho global `Ctrl+J` e uma opção sob o menu *Visualizar > Mostrar Console* para alternar a exibição.
-  - A visibilidade do console é mantida e carregada dinamicamente através da persistência do `EditorPrefs` (chave `consoleVisible`).
+### Propósito Técnico:
+- **Visibilidade de Debug:** Permite que desenvolvedores acompanhem a saída de seus IgnisScripts e erros de compilação sem precisar alternar entre o editor de jogo e a janela do terminal do sistema operacional.
+- **Filtragem de Ruído:** Melhora a identificação de problemas através de botões de filtro na barra de ferramentas que mostram ou ocultam mensagens com base em sua severidade.
+- **Ergonometria Visual:** A rolagem automática inteligente (*auto-scroll*) mantém as mensagens mais recentes visíveis, e as cores personalizadas integradas respeitam a estética do tema escuro do editor.
+
+### O que faltou implementar (Pendências):
+- **Navegação de Erro ao Clique (Go to Error Line):** Falta implementar uma lógica onde, ao dar um duplo-clique em uma linha de erro de compilação ou exceção de script no console, o arquivo de script correspondente seja aberto automaticamente no editor de código integrado ([FxCodeEditor.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/FxCodeEditor.java)) posicionado na linha que causou o problema.
+- **Barra de Pesquisa e Filtro de Texto:** Adicionar uma caixa de texto para filtrar logs em tempo real por termos de busca específicos ou expressões regulares.
+- **Exportação de Logs:** Implementar a funcionalidade de salvar/exportar o buffer do console em um arquivo `.txt` ou `.log` local.
 
 ---
 
 ## 3. Desfazer (Undo) na Edição de Campos do Inspector
 
-Anteriormente, alterações feitas por digitação direta nos campos do Inspector (como X, Y, Largura, Altura, Rotação e Nome) não podiam ser desfeitas, e qualquer evento de alteração ao vivo poluía o histórico do `UndoManager`.
+### O que faz:
+Gerencia as ações de desfazer e refazer para as propriedades digitadas nos campos de texto do Inspector (X, Y, Largura, Altura, Rotação e Nome) de forma transacional. O editor escuta o ganho de foco do campo para armazenar o valor inicial do objeto (`beginInspectorEdit`) e, ao perder o foco ou pressionar Enter, valida se houve alteração real para empilhar um único comando consolidado no `UndoManager` (`commitInspectorEdit`).
 
-### Detalhes de Implementação:
-- **Edição Transacional por Foco (`wireUndoableField`):**
-  - Quando um campo de texto ganha foco, o editor captura o valor atual do GameObject como ponto de partida (`beginInspectorEdit`).
-  - Quando o campo perde o foco (`focusedProperty` passa a falso) ou quando o usuário pressiona a tecla `Enter`, o editor compara o valor atual com o ponto de partida (`commitInspectorEdit`).
-  - Se houver alteração real de valor, uma única transação descritiva (ex: "Editar Nome", "Editar X") é empilhada no `UndoManager`. Os listeners de texto continuam atualizando o viewport em tempo real ao digitar, garantindo feedback visual fluido sem sobrecarregar o histórico de Undo.
-- **Undo em Controles Discretos:**
-  - Alterações no estado da checkbox "Visível" geram transações imediatas no `UndoManager` por não envolverem digitação contínua.
+### Propósito Técnico:
+- **Prevenção de Inundação de Histórico:** Evita que cada tecla digitada (por exemplo, ao digitar "150" caractere por caractere: "1", "15", "150") crie múltiplos comandos de desfazer separados, o que tornaria o histórico de Undo inútil para o usuário.
+- **Mudanças Discretas Imediatas:** Controles de clique direto (como a checkbox de visibilidade) criam uma transação no `UndoManager` imediatamente, sem a necessidade de esperar perda de foco.
+
+### O que faltou implementar (Pendências):
+- **Suporte para Sliders e Arrastes de Valores:** Se forem implementados sliders ou campos arrastáveis (drag-to-modify) no Inspector, eles precisarão de uma lógica similar que capture o valor no início do clique (Mouse Pressed) e comite o valor acumulado no término do clique (Mouse Released).
+- **Undo para Outros Componentes:** Propriedades mais complexas do Inspector (como propriedades de Script adicionadas dinamicamente, seletores de cores e caixas de colisão) ainda não utilizam o sistema transacional de perda de foco e precisam ser portadas para este padrão.
 
 ---
 
 ## 4. Multi-seleção no Editor FX (Em Progresso)
 
-Iniciados os preparativos arquiteturais para suportar a seleção simultânea de múltiplos objetos no editor.
+### O que faz:
+Adiciona suporte básico no renderizador da engine ([Game.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/core/Game.java)) para exibir contornos pontilhados na cor laranja (`Color(255, 160, 40)`) ao redor de uma lista de entidades secundárias (`editorHighlights`) durante o modo de edição, permitindo feedback visual de que múltiplos elementos estão agrupados na seleção.
 
-### Detalhes de Implementação:
-- **Suporte no Core da Engine (`Game.java`):**
-  - Adicionada a lista privada `editorHighlights` e o método síncrono `setEditorHighlights(List<GameObject>)`.
-  - No método de desenho da cena (`renderWorldTo`), caso o estado atual do jogo seja `GameState.EDITING`, cada entidade secundária contida na lista de realces é desenhada com uma borda pontilhada laranja (`Color(255, 160, 40)`), sem exibir alças de redimensionamento ou gizmos de translação ativos.
-  - A manipulação de gizmos e arraste lógico de coordenadas permanece restrita à entidade selecionada principal (`selectedObject`), mantendo a integridade física e de simulação da cena.
+### Propósito Técnico:
+- **Identificação Visual:** Permitir que o usuário saiba quais objetos pertencem à sua seleção secundária sem exibir o gizmo ativo de transformação para cada um, evitando poluição visual na viewport.
+- **Isolamento de Controles:** Mantém a manipulação física (arraste e redimensionamento via gizmo) vinculada apenas ao objeto primário selecionado, preparando a arquitetura de movimentação em bloco.
 
----
-
-## 5. Resumo das Modificações nos Arquivos
-
-### [Game.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/core/Game.java)
-- Adicionado campo `editorHighlights` para armazenar a lista secundária de seleção.
-- Adicionado método `setEditorHighlights(List<GameObject> objs)`.
-- Adicionado loop de desenho tracejado na cor laranja para elementos em `editorHighlights` dentro de `renderWorldTo()`.
-
-### [EditorPrefs.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/EditorPrefs.java)
-- Adicionados métodos `isConsoleVisible()` e `setConsoleVisible(boolean)` para salvar e ler a visibilidade do dock de console no arquivo de preferências do editor.
-
-### [IgnisEditorApp.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEngine-main/src/com/ignis/editor/fx/IgnisEditorApp.java)
-- Instanciado `FxConsolePanel` na inicialização, registrando a captura dos streams do sistema e adicionando o componente no dock inferior caso configurado.
-- Adicionada ação de toggle do console no menu *Visualizar* com atalho `Ctrl+J`.
-- Adicionado suporte a `PrefabManager` e implementados os métodos `saveSelectedAsPrefab()`, `instantiatePrefabDialog()` e `instantiatePrefabByName(String)`.
-- Vinculado duplo clique em arquivos `.prefab.json` e ação contextual no navegador de arquivos à instanciação de prefabs.
-- Criados métodos `wireUndoableField()`, `beginInspectorEdit()`, `commitInspectorEdit()` e `applyInspectorUndo()` no painel do Inspector para implementar o histórico de Undo transacional por foco.
+### O que faltou implementar (Pendências):
+- **Habilitação de Seleção Múltipla na TreeView:** A árvore de hierarquia (`TreeView`) em [IgnisEditorApp.java](file:///c:/Users/thyag/OneDrive/Desktop/IgnisEditorApp.java) ainda opera no modo de seleção única. É necessário alterar para `SelectionMode.MULTIPLE`.
+- **Comportamento de Clique na Viewport e Hierarquia:** Falta implementar a lógica que captura cliques com as teclas `Ctrl` ou `Shift` pressionadas para adicionar ou remover entidades da lista de seleção, atualizando os destaques pontilhados.
+- **Gizmo de Transformação Coletivo:** Atualmente, as transformações de translação, rotação e escala ocorrem apenas no objeto principal selecionado. Falta implementar a movimentação proporcional em grupo, onde mover o objeto âncora (com o gizmo) translada proporcionalmente todos os demais objetos selecionados na lista de realces.
+- **Ações de Menu em Bloco:** Operações como duplicar (Duplicate), deletar (Delete) e mover (ordenar) ainda atuam estritamente sobre a entidade principal selecionada. É necessário adaptar estas funções para varrer a lista de seleção múltipla e efetuar as operações em bloco em uma única transação de Undo.
