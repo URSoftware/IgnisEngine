@@ -117,8 +117,7 @@ public class IgnisProjectIO {
         // Update file reference in project (use actual file in projects folder)
         project.setProjectFile(actualIgnisFile);
 
-        System.out.println("Project saved at: " + actualIgnisFile.getAbsolutePath());
-        System.out.println("Project folder: " + projectFolder.getAbsolutePath());
+        com.ignis.core.IgnisLogger.info("Projeto salvo em: " + actualIgnisFile.getName());
     }
 
     /**
@@ -235,7 +234,7 @@ public class IgnisProjectIO {
             }
         }
 
-        System.out.println("Project loaded: " + project.getProjectName());
+        com.ignis.core.IgnisLogger.info("Projeto carregado: " + project.getProjectName());
         return project;
     }
 

@@ -73,7 +73,7 @@ public class IgnisSoundEngine {
         });
         initialized = true;
         
-        System.out.println("[IgnisSoundEngine] Audio engine initialized!");
+        IgnisLogger.info("[IgnisSoundEngine] Motor de áudio inicializado!");
     }
 
     // ==================== MÉTODOS DE EFEITOS SONOROS ====================
@@ -152,7 +152,7 @@ public class IgnisSoundEngine {
                 clip.start();
                 
             } catch (Exception e) {
-                System.err.println("[IgnisSoundEngine] Erro ao reproduzir som: " + e.getMessage());
+                IgnisLogger.error("[IgnisSoundEngine] Erro ao reproduzir som: " + e.getMessage());
             }
         });
     }
@@ -237,10 +237,10 @@ public class IgnisSoundEngine {
             });
             
             backgroundMusic.start();
-            System.out.println("[IgnisSoundEngine] Música iniciada: " + filePath);
+            IgnisLogger.info("[IgnisSoundEngine] Música iniciada: " + filePath);
             
         } catch (Exception e) {
-            System.err.println("[IgnisSoundEngine] Erro ao reproduzir música: " + e.getMessage());
+            IgnisLogger.error("[IgnisSoundEngine] Erro ao reproduzir música: " + e.getMessage());
         }
     }
     
@@ -252,7 +252,7 @@ public class IgnisSoundEngine {
             musicPausePosition = backgroundMusic.getMicrosecondPosition();
             backgroundMusic.stop();
             musicPaused = true;
-            System.out.println("[IgnisSoundEngine] Música pausada");
+            IgnisLogger.info("[IgnisSoundEngine] Música pausada");
         }
     }
     
@@ -268,7 +268,7 @@ public class IgnisSoundEngine {
                 backgroundMusic.start();
             }
             musicPaused = false;
-            System.out.println("[IgnisSoundEngine] Música retomada");
+            IgnisLogger.info("[IgnisSoundEngine] Música retomada");
         }
     }
     
@@ -283,7 +283,7 @@ public class IgnisSoundEngine {
             currentMusicPath = null;
             musicPaused = false;
             musicPausePosition = 0;
-            System.out.println("[IgnisSoundEngine] Música parada");
+            IgnisLogger.info("[IgnisSoundEngine] Música parada");
         }
     }
     
@@ -542,7 +542,7 @@ public class IgnisSoundEngine {
      * Finaliza o motor de áudio e libera recursos.
      */
     public void shutdown() {
-        System.out.println("[IgnisSoundEngine] Finalizando motor de áudio...");
+        IgnisLogger.info("[IgnisSoundEngine] Finalizando motor de áudio...");
         
         stopMusic();
         stopAllSounds();
@@ -563,7 +563,7 @@ public class IgnisSoundEngine {
         initialized = false;
         instance = null;
         
-        System.out.println("[IgnisSoundEngine] Motor de áudio finalizado");
+        IgnisLogger.info("[IgnisSoundEngine] Motor de áudio finalizado");
     }
 
     // ==================== MÉTODOS ESTÁTICOS DE CONVENIÊNCIA ====================

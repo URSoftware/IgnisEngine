@@ -97,6 +97,17 @@ public final class FxConsolePanel extends VBox {
 
         getChildren().addAll(bar, list);
         updateCounter();
+
+        // Registrar ouvinte do logger privado e centralizado do IgnisEngine
+        com.ignis.core.IgnisLogger.addListener((level, message) -> {
+            Level fxLevel;
+            switch (level) {
+                case ERROR: fxLevel = Level.ERROR; break;
+                case WARN:  fxLevel = Level.WARN; break;
+                default:    fxLevel = Level.INFO; break;
+            }
+            log(fxLevel, message);
+        });
     }
 
     // ---------------- API publica ----------------
@@ -116,57 +127,16 @@ public final class FxConsolePanel extends VBox {
     }
 
     /**
-     * Comeca a espelhar System.out/System.err para este painel. Idempotente.
-     * As linhas continuam indo para os streams originais (terminal).
+     * Nao faz mais nada pois agora o terminal da ferramenta e isolado (privado)
+     * e os logs sao direcionados explicitamente via IgnisLogger.
      */
     public void startCapture() {
-        if (capturing) return;
         capturing = true;
-        originalOut = System.out;
-        originalErr = System.err;
-        System.setOut(tee(originalOut, false));
-        System.setErr(tee(originalErr, true));
     }
 
-    /** Restaura System.out/System.err originais. */
+    /** Restaura logs originais (no-op). */
     public void stopCapture() {
-        if (!capturing) return;
         capturing = false;
-        if (originalOut != null) System.setOut(originalOut);
-        if (originalErr != null) System.setErr(originalErr);
-    }
-
-    // ---------------- Captura (tee) ----------------
-
-    private PrintStream tee(PrintStream original, boolean errStream) {
-        OutputStream os = new OutputStream() {
-            private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
-
-            @Override public synchronized void write(int b) {
-                original.write(b);
-                if (b == '\n') flushLine();
-                else if (b != '\r') buf.write(b);
-            }
-
-            @Override public synchronized void write(byte[] data, int off, int len) {
-                original.write(data, off, len);
-                for (int i = 0; i < len; i++) {
-                    int b = data[off + i] & 0xff;
-                    if (b == '\n') flushLine();
-                    else if (b != '\r') buf.write(b);
-                }
-            }
-
-            @Override public void flush() { original.flush(); }
-
-            private void flushLine() {
-                if (buf.size() == 0) return;
-                String line = new String(buf.toByteArray(), Charset.defaultCharset());
-                buf.reset();
-                appendOnFx(classify(errStream, line), line);
-            }
-        };
-        return new PrintStream(os, true, Charset.defaultCharset());
     }
 
     // Heuristica de severidade: stderr e erro por padrao (mas "warning" vira aviso);

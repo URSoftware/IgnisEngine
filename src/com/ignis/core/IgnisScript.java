@@ -190,7 +190,7 @@ public abstract class IgnisScript {
      * @param message Mensagem a imprimir
      */
     protected void println(String message) {
-        System.out.println("[" + scriptName + "] " + message);
+        com.ignis.core.IgnisLogger.info("[" + scriptName + "] " + message);
     }
     
     /**
@@ -198,7 +198,7 @@ public abstract class IgnisScript {
      * @param message Mensagem a imprimir
      */
     protected void print(String message) {
-        System.out.print(message);
+        com.ignis.core.IgnisLogger.info(message);
     }
     
     // ==================== MÉTODOS DE INPUT ====================

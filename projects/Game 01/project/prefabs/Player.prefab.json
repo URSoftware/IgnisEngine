@@ -1,0 +1,21 @@
+{
+  "transform": {
+    "rotation": 0,
+    "x": -74.6627435016344,
+    "width": 80,
+    "y": -107.5548903868488,
+    "height": 80
+  },
+  "prefabName": "Player",
+  "name": "Player",
+  "type": "Square",
+  "scripts": [
+    {"name": "Player"},
+    {"name": "PlayerCollisionEffect"}
+  ],
+  "properties": {
+    "visible": true,
+    "color": -10184961
+  },
+  "prefabVersion": "1.0"
+}

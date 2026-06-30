@@ -12,6 +12,7 @@ import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceDialog;
@@ -105,6 +106,16 @@ public class IgnisEditorApp extends Application {
     private GameObject transformObj;
     private double txStartX, txStartY, txStartRot;
     private int txStartW, txStartH;
+    
+    private static final class TransformState {
+        final GameObject obj;
+        final double x, y, rotation;
+        final int w, h;
+        TransformState(GameObject obj, double x, double y, double rotation, int w, int h) {
+            this.obj = obj; this.x = x; this.y = y; this.rotation = rotation; this.w = w; this.h = h;
+        }
+    }
+    private final java.util.List<TransformState> secondaryStartStates = new java.util.ArrayList<>();
     // Fonte AWT (nao exibida) usada apenas como 'source' nao-nulo ao fabricar
     // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
     private final java.awt.Component awtEventSource = new java.awt.Canvas();
@@ -127,6 +138,9 @@ public class IgnisEditorApp extends Application {
     private Label cameraPosLabel;
     private Label cameraZoomLabel;
     private GameObject clipboardObject;
+    // Multi-selecao: lista de objetos selecionados secundariamente (alem do primario 'selected').
+    // O primario recebe gizmo/drag; os secundarios recebem contorno tracejado (editorHighlights).
+    private final java.util.List<GameObject> secondarySelection = new java.util.ArrayList<>();
     private ToggleButton btnMove;
     private ToggleButton btnRotate;
     private ToggleButton btnScale;
@@ -1122,6 +1136,7 @@ public class IgnisEditorApp extends Application {
     private void playWorld() {
         if (playing) return;
         try {
+            clearSecondarySelection();
             game.playWorld();
             game.start();
             playing = true;
@@ -1170,6 +1185,31 @@ public class IgnisEditorApp extends Application {
             canvas.requestFocus();
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED);
             com.ignis.core.Input.getInstance().mousePressed(awtEvent);
+            // Multi-selecao via Ctrl+Click esquerdo no viewport (so em edicao, nao em Play).
+            if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isControlDown() && !playing) {
+                GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
+                if (clicked != null) {
+                    if (clicked == selected) {
+                        // Ctrl+Click no primario: promove o 1o secundario a primario (se houver)
+                        // e move o primario atual para a lista secundaria.
+                        if (!secondarySelection.isEmpty()) {
+                            GameObject newPrimary = secondarySelection.remove(0);
+                            secondarySelection.add(selected);
+                            selectEntity(newPrimary);
+                            syncHighlights();
+                        }
+                        // Se nao ha secundarios, Ctrl+Click no unico selecionado nao faz nada.
+                    } else {
+                        toggleSecondarySelection(clicked);
+                    }
+                }
+                // NAO despacha ao engine; impede que ele substitua a selecao primaria.
+                return;
+            }
+            // Clique normal (sem Ctrl): limpa a selecao secundaria.
+            if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY && !e.isControlDown()) {
+                clearSecondarySelection();
+            }
             if (e.getButton() != javafx.scene.input.MouseButton.SECONDARY) game.dispatchEvent(awtEvent);
         });
         canvas.setOnMouseReleased(e -> {
@@ -1288,6 +1328,8 @@ public class IgnisEditorApp extends Application {
         refreshHierarchy();
         hierarchyRoot.setExpanded(true);
         TreeView<String> tree = new TreeView<>(hierarchyRoot);
+        // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
+        tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
         // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
         // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
@@ -1305,14 +1347,38 @@ public class IgnisEditorApp extends Application {
             });
             return cell;
         });
-        tree.getSelectionModel().selectedItemProperty().addListener((obs, oldItem, item) -> {
+        // Listener de selecao: sincroniza o primario + secundarios a partir da
+        // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
+        // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
+        tree.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
             if (suppressSelectionEvents) return;
             suppressSelectionEvents = true;
             try {
-                if (item == null || item == hierarchyRoot) { setSelected(null); return; }
-                int idx = hierarchyRoot.getChildren().indexOf(item);
+                var selItems = tree.getSelectionModel().getSelectedItems();
                 java.util.List<GameObject> ents = game.getEntities();
-                setSelected(idx >= 0 && idx < ents.size() ? ents.get(idx) : null);
+                if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
+                    setSelected(null);
+                    clearSecondarySelection();
+                    return;
+                }
+                // O item com foco (ultimo clicado) vira o primario.
+                TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
+                if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
+                int primaryIdx = hierarchyRoot.getChildren().indexOf(focusedItem);
+                GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
+                setSelected(primary);
+                // Montar a lista de secundarios (os demais).
+                secondarySelection.clear();
+                for (TreeItem<String> ti : selItems) {
+                    if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
+                    int idx = hierarchyRoot.getChildren().indexOf(ti);
+                    if (idx >= 0 && idx < ents.size()) {
+                        GameObject go = ents.get(idx);
+                        if (go != primary) secondarySelection.add(go);
+                    }
+                }
+                syncHighlights();
             } finally {
                 suppressSelectionEvents = false;
             }
@@ -1371,51 +1437,138 @@ public class IgnisEditorApp extends Application {
     }
 
     private void duplicateSelected() {
-        if (selected == null) { setStatus("Nada selecionado para duplicar."); return; }
+        java.util.List<GameObject> targets = allSelected();
+        if (targets.isEmpty()) { setStatus("Nada selecionado para duplicar."); return; }
         try {
-            GameObject original = selected;
-            GameObject copy = com.ignis.core.EntityFactory.create(original.getType());
-            copy.setGame(game);
-            copy.setX(original.getX());
-            copy.setY(original.getY());
-            copy.setWidth(original.getWidth());
-            copy.setHeight(original.getHeight());
-            copy.setSpritePath(original.getSpritePath());
-            try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) { /* props opcionais */ }
-            copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
-            addEntityTracked(copy);
+            java.util.List<GameObject> copies = new java.util.ArrayList<>();
+            for (GameObject original : targets) {
+                GameObject copy = com.ignis.core.EntityFactory.create(original.getType());
+                copy.setGame(game);
+                copy.setX(original.getX());
+                copy.setY(original.getY());
+                copy.setWidth(original.getWidth());
+                copy.setHeight(original.getHeight());
+                copy.setSpritePath(original.getSpritePath());
+                try { copy.loadProperties(original.saveProperties()); } catch (Exception ignore) { /* props opcionais */ }
+                copy.setName(uniqueNameExcept(original.getName() + " (Copy)", null));
+                copies.add(copy);
+            }
+            for (GameObject copy : copies) {
+                addEntityTracked(copy);
+            }
             refreshHierarchy();
-            selectEntity(copy);
+            
+            // Seleciona as copias: primeira como primaria, as outras como secundarias
+            GameObject firstCopy = copies.get(0);
+            selectEntity(firstCopy);
+            for (int i = 1; i < copies.size(); i++) {
+                secondarySelection.add(copies.get(i));
+            }
+            syncHighlights();
+            
             markProjectDirty();
-            setStatus("Duplicado: " + copy.getName());
-            undoManager.push("Duplicar " + copy.getName(),
-                    () -> { removeEntityTracked(copy); refreshHierarchy(); selectEntity(null); markProjectDirty(); },
-                    () -> { addEntityTracked(copy); refreshHierarchy(); selectEntity(copy); markProjectDirty(); });
+            if (copies.size() == 1) {
+                setStatus("Duplicado: " + firstCopy.getName());
+            } else {
+                setStatus("Duplicados " + copies.size() + " objetos.");
+            }
+            
+            undoManager.push("Duplicar em bloco",
+                () -> {
+                    for (GameObject copy : copies) {
+                        removeEntityTracked(copy);
+                    }
+                    setSelected(null);
+                    clearSecondarySelection();
+                    refreshHierarchy();
+                    markProjectDirty();
+                },
+                () -> {
+                    for (GameObject copy : copies) {
+                        addEntityTracked(copy);
+                    }
+                    refreshHierarchy();
+                    selectEntity(firstCopy);
+                    for (int i = 1; i < copies.size(); i++) {
+                        secondarySelection.add(copies.get(i));
+                    }
+                    syncHighlights();
+                    markProjectDirty();
+                }
+            );
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao duplicar:\n" + ex.getMessage()).showAndWait();
         }
     }
 
     private void deleteSelected() {
-        if (selected == null) { setStatus("Nada selecionado para deletar."); return; }
-        GameObject toDelete = selected;
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "Deletar '" + toDelete.getName() + "'?", ButtonType.YES, ButtonType.NO);
+        java.util.List<GameObject> targets = allSelected();
+        if (targets.isEmpty()) { setStatus("Nada selecionado para deletar."); return; }
+        
+        String confirmMsg = (targets.size() == 1) ? 
+                "Deletar '" + targets.get(0).getName() + "'?" : 
+                "Deletar " + targets.size() + " objetos selecionados?";
+                
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, confirmMsg, ButtonType.YES, ButtonType.NO);
         confirm.setHeaderText(null);
         if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
-        int idx = game.getEntities().indexOf(toDelete);
-        removeEntityTracked(toDelete);
+        
+        class DeletedEntry {
+            final GameObject obj;
+            final int index;
+            DeletedEntry(GameObject obj, int index) { this.obj = obj; this.index = index; }
+        }
+        java.util.List<DeletedEntry> deleted = new java.util.ArrayList<>();
+        for (GameObject obj : targets) {
+            int idx = game.getEntities().indexOf(obj);
+            deleted.add(new DeletedEntry(obj, idx));
+        }
+        
+        for (GameObject obj : targets) {
+            removeEntityTracked(obj);
+        }
         setSelected(null);
+        clearSecondarySelection();
         refreshHierarchy();
         markProjectDirty();
-        setStatus("Deletado: " + toDelete.getName());
-        undoManager.push("Deletar " + toDelete.getName(),
-                () -> {
-                    addEntityTracked(toDelete);
-                    if (idx >= 0) game.moveEntityToIndex(toDelete, idx);
-                    refreshHierarchy(); selectEntity(toDelete); markProjectDirty();
-                },
-                () -> { removeEntityTracked(toDelete); refreshHierarchy(); selectEntity(null); markProjectDirty(); });
+        
+        if (targets.size() == 1) {
+            setStatus("Deletado: " + targets.get(0).getName());
+        } else {
+            setStatus("Deletados " + targets.size() + " objetos.");
+        }
+        
+        undoManager.push("Deletar em bloco",
+            () -> {
+                java.util.List<DeletedEntry> sorted = new java.util.ArrayList<>(deleted);
+                sorted.sort(java.util.Comparator.comparingInt(d -> d.index));
+                for (DeletedEntry d : sorted) {
+                    addEntityTracked(d.obj);
+                    if (d.index >= 0 && d.index < game.getEntities().size()) {
+                        game.moveEntityToIndex(d.obj, d.index);
+                    }
+                }
+                refreshHierarchy();
+                if (!sorted.isEmpty()) {
+                    GameObject first = sorted.get(0).obj;
+                    selectEntity(first);
+                    for (int i = 1; i < sorted.size(); i++) {
+                        secondarySelection.add(sorted.get(i).obj);
+                    }
+                    syncHighlights();
+                }
+                markProjectDirty();
+            },
+            () -> {
+                for (GameObject obj : targets) {
+                    removeEntityTracked(obj);
+                }
+                setSelected(null);
+                clearSecondarySelection();
+                refreshHierarchy();
+                markProjectDirty();
+            }
+        );
     }
 
     private void renameSelected() {
@@ -1598,6 +1751,11 @@ public class IgnisEditorApp extends Application {
             } else {
                 int idx = game.getEntities().indexOf(go);
                 if (hierarchy != null && idx >= 0 && idx < hierarchyRoot.getChildren().size()) {
+                    // Em MULTIPLE mode, select() ACUMULA; para selecao programatica (criar,
+                    // duplicar, undo, etc.) precisamos clearSelection antes para que o tree
+                    // reflita apenas o primario. A multi-selecao nativa (Ctrl/Shift) e tratada
+                    // pelo listener do getSelectedItems().
+                    hierarchy.getSelectionModel().clearSelection();
                     hierarchy.getSelectionModel().select(hierarchyRoot.getChildren().get(idx));
                 }
             }
@@ -1605,6 +1763,49 @@ public class IgnisEditorApp extends Application {
         } finally {
             suppressSelectionEvents = false;
         }
+    }
+
+    // ---------------- Multi-selecao ----------------
+
+    // Empurra a lista de selecao secundaria para o Game (contornos tracejados no viewport).
+    private void syncHighlights() {
+        game.setEditorHighlights(secondarySelection.isEmpty() ? null : secondarySelection);
+    }
+
+    // Limpa a selecao secundaria e atualiza o viewport.
+    private void clearSecondarySelection() {
+        if (!secondarySelection.isEmpty()) {
+            secondarySelection.clear();
+            syncHighlights();
+        }
+    }
+
+    // Toggle de um objeto na selecao secundaria (Ctrl+Click). Se o objeto ja
+    // esta na lista, remove; senao, adiciona. O objeto primario ('selected') nunca
+    // entra na lista secundaria — ele mantem o gizmo e o Inspector.
+    private void toggleSecondarySelection(GameObject go) {
+        if (go == null || go == selected) return;
+        if (secondarySelection.contains(go)) {
+            secondarySelection.remove(go);
+        } else {
+            secondarySelection.add(go);
+        }
+        syncHighlights();
+    }
+
+    // Retorna todos os selecionados (primario + secundarios), na ordem da cena.
+    private java.util.List<GameObject> allSelected() {
+        java.util.List<GameObject> all = new java.util.ArrayList<>();
+        java.util.List<GameObject> entities = game.getEntities();
+        for (GameObject e : entities) {
+            if (e == selected || secondarySelection.contains(e)) all.add(e);
+        }
+        return all;
+    }
+
+    // Quantidade total de objetos selecionados (primario + secundarios).
+    private int selectionCount() {
+        return (selected != null ? 1 : 0) + secondarySelection.size();
     }
 
     // ---------------- Auto Save do projeto ----------------
@@ -1616,18 +1817,68 @@ public class IgnisEditorApp extends Application {
             @Override public void onTransformStart(GameObject o, double x, double y, double rotation, int w, int h) {
                 transformObj = o;
                 txStartX = x; txStartY = y; txStartRot = rotation; txStartW = w; txStartH = h;
+                secondaryStartStates.clear();
+                for (GameObject sec : secondarySelection) {
+                    if (sec != o) {
+                        secondaryStartStates.add(new TransformState(sec, sec.getX(), sec.getY(), sec.getRotation(), sec.getWidth(), sec.getHeight()));
+                    }
+                }
             }
             @Override public void onTransformEnd(GameObject o) {
                 markProjectDirty();
-                if (o == null || o != transformObj) { transformObj = null; return; }
+                if (o == null || o != transformObj) { transformObj = null; secondaryStartStates.clear(); return; }
                 double sx = txStartX, sy = txStartY, srot = txStartRot; int sw = txStartW, sh = txStartH;
                 double ex = o.getX(), ey = o.getY(), erot = o.getRotation(); int ew = o.getWidth(), eh = o.getHeight();
                 transformObj = null;
                 // Ignora se nada mudou (ex: clique sem arraste).
-                if (sx == ex && sy == ey && srot == erot && sw == ew && sh == eh) return;
-                undoManager.push("Transformar " + o.getName(),
-                        () -> applyTransform(o, sx, sy, srot, sw, sh),
-                        () -> applyTransform(o, ex, ey, erot, ew, eh));
+                if (sx == ex && sy == ey && srot == erot && sw == ew && sh == eh) {
+                    secondaryStartStates.clear();
+                    return;
+                }
+                
+                // Calcula deltas do primario
+                double dx = ex - sx;
+                double dy = ey - sy;
+                double drot = erot - srot;
+                double dw = ew - sw;
+                double dh = eh - sh;
+                
+                // Grava os estados de antes e depois de todos (primario + secundarios)
+                java.util.List<TransformState> beforeStates = new java.util.ArrayList<>();
+                java.util.List<TransformState> afterStates = new java.util.ArrayList<>();
+                
+                // Adiciona primario
+                beforeStates.add(new TransformState(o, sx, sy, srot, sw, sh));
+                afterStates.add(new TransformState(o, ex, ey, erot, ew, eh));
+                
+                // Aplica e grava os secundarios
+                for (TransformState start : secondaryStartStates) {
+                    GameObject sec = start.obj;
+                    double secEx = start.x + dx;
+                    double secEy = start.y + dy;
+                    double secErot = start.rotation + drot;
+                    int secEw = (int)(start.w + dw);
+                    int secEh = (int)(start.h + dh);
+                    
+                    sec.setX(secEx);
+                    sec.setY(secEy);
+                    sec.setRotation(secErot);
+                    sec.setWidth(secEw);
+                    sec.setHeight(secEh);
+                    
+                    beforeStates.add(start);
+                    afterStates.add(new TransformState(sec, secEx, secEy, secErot, secEw, secEh));
+                }
+                secondaryStartStates.clear();
+                
+                refreshHierarchy();
+                // Forca atualizacao do Inspector para o primario
+                setSelected(o);
+                game.repaint();
+                
+                undoManager.push("Transformar em bloco",
+                        () -> applyMultipleTransforms(beforeStates),
+                        () -> applyMultipleTransforms(afterStates));
             }
         });
         projectAutoSaveTimer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
@@ -1639,6 +1890,22 @@ public class IgnisEditorApp extends Application {
         }));
         projectAutoSaveTimer.setCycleCount(javafx.animation.Animation.INDEFINITE);
         projectAutoSaveTimer.play();
+    }
+
+    private void applyMultipleTransforms(java.util.List<TransformState> states) {
+        for (TransformState s : states) {
+            s.obj.setX(s.x);
+            s.obj.setY(s.y);
+            s.obj.setRotation(s.rotation);
+            s.obj.setWidth(s.w);
+            s.obj.setHeight(s.h);
+        }
+        refreshHierarchy();
+        if (selected != null) {
+            setSelected(selected);
+        }
+        game.repaint();
+        markProjectDirty();
     }
 
     // Salvamento usado pelo Auto Save: nunca abre Alert modal (uma falha persistente de
@@ -1965,6 +2232,7 @@ public class IgnisEditorApp extends Application {
             nameField.setText(""); xField.setText(""); yField.setText("");
             wField.setText(""); hField.setText(""); rotField.setText("");
             visibleCheck.setSelected(false);
+            clearSecondarySelection();
         } else {
             setInspectorEnabled(true);
             nameField.setText(go.getName());
@@ -2280,6 +2548,7 @@ public class IgnisEditorApp extends Application {
 
     private void setStatus(String text) {
         if (status != null) status.setText(" " + text);
+        com.ignis.core.IgnisLogger.info(text);
     }
 
     // ---------------- Ponte de render ----------------

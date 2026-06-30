@@ -85,21 +85,21 @@ public class ScriptManager {
 
             // Show errors/warnings
             for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
-                String msg = String.format("Line %d: %s%n",
+                String msg = String.format("Line %d: %s",
                     diagnostic.getLineNumber(),
                     diagnostic.getMessage(null));
                 
                 if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
-                    System.err.println("ERROR: " + msg);
+                    com.ignis.core.IgnisLogger.error(scriptFile.getName() + " -> " + msg);
                 } else {
-                    System.out.println("WARNING: " + msg);
+                    com.ignis.core.IgnisLogger.warn(scriptFile.getName() + " -> " + msg);
                 }
             }
 
             fileManager.close();
             
             if (success) {
-                System.out.println("Script compiled: " + scriptFile.getName());
+                com.ignis.core.IgnisLogger.info("Script compilado com sucesso: " + scriptFile.getName());
                 // Reload ClassLoader to get new classes
                 reloadClassLoader();
             }
@@ -107,8 +107,7 @@ public class ScriptManager {
             return success;
             
         } catch (Exception e) {
-            System.err.println("Error compiling script: " + e.getMessage());
-            e.printStackTrace();
+            com.ignis.core.IgnisLogger.error("Erro ao compilar script " + scriptFile.getName() + ": " + e.getMessage());
             return false;
         }
     }

@@ -54,12 +54,11 @@ public class PrefabManager {
                 writer.write(prefabJson.toString(2));
             }
             
-            System.out.println("Prefab saved: " + prefabFile.getAbsolutePath());
+            com.ignis.core.IgnisLogger.info("Prefab salvo com sucesso: " + prefabFile.getName());
             return true;
             
         } catch (Exception e) {
-            System.err.println("Failed to save prefab: " + e.getMessage());
-            e.printStackTrace();
+            com.ignis.core.IgnisLogger.error("Falha ao salvar prefab " + prefabName + ": " + e.getMessage());
             return false;
         }
     }

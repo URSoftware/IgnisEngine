@@ -219,7 +219,7 @@ public class Game extends Canvas implements Runnable {
         try {
             robot = new Robot();
         } catch (AWTException e) {
-            System.err.println("Could not create Robot for infinite drag: " + e.getMessage());
+            IgnisLogger.error("Nao foi possivel criar Robot para infinite drag: " + e.getMessage());
             robot = null;
         }
         
@@ -328,11 +328,11 @@ public class Game extends Canvas implements Runnable {
                 alertMethod.invoke(editorReference, message);
             } catch (Exception e) {
                 // Silenciosamente ignorar se o editor não tiver o método alert
-                System.err.println("Aviso: Não foi possível chamar alert() no editor: " + e.getMessage());
+                IgnisLogger.warn("Aviso: Nao foi possivel chamar alert() no editor: " + e.getMessage());
             }
         } else {
             // Se não há editor, exibir no console
-            System.out.println("[ALERT] " + message);
+            IgnisLogger.info("[ALERT] " + message);
         }
     }
     
@@ -374,7 +374,7 @@ public class Game extends Canvas implements Runnable {
      */
     public GameObject instantiatePrefab(String prefabName, double x, double y) {
         if (prefabManager == null) {
-            System.err.println("PrefabManager não está disponível. Certifique-se de que um projeto está aberto.");
+            IgnisLogger.error("PrefabManager nao esta disponivel. Certifique-se de que um projeto esta aberto.");
             return null;
         }
         
@@ -400,9 +400,9 @@ public class Game extends Canvas implements Runnable {
                 }
             }
             
-            System.out.println("Prefab '" + prefabName + "' instanciada como '" + instance.getName() + "' em (" + x + ", " + y + ")");
+            IgnisLogger.info("Prefab '" + prefabName + "' instanciada como '" + instance.getName() + "' em (" + x + ", " + y + ")");
         } else {
-            System.err.println("Falha ao instanciar prefab '" + prefabName + "'. Verifique se a prefab existe.");
+            IgnisLogger.error("Falha ao instanciar prefab '" + prefabName + "'. Verifique se a prefab existe.");
         }
         
         return instance;
@@ -1061,7 +1061,7 @@ public class Game extends Canvas implements Runnable {
             entities.remove(runtimeObj);
         }
         runtimeObjects.clear();
-        System.out.println("Objetos de runtime removidos.");
+        IgnisLogger.info("Objetos de runtime removidos.");
         
         // Restore initial positions
         restoreInitialSnapshots();
@@ -2198,8 +2198,7 @@ public class Game extends Canvas implements Runnable {
                     }
                 }
             } catch (Throwable t) {
-                System.err.println("Error in game loop thread: " + t.getMessage());
-                t.printStackTrace();
+                IgnisLogger.error("Erro na thread do loop do jogo: " + t.getMessage());
                 // Avoid fast spinning if there's a persistent error
                 try {
                     Thread.sleep(100);
