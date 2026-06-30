@@ -78,6 +78,9 @@ public class IgnisEditorApp extends Application {
     private File projectFolder;
     private File currentIgnisFile;
     private Project currentProject;
+    // Prefabs: gerenciador lazy, recriado quando a pasta do projeto muda.
+    private com.ignis.core.PrefabManager prefabManager;
+    private File prefabManagerFolder;
     private Stage primaryStage;
     private Menu recentMenu;
     private boolean projectDirty = false;
@@ -88,6 +91,9 @@ public class IgnisEditorApp extends Application {
     private Canvas viewportCanvas;
     private SplitPane mainSplit;
     private SplitPane leftSplit;
+    private SplitPane centerSplit;
+    private FxConsolePanel console;
+    private CheckMenuItem consoleMenuItem;
     private FxSettingsWindow settingsWindow;
 
     // Desfazer/Refazer (padrao Command). Cobre criar/deletar/duplicar/colar/
@@ -111,6 +117,9 @@ public class IgnisEditorApp extends Application {
     // Campos do Inspector
     private TextField nameField, xField, yField, wField, hField, rotField;
     private CheckBox visibleCheck;
+    // Snapshot para desfazer edicoes digitadas no Inspector (valor capturado no foco).
+    private GameObject inspectorEditObj;
+    private Object inspectorEditOld;
     // Seções do Inspector dependentes do tipo do objeto (cor/sprite/collider/camera/scripts),
     // reconstruídas a cada seleção (ver rebuildInspectorExtras).
     private VBox inspectorExtras;
@@ -224,7 +233,18 @@ public class IgnisEditorApp extends Application {
         mainSplit = new SplitPane();
         mainSplit.getItems().addAll(leftSplit, viewportPane, inspector);
         mainSplit.setDividerPositions(0.2, 0.78);
-        root.setCenter(mainSplit);
+
+        // ---- Console dockavel (abaixo do viewport/paineis) ----
+        console = new FxConsolePanel();
+        console.startCapture();
+        centerSplit = new SplitPane();
+        centerSplit.setOrientation(Orientation.VERTICAL);
+        centerSplit.getItems().add(mainSplit);
+        if (EditorPrefs.isConsoleVisible()) {
+            centerSplit.getItems().add(console);
+            centerSplit.setDividerPositions(0.76);
+        }
+        root.setCenter(centerSplit);
 
         status = new Label(" Editor JavaFX (Fase 2) — abra um projeto .ignis (Arquivo > Abrir projeto)");
         status.getStyleClass().add("status-bar");
@@ -334,6 +354,7 @@ public class IgnisEditorApp extends Application {
 
         stage.setOnCloseRequest(e -> {
             saveLayout();
+            if (console != null) console.stopCapture();
             stopGameLoop();
             Platform.exit();
             System.exit(0);
@@ -446,12 +467,18 @@ public class IgnisEditorApp extends Application {
         showCollidersItem.setSelected(game.isShowColliders());
         showCollidersItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
         showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
-        
+
+        consoleMenuItem = new CheckMenuItem("Mostrar Console");
+        consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
+        consoleMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.J, KeyCombination.CONTROL_DOWN));
+        consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
+
         view.getItems().addAll(
             zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
             resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
             showGridItem, gridSizeMenu, new SeparatorMenuItem(),
-            showCollidersItem
+            showCollidersItem, new SeparatorMenuItem(),
+            consoleMenuItem
         );
 
         Menu help = new Menu("Ajuda");
@@ -540,8 +567,13 @@ public class IgnisEditorApp extends Application {
         top.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
         MenuItem bottom = new MenuItem("Mover para o fundo");
         bottom.setOnAction(e -> moveSelectedTo(0));
+        MenuItem savePrefab = new MenuItem("Salvar selecionado como Prefab…");
+        savePrefab.setOnAction(e -> saveSelectedAsPrefab());
+        MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
+        instPrefab.setOnAction(e -> instantiatePrefabDialog());
         scene.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
-                new SeparatorMenuItem(), up, down, top, bottom);
+                new SeparatorMenuItem(), up, down, top, bottom,
+                new SeparatorMenuItem(), savePrefab, instPrefab);
         return scene;
     }
 
@@ -575,8 +607,14 @@ public class IgnisEditorApp extends Application {
         bottom.setOnAction(e -> moveSelectedTo(0));
         ordenar.getItems().addAll(up, down, top, bottom);
 
+        MenuItem savePrefab = new MenuItem("Salvar como Prefab…");
+        savePrefab.setOnAction(e -> saveSelectedAsPrefab());
+        MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
+        instPrefab.setOnAction(e -> instantiatePrefabDialog());
+
         menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
-                new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar);
+                new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar,
+                new SeparatorMenuItem(), savePrefab, instPrefab);
         return menu;
     }
 
@@ -883,6 +921,9 @@ public class IgnisEditorApp extends Application {
             }
             if (mainSplit != null) EditorPrefs.saveDividers("main", mainSplit.getDividerPositions());
             if (leftSplit != null) EditorPrefs.saveDividers("left", leftSplit.getDividerPositions());
+            if (centerSplit != null && centerSplit.getDividers().size() == 1) {
+                EditorPrefs.saveDividers("center", centerSplit.getDividerPositions());
+            }
         } catch (Exception ignore) { /* best-effort */ }
     }
 
@@ -899,6 +940,11 @@ public class IgnisEditorApp extends Application {
             if (left != null && left.length > 0 && leftSplit != null
                     && leftSplit.getDividers().size() == left.length) {
                 leftSplit.setDividerPositions(left);
+            }
+            double[] center = EditorPrefs.getDividers("center");
+            if (center != null && center.length == 1 && centerSplit != null
+                    && centerSplit.getDividers().size() == 1) {
+                centerSplit.setDividerPositions(center);
             }
         } catch (Exception ignore) { /* best-effort */ }
     }
@@ -1433,6 +1479,101 @@ public class IgnisEditorApp extends Application {
                 () -> { game.moveEntityToIndex(o, newIdx); refreshHierarchy(); selectEntity(o); markProjectDirty(); });
     }
 
+    // ---------------- Prefabs ----------------
+    // Templates reutilizaveis de objeto (com transform/sprite/scripts/variaveis),
+    // gravados em <projeto>/prefabs/*.prefab.json pelo core PrefabManager. Aqui so
+    // fiamos a UI: salvar selecao como prefab e instanciar na cena (com desfazer).
+
+    // PrefabManager lazy; recriado quando muda a pasta do projeto.
+    private com.ignis.core.PrefabManager getPrefabManager() {
+        if (projectFolder == null) return null;
+        if (prefabManager == null || !projectFolder.equals(prefabManagerFolder)) {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) { sm = new com.ignis.core.ScriptManager(projectFolder); game.setScriptManager(sm); }
+            prefabManager = new com.ignis.core.PrefabManager(projectFolder, game, sm);
+            prefabManagerFolder = projectFolder;
+        }
+        return prefabManager;
+    }
+
+    // Salva o objeto selecionado como prefab reutilizavel.
+    private void saveSelectedAsPrefab() {
+        if (selected == null) { setStatus("Nada selecionado para salvar como prefab."); return; }
+        if (!requireProject()) return;
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm == null) return;
+        TextInputDialog dlg = new TextInputDialog(selected.getName());
+        dlg.setTitle("Salvar como Prefab");
+        dlg.setHeaderText(null);
+        dlg.setContentText("Nome do prefab:");
+        java.util.Optional<String> opt = dlg.showAndWait();
+        if (opt.isEmpty() || opt.get().trim().isEmpty()) return;
+        String name = opt.get().trim();
+        if (pm.prefabExists(name)) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Prefab '" + name + "' ja existe. Sobrescrever?", ButtonType.YES, ButtonType.NO);
+            confirm.setHeaderText(null);
+            if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
+        }
+        if (pm.savePrefab(selected, name)) {
+            setStatus("Prefab salvo: " + name);
+            refreshAssetBrowser();
+        } else {
+            new Alert(Alert.AlertType.ERROR, "Falha ao salvar prefab '" + name + "'.").showAndWait();
+        }
+    }
+
+    // Nome do prefab a partir do arquivo <nome>.prefab.json.
+    private String prefabNameOf(File f) {
+        return f == null ? null : f.getName().replaceFirst("(?i)\\.prefab\\.json$", "");
+    }
+
+    // Escolhe um prefab salvo e o instancia na cena atual.
+    private void instantiatePrefabDialog() {
+        if (!requireProject()) return;
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm == null) return;
+        java.util.List<String> prefabs = pm.listPrefabs();
+        if (prefabs.isEmpty()) {
+            new Alert(Alert.AlertType.INFORMATION,
+                    "Nenhum prefab salvo ainda.\nSelecione um objeto e use 'Salvar como Prefab'.").showAndWait();
+            return;
+        }
+        java.util.Collections.sort(prefabs);
+        ChoiceDialog<String> dlg = new ChoiceDialog<>(prefabs.get(0), prefabs);
+        dlg.setTitle("Instanciar Prefab");
+        dlg.setHeaderText(null);
+        dlg.setContentText("Prefab:");
+        java.util.Optional<String> opt = dlg.showAndWait();
+        opt.ifPresent(this::instantiatePrefabByName);
+    }
+
+    // Instancia o prefab nomeado, adiciona a cena e registra desfazer/refazer.
+    private void instantiatePrefabByName(String name) {
+        if (name == null || !requireProject()) return;
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm == null) return;
+        GameObject obj;
+        try {
+            obj = pm.instantiatePrefab(name);
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao instanciar prefab:\n" + ex.getMessage()).showAndWait();
+            return;
+        }
+        if (obj == null) {
+            new Alert(Alert.AlertType.ERROR, "Prefab nao encontrado ou invalido: " + name).showAndWait();
+            return;
+        }
+        addEntityTracked(obj);
+        refreshHierarchy();
+        selectEntity(obj);
+        markProjectDirty();
+        setStatus("Prefab instanciado: " + obj.getName());
+        undoManager.push("Instanciar " + obj.getName(),
+                () -> { removeEntityTracked(obj); refreshHierarchy(); selectEntity(null); markProjectDirty(); },
+                () -> { addEntityTracked(obj); refreshHierarchy(); selectEntity(obj); markProjectDirty(); });
+    }
+
     // Nome unico entre as entidades (ignora 'except', util ao renomear o proprio objeto).
     private String uniqueNameExcept(String base, GameObject except) {
         java.util.Set<String> existing = new java.util.HashSet<>();
@@ -1520,6 +1661,20 @@ public class IgnisEditorApp extends Application {
         projectDirty = true;
     }
 
+    // Mostra/oculta o painel de Console (dock inferior) e persiste a preferencia.
+    private void setConsoleVisible(boolean visible) {
+        if (centerSplit == null || console == null) return;
+        boolean present = centerSplit.getItems().contains(console);
+        if (visible && !present) {
+            centerSplit.getItems().add(console);
+            centerSplit.setDividerPositions(0.76);
+        } else if (!visible && present) {
+            centerSplit.getItems().remove(console);
+        }
+        if (consoleMenuItem != null) consoleMenuItem.setSelected(visible);
+        EditorPrefs.setConsoleVisible(visible);
+    }
+
     // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
 
     private javafx.scene.Node buildAssetBrowser() {
@@ -1552,7 +1707,9 @@ public class IgnisEditorApp extends Application {
             File file = (sel != null) ? sel.getValue() : null;
             if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
                 if (file != null && file.isFile()) {
-                    if (file.getName().endsWith(".java")) {
+                    if (file.getName().endsWith(".prefab.json")) {
+                        instantiatePrefabByName(prefabNameOf(file));
+                    } else if (file.getName().endsWith(".java")) {
                         openScriptInIgnisEditor(file);
                     } else {
                         openAssetFile(file);
@@ -1702,7 +1859,28 @@ public class IgnisEditorApp extends Application {
         wField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setWidth(parseI(b, selected.getWidth()))));
         hField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setHeight(parseI(b, selected.getHeight()))));
         rotField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setRotation(parseD(b, selected.getRotation()))));
-        visibleCheck.selectedProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setVisible(b)));
+
+        // Desfazer/Refazer da edicao por digitacao: captura o valor no foco e registra
+        // um comando no commit (Enter ou foco perdido) quando o valor mudou. Os listeners
+        // acima ja aplicaram a mudanca ao vivo; aqui so registramos o antes->depois.
+        wireUndoableField(nameField, GameObject::getName, (g, v) -> g.setName((String) v), "Nome");
+        wireUndoableField(xField,    GameObject::getX,      (g, v) -> g.setX((Double) v),    "X");
+        wireUndoableField(yField,    GameObject::getY,      (g, v) -> g.setY((Double) v),    "Y");
+        wireUndoableField(wField,    GameObject::getWidth,  (g, v) -> g.setWidth((Integer) v),  "Largura");
+        wireUndoableField(hField,    GameObject::getHeight, (g, v) -> g.setHeight((Integer) v), "Altura");
+        wireUndoableField(rotField,  GameObject::getRotation, (g, v) -> g.setRotation((Double) v), "Rotacao");
+
+        // Checkbox de visibilidade: undo imediato (mudanca discreta).
+        visibleCheck.selectedProperty().addListener((o, a, b) -> {
+            if (suppressInspectorEvents || selected == null) return;
+            GameObject o2 = selected;
+            boolean oldV = a, newV = b;
+            o2.setVisible(newV);
+            markProjectDirty();
+            undoManager.push("Editar Visivel",
+                    () -> applyInspectorUndo(o2, g -> g.setVisible(oldV)),
+                    () -> applyInspectorUndo(o2, g -> g.setVisible(newV)));
+        });
 
         inspectorExtras = new VBox(8);
         box.getChildren().addAll(title, grid, inspectorExtras);
@@ -1726,6 +1904,50 @@ public class IgnisEditorApp extends Application {
     private void applyIfEditing(Runnable action) {
         if (suppressInspectorEvents || selected == null) return;
         try { action.run(); markProjectDirty(); } catch (Exception ignore) { /* entrada invalida */ }
+    }
+
+    // Liga undo/redo por digitacao a um campo: snapshot no foco, commit ao perder o
+    // foco ou no Enter. O valor ja foi aplicado ao vivo pelo listener de texto; aqui
+    // so registramos o comando antes->depois se o valor realmente mudou.
+    private void wireUndoableField(TextField field,
+            java.util.function.Function<GameObject, Object> getter,
+            java.util.function.BiConsumer<GameObject, Object> setter,
+            String label) {
+        field.focusedProperty().addListener((o, was, now) -> {
+            if (now) beginInspectorEdit(getter);
+            else commitInspectorEdit(getter, setter, label);
+        });
+        field.setOnAction(e -> { // Enter
+            commitInspectorEdit(getter, setter, label);
+            beginInspectorEdit(getter); // nova linha de base para edicoes seguintes
+        });
+    }
+
+    private void beginInspectorEdit(java.util.function.Function<GameObject, Object> getter) {
+        if (selected == null) { inspectorEditObj = null; return; }
+        inspectorEditObj = selected;
+        inspectorEditOld = getter.apply(selected);
+    }
+
+    private void commitInspectorEdit(java.util.function.Function<GameObject, Object> getter,
+            java.util.function.BiConsumer<GameObject, Object> setter, String label) {
+        GameObject o = inspectorEditObj;
+        inspectorEditObj = null;
+        if (o == null) return;
+        Object oldV = inspectorEditOld;
+        Object newV = getter.apply(o);
+        if (java.util.Objects.equals(oldV, newV)) return;
+        undoManager.push("Editar " + label,
+                () -> applyInspectorUndo(o, g -> setter.accept(g, oldV)),
+                () -> applyInspectorUndo(o, g -> setter.accept(g, newV)));
+    }
+
+    // Aplica uma mutacao de propriedade (undo/redo do Inspector) e reflete na UI.
+    private void applyInspectorUndo(GameObject o, java.util.function.Consumer<GameObject> mutation) {
+        mutation.accept(o);
+        refreshHierarchy();
+        selectEntity(o);
+        markProjectDirty();
     }
 
     private void setSelected(GameObject go) {
@@ -2205,7 +2427,14 @@ public class IgnisEditorApp extends Application {
         MenuItem pasteItem = new MenuItem("Colar (Ctrl+V)");
         pasteItem.setOnAction(e -> pasteSelected());
 
-        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del, new SeparatorMenuItem(), copyItem, pasteItem);
+        MenuItem savePrefab = new MenuItem("Salvar como Prefab…");
+        savePrefab.setOnAction(e -> saveSelectedAsPrefab());
+        MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
+        instPrefab.setOnAction(e -> instantiatePrefabDialog());
+
+        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+                new SeparatorMenuItem(), copyItem, pasteItem,
+                new SeparatorMenuItem(), savePrefab, instPrefab);
         return menu;
     }
 
@@ -2276,6 +2505,12 @@ public class IgnisEditorApp extends Application {
             MenuItem openInIgnisItem = new MenuItem("Abrir no Editor do Ignis");
             openInIgnisItem.setOnAction(e -> openScriptInIgnisEditor(file));
             menu.getItems().add(openInIgnisItem);
+        }
+
+        if (file.isFile() && file.getName().endsWith(".prefab.json")) {
+            MenuItem instItem = new MenuItem("Instanciar Prefab");
+            instItem.setOnAction(e -> instantiatePrefabByName(prefabNameOf(file)));
+            menu.getItems().add(instItem);
         }
 
         menu.getItems().add(openItem);

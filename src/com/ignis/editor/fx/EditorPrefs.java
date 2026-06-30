@@ -229,6 +229,17 @@ public final class EditorPrefs {
         write(json);
     }
 
+    /** Painel de Console visivel no editor? (default: ligado). */
+    public static boolean isConsoleVisible() {
+        return read().optBoolean("consoleVisible", true);
+    }
+
+    public static void setConsoleVisible(boolean on) {
+        JSONObject json = read();
+        json.put("consoleVisible", on);
+        write(json);
+    }
+
     // ---------------- Layout da janela (Fase F4-B) ----------------
     // Persistencia estilo VSCode do tamanho/posicao da janela principal e das
     // posicoes dos divisores dos SplitPane. Tudo opcional: se ausente, o editor

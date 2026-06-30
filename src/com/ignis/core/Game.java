@@ -90,6 +90,10 @@ public class Game extends Canvas implements Runnable {
     // ==================== SELECTION SYSTEM ====================
     private GameObject selectedObject = null;
     private List<SelectionListener> selectionListeners = new ArrayList<>();
+    // Realces secundarios de multi-selecao do editor (alem do selectedObject primario).
+    // Puramente visual e aditivo: o editor FX define a lista; renderWorldTo desenha um
+    // contorno tracejado para cada um. Nao afeta gizmos/drag/colisao do core.
+    private final List<GameObject> editorHighlights = new ArrayList<>();
 
     // ==================== TOOL SYSTEM ====================
     public enum ToolType {
@@ -944,6 +948,18 @@ public class Game extends Canvas implements Runnable {
         return selectedObject;
     }
 
+    /**
+     * Define os realces secundarios da multi-selecao do editor (alem do objeto
+     * primario). Apenas visual: cada um recebe um contorno tracejado em
+     * {@link #renderWorldTo}. Passar null/vazio limpa os realces. Aditivo — nao
+     * altera gizmos, drag, colisao nem o objeto selecionado primario.
+     */
+    public synchronized void setEditorHighlights(List<GameObject> objs) {
+        editorHighlights.clear();
+        if (objs != null) editorHighlights.addAll(objs);
+        repaint();
+    }
+
     public void addSelectionListener(SelectionListener listener) {
         selectionListeners.add(listener);
     }
@@ -1376,6 +1392,28 @@ public class Game extends Canvas implements Runnable {
             AffineTransform colliderTransform = g2d.getTransform();
             collisionManager.debugRender(g2d);
             g2d.setTransform(colliderTransform);
+        }
+
+        // Realces de multi-selecao (contorno tracejado laranja, sem alcas) para os
+        // objetos secundarios definidos pelo editor. O primario continua com o
+        // contorno+alcas+gizmo abaixo. Aditivo e puramente visual.
+        if (gameState == GameState.EDITING && !editorHighlights.isEmpty()) {
+            for (GameObject hl : editorHighlights) {
+                if (hl == null || hl == selected || !hl.isVisible() || hl instanceof Camera) continue;
+                AffineTransform hlTransform = g2d.getTransform();
+                if (hl.getRotation() != 0) {
+                    double cx = hl.getX() + hl.getWidth() / 2.0;
+                    double cy = hl.getY() + hl.getHeight() / 2.0;
+                    g2d.rotate(Math.toRadians(hl.getRotation()), cx, cy);
+                }
+                int hx = (int) hl.getX();
+                int hy = (int) hl.getY();
+                g2d.setColor(new Color(255, 160, 40));
+                g2d.setStroke(new java.awt.BasicStroke(2f, java.awt.BasicStroke.CAP_ROUND,
+                        java.awt.BasicStroke.JOIN_ROUND, 1.0f, new float[] { 4.0f, 4.0f }, 0.0f));
+                g2d.drawRect(hx - 2, hy - 2, hl.getWidth() + 4, hl.getHeight() + 4);
+                g2d.setTransform(hlTransform);
+            }
         }
 
         // Contorno de selecao (espaco do mundo, com a transform da camera aplicada)
