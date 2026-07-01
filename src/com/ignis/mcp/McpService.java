@@ -1,5 +1,7 @@
 package com.ignis.mcp;
 
+import com.ignis.core.Game;
+
 import java.io.File;
 
 /**
@@ -17,7 +19,28 @@ public final class McpService {
     private static IgnisToolRegistry registry;
     private static File activeProject;
 
+    // Contexto vivo do editor, registrado uma vez no carregamento do projeto.
+    private static Game editorGame;
+    private static Runnable editorPlay, editorStop, editorRefresh, editorSave;
+
     private McpService() {}
+
+    /**
+     * Registra o editor vivo (chamado pelo IgnisEditorApp ao abrir um projeto),
+     * para que o bridge exponha ferramentas de cena e Play. Se o bridge ja estiver
+     * ativo, o contexto passa a valer no proximo start.
+     */
+    public static synchronized void setEditorContext(Game game, Runnable play, Runnable stop,
+                                                     Runnable refresh, Runnable save) {
+        editorGame = game;
+        editorPlay = play;
+        editorStop = stop;
+        editorRefresh = refresh;
+        editorSave = save;
+        if (registry != null && game != null) {
+            registry.attachLiveEditor(game, play, stop, refresh, save);
+        }
+    }
 
     /**
      * Sobe (ou reinicia) o bridge HTTP do MCP para o projeto informado.
@@ -35,6 +58,9 @@ public final class McpService {
         }
         activeProject = projectFolder;
         registry = new IgnisToolRegistry(projectFolder);
+        if (editorGame != null) {
+            registry.attachLiveEditor(editorGame, editorPlay, editorStop, editorRefresh, editorSave);
+        }
         String host = exposeNetwork ? "0.0.0.0" : "127.0.0.1";
         McpHttpBridge bridge = McpHttpBridge.start(registry, host, port, token);
         return bridge.getUrl();

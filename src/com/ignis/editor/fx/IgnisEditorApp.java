@@ -1124,6 +1124,11 @@ public class IgnisEditorApp extends Application {
     // nas Configuracoes (IA & MCP). Best-effort: nunca quebra o carregamento do projeto.
     private void maybeAutoStartMcp() {
         try {
+            // Registra o editor vivo para o MCP expor ferramentas de cena e Play,
+            // independentemente de o bridge estar ligado agora (o toggle das
+            // Configuracoes tambem se beneficia).
+            com.ignis.mcp.McpService.setEditorContext(game,
+                    this::playWorld, this::stopWorld, this::refreshHierarchy, this::saveProjectSilently);
             if (EditorPrefs.isMcpEnabled() && projectFolder != null && projectFolder.isDirectory()) {
                 com.ignis.mcp.McpService.start(projectFolder, EditorPrefs.isMcpExposeNetwork(),
                         EditorPrefs.getMcpPort(), EditorPrefs.getMcpToken());

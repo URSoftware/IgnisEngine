@@ -100,6 +100,35 @@ Definidas em `IgnisToolRegistry.registerDefaults()`:
 Delegam ao `com.ignis.core.ScriptManager` do projeto ativo — uma única fonte de
 verdade das operações do motor.
 
+### 4.1 Ferramentas de cena e Play (somente com editor vivo)
+
+Quando o bridge roda **dentro do editor JavaFX** (não no modo headless `--mcp`), o
+`IgnisEditorApp` registra o *contexto vivo* (`McpService.setEditorContext(...)`) —
+o `Game` da cena e hooks de Play/Stop/Refresh/Save. Isso habilita mais 8 ferramentas
+que permitem a um agente **montar e testar um jogo de ponta a ponta**:
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `list_scene_objects` | — | Lista os GameObjects da cena (nome, pos, tamanho, scripts) |
+| `create_object` | `name`, `type?`, `x?`, `y?`, `width?`, `height?` | Cria uma forma (`square`/`circle`/`triangle`/`star`/`pentagon`/`player`) na cena |
+| `set_object_transform` | `name`, `x?`, `y?`, `width?`, `height?`, `rotation?` | Move/redimensiona/rotaciona um objeto |
+| `set_object_sprite` | `name`, `path` | Define o sprite (imagem) do objeto |
+| `attach_script` | `objectName`, `scriptName` | Anexa um IgnisScript ao objeto |
+| `play_game` | — | Inicia o Play (equivale ao botão Play do editor) |
+| `stop_game` | — | Para e volta ao modo de edição |
+| `save_project` | — | Salva a cena no arquivo `.ignis` |
+
+Como `GameObject` é abstrato, `create_object` instancia formas concretas via fábrica
+(`Square`, `Circle`, …). Todas as ferramentas rodam na thread de UI via
+`IgnisMcpBridge`; os hooks invocam os métodos reais do editor (`playWorld`,
+`stopWorld`, `refreshHierarchy`, `saveProjectSilently`), então botões e viewport
+ficam sincronizados. No modo headless, essas 8 ferramentas simplesmente não são
+registradas (o total cai de 15 para 7).
+
+> Importante: as ferramentas vivas exigem reiniciar o editor após atualizar o build
+> (Java não faz hot-reload). Ao reabrir com o MCP habilitado, o bridge sobe já com o
+> contexto vivo.
+
 ---
 
 ## 5. Segurança
