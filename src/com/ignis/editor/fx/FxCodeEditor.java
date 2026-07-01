@@ -210,7 +210,7 @@ public class FxCodeEditor extends Stage {
         , Pattern.DOTALL
     );
 
-    private final Editor editor;
+    private final Object editor;
     private final ScriptManager scriptManager;
     private final String scriptName;
 
@@ -229,7 +229,7 @@ public class FxCodeEditor extends Stage {
     private Timeline highlightTimer;
     private Timeline autoSaveTimer;
 
-    public FxCodeEditor(Editor editor, ScriptManager scriptManager, String scriptName) {
+    public FxCodeEditor(Object editor, ScriptManager scriptManager, String scriptName) {
         this.editor = editor;
         this.scriptManager = scriptManager;
         this.scriptName = scriptName;
@@ -237,6 +237,7 @@ public class FxCodeEditor extends Stage {
         setTitle("Script Editor - " + scriptName);
         setWidth(800);
         setHeight(600);
+        setAlwaysOnTop(true);
 
         try {
             File iconFile = new File("Icons/IconeIgnis.png");
@@ -369,6 +370,55 @@ public class FxCodeEditor extends Stage {
             if (e.getClickCount() == 2) {
                 insertSelectedSuggestion();
             }
+        });
+
+        // --- Configura Drag & Drop da Hierarquia para criar variaveis ---
+        codeArea.setOnDragOver(e -> {
+            if (e.getDragboard().hasString()) {
+                e.acceptTransferModes(javafx.scene.input.TransferMode.ANY);
+            }
+            e.consume();
+        });
+
+        codeArea.setOnDragDropped(e -> {
+            javafx.scene.input.Dragboard db = e.getDragboard();
+            boolean success = false;
+            if (db.hasString()) {
+                String goName = db.getString();
+                String varName = toJavaIdentifier(goName);
+                
+                // Garantir imports no topo do script se nao existirem
+                String fullText = codeArea.getText();
+                if (!fullText.contains("import com.ignis.core.Serialize;")) {
+                    int idx = fullText.indexOf("import com.ignis.core.IgnisScript;");
+                    if (idx != -1) {
+                        codeArea.insertText(idx + "import com.ignis.core.IgnisScript;".length(), "\nimport com.ignis.core.Serialize;");
+                        fullText = codeArea.getText();
+                    } else {
+                        codeArea.insertText(0, "import com.ignis.core.Serialize;\n");
+                        fullText = codeArea.getText();
+                    }
+                }
+                
+                if (!fullText.contains("import com.ignis.core.GameObject;")) {
+                    int idx = fullText.indexOf("import com.ignis.core.IgnisScript;");
+                    if (idx != -1) {
+                        codeArea.insertText(idx + "import com.ignis.core.IgnisScript;".length(), "\nimport com.ignis.core.GameObject;");
+                    } else {
+                        codeArea.insertText(0, "import com.ignis.core.GameObject;\n");
+                    }
+                }
+
+                // Inserir variavel no ponto exato do drop
+                org.fxmisc.richtext.CharacterHit hit = codeArea.hit(e.getX(), e.getY());
+                int insertionPos = hit.getCharacterIndex().orElse(codeArea.getLength());
+                
+                String snippet = "\n    @Serialize\n    private GameObject " + varName + "; // Referencia para o objeto \"" + goName + "\"\n";
+                codeArea.insertText(insertionPos, snippet);
+                success = true;
+            }
+            e.setDropCompleted(success);
+            e.consume();
         });
 
         // Setup Scene and Theme
@@ -755,10 +805,12 @@ public class FxCodeEditor extends Stage {
         return methods;
     }
 
-    // Auto Save ligado por EditorPrefs (casca FX passa editor=null, entao a flag global
-    // de EditorPrefs e a fonte de verdade; mantem compat com o editor Swing legado).
     private boolean autoSaveOn() {
-        return EditorPrefs.isAutoSave() || (editor != null && editor.isAutoSaveScriptsEnabled());
+        if (EditorPrefs.isAutoSave()) return true;
+        if (editor instanceof com.ignis.editor.Editor) {
+            return ((com.ignis.editor.Editor) editor).isAutoSaveScriptsEnabled();
+        }
+        return false;
     }
 
     private void setupAutoSave() {
@@ -780,6 +832,7 @@ public class FxCodeEditor extends Stage {
                     closeEditor();
                 } else {
                     Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                    alert.initOwner(this);
                     alert.setTitle("Unsaved Changes");
                     alert.setHeaderText("Script '" + scriptName + "' has unsaved changes.");
                     alert.setContentText("Save changes now?");
@@ -870,8 +923,8 @@ public class FxCodeEditor extends Stage {
             autoSaveTimer.stop();
         }
         hideAutocompletePopup();
-        if (editor != null) {
-            editor.onScriptEditorClosed(scriptName);
+        if (editor instanceof com.ignis.editor.Editor) {
+            ((com.ignis.editor.Editor) editor).onScriptEditorClosed(scriptName);
         }
         close();
     }
@@ -1105,5 +1158,33 @@ public class FxCodeEditor extends Stage {
             return matcher.group(1);
         }
         return null;
+    }
+
+    private String toJavaIdentifier(String name) {
+        if (name == null || name.isEmpty()) return "gameObject";
+        StringBuilder sb = new StringBuilder();
+        boolean nextUpper = false;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (Character.isJavaIdentifierPart(c)) {
+                if (sb.length() == 0) {
+                    if (Character.isJavaIdentifierStart(c)) {
+                        sb.append(Character.toLowerCase(c));
+                    } else {
+                        sb.append('_');
+                    }
+                } else {
+                    if (nextUpper) {
+                        sb.append(Character.toUpperCase(c));
+                        nextUpper = false;
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            } else {
+                nextUpper = true;
+            }
+        }
+        return sb.toString();
     }
 }

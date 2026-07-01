@@ -12,12 +12,14 @@ import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.Alert;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
@@ -710,6 +712,12 @@ public class IgnisEditorApp extends Application {
                     game.addEntity(e);
                 }
             }
+            // Compila e recarrega os scripts para instanciá-los e carregar suas variáveis no editor
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm != null) {
+                sm.compileAllScripts();
+                reloadAllScriptInstances();
+            }
             refreshHierarchy();
             refreshAssetBrowser();
             undoManager.clear();
@@ -1097,7 +1105,7 @@ public class IgnisEditorApp extends Application {
                 scriptName = after.get(0);
             }
 
-            FxCodeEditor codeEditor = new FxCodeEditor(null, scriptManager, scriptName);
+            FxCodeEditor codeEditor = new FxCodeEditor(this, scriptManager, scriptName);
             codeEditor.show();
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
@@ -1160,6 +1168,12 @@ public class IgnisEditorApp extends Application {
         if (playing) return;
         try {
             clearSecondarySelection();
+            // Recompilar e recarregar todos os scripts antes de iniciar o Play
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm != null) {
+                sm.compileAllScripts();
+                reloadAllScriptInstances();
+            }
             game.playWorld();
             game.start();
             playing = true;
@@ -1176,6 +1190,8 @@ public class IgnisEditorApp extends Application {
     private void stopWorld() {
         if (!playing) return;
         stopGameLoop();
+        // Recarregar os scripts para restaurar o estado do editor e suas variáveis
+        reloadAllScriptInstances();
         setStatus("Parado (edicao)");
     }
 
@@ -1366,6 +1382,15 @@ public class IgnisEditorApp extends Application {
             cell.setOnMousePressed(e -> {
                 if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
                     tv.getSelectionModel().select(cell.getTreeItem());
+                }
+            });
+            cell.setOnDragDetected(e -> {
+                if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
+                    javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
+                    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+                    content.putString(cell.getItem());
+                    db.setContent(content);
+                    e.consume();
                 }
             });
             return cell;
@@ -1974,6 +1999,14 @@ public class IgnisEditorApp extends Application {
         title.getStyleClass().add("panel-title");
 
         assetTree = new TreeView<>();
+        assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                File file = newVal.getValue();
+                if (file != null && file.isFile() && file.getName().endsWith(".java")) {
+                    inspectScriptFile(file);
+                }
+            }
+        });
         assetTree.setShowRoot(true);
         assetTree.setCellFactory(tv -> {
             TreeCell<File> cell = new TreeCell<>() {
@@ -2082,7 +2115,7 @@ public class IgnisEditorApp extends Application {
             if (scriptName.endsWith(".java")) {
                 scriptName = scriptName.substring(0, scriptName.length() - 5);
             }
-            FxCodeEditor codeEditor = new FxCodeEditor(null, sm, scriptName);
+            FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
             codeEditor.show();
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
@@ -2303,6 +2336,84 @@ public class IgnisEditorApp extends Application {
         inspectorExtras.getChildren().add(buildScriptsSection(go));
     }
 
+    private void inspectScriptFile(File file) {
+        // Deseleciona GameObject ativo
+        setSelected(null);
+        
+        if (inspectorExtras == null) return;
+        inspectorExtras.getChildren().clear();
+
+        String scriptClassName = file.getName();
+        if (scriptClassName.endsWith(".java")) {
+            scriptClassName = scriptClassName.substring(0, scriptClassName.length() - 5);
+        }
+
+        VBox panel = new VBox(6);
+        panel.setPadding(new Insets(8));
+        panel.setStyle("-fx-border-color: #555; -fx-border-width: 0 0 0 2; -fx-background-color: rgba(255, 255, 255, 0.02);");
+
+        Label title = new Label("Script: " + scriptClassName);
+        title.setStyle("-fx-font-weight: bold; -fx-text-fill: -ignis-primary; -fx-font-size: 13px;");
+        panel.getChildren().add(title);
+
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) {
+                sm = new com.ignis.core.ScriptManager(projectFolder);
+                game.setScriptManager(sm);
+            }
+            
+            Class<? extends com.ignis.core.IgnisScript> scriptClass = sm.loadScriptClass(scriptClassName);
+            if (scriptClass != null) {
+                com.ignis.core.IgnisScript tempInstance = scriptClass.getDeclaredConstructor().newInstance();
+                java.util.List<java.lang.reflect.Field> fields = com.ignis.core.ScriptSerializationHelper.getSerializedFields(scriptClass);
+                
+                if (fields.isEmpty()) {
+                    Label noVars = new Label("Nenhuma variável serializada (@Serialize) encontrada.");
+                    noVars.setStyle("-fx-text-fill: #888; -fx-font-style: italic; -fx-wrap-text: true;");
+                    panel.getChildren().add(noVars);
+                } else {
+                    GridPane grid = new GridPane();
+                    grid.setHgap(8);
+                    grid.setVgap(4);
+                    int rowIdx = 0;
+                    for (java.lang.reflect.Field field : fields) {
+                        Class<?> type = field.getType();
+                        if (com.ignis.core.ScriptSerializationHelper.isSupportedType(type)) {
+                            field.setAccessible(true);
+                            Object val = field.get(tempInstance);
+                            
+                            Label nameLbl = new Label(field.getName());
+                            nameLbl.setStyle("-fx-font-weight: bold; -fx-text-fill: #ccc;");
+                            
+                            Label typeLbl = new Label("(" + type.getSimpleName() + ")");
+                            typeLbl.setStyle("-fx-text-fill: #666; -fx-font-style: italic;");
+                            
+                            Label valLbl = new Label(val != null ? val.toString() : "null");
+                            valLbl.setStyle("-fx-text-fill: #aaa;");
+                            
+                            grid.add(nameLbl, 0, rowIdx);
+                            grid.add(typeLbl, 1, rowIdx);
+                            grid.add(valLbl, 2, rowIdx);
+                            rowIdx++;
+                        }
+                    }
+                    panel.getChildren().add(grid);
+                }
+            } else {
+                Label errLabel = new Label("Não foi possível carregar o script.\nAbra o script e compile-o para corrigir.");
+                errLabel.setStyle("-fx-text-fill: #c86464; -fx-wrap-text: true;");
+                panel.getChildren().add(errLabel);
+            }
+        } catch (Exception ex) {
+            Label errLabel = new Label("Erro ao ler variáveis: " + ex.getMessage());
+            errLabel.setStyle("-fx-text-fill: #c86464; -fx-wrap-text: true;");
+            panel.getChildren().add(errLabel);
+        }
+
+        inspectorExtras.getChildren().add(panel);
+    }
+
     private Label sectionTitle(String text) {
         Label l = new Label(text);
         l.getStyleClass().add("panel-title");
@@ -2418,11 +2529,15 @@ public class IgnisEditorApp extends Application {
         list.setPrefHeight(90);
 
         Button attach = new Button("Anexar…");
-        attach.setOnAction(e -> { attachScriptTo(go); list.getItems().setAll(go.getScriptNames()); });
+        attach.setOnAction(e -> { attachScriptTo(go); rebuildInspectorExtras(go); });
         Button remove = new Button("Remover");
         remove.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null) { go.removeScriptByName(sel); list.getItems().setAll(go.getScriptNames()); markProjectDirty(); }
+            if (sel != null) {
+                go.removeScriptByName(sel);
+                rebuildInspectorExtras(go);
+                markProjectDirty();
+            }
         });
         Button open = new Button("Abrir");
         open.setOnAction(e -> {
@@ -2431,7 +2546,303 @@ public class IgnisEditorApp extends Application {
         });
 
         sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
+
+        // Renderizar painel de variaveis para cada script instanciado
+        for (com.ignis.core.IgnisScript script : go.getScripts()) {
+            javafx.scene.Node varsNode = createScriptVariablesNode(script);
+            if (varsNode != null) {
+                sec.getChildren().add(varsNode);
+            }
+        }
+
         return sec;
+    }
+
+    private javafx.scene.Node createScriptVariablesNode(com.ignis.core.IgnisScript script) {
+        VBox panel = new VBox(4);
+        panel.setPadding(new Insets(4, 4, 4, 10));
+        panel.setStyle("-fx-border-color: #555; -fx-border-width: 0 0 0 2; -fx-background-color: rgba(255, 255, 255, 0.02);");
+
+        Label title = new Label("[" + script.getScriptName() + " Variables]");
+        title.setStyle("-fx-font-weight: bold; -fx-text-fill: -ignis-primary; -fx-font-size: 10px;");
+        panel.getChildren().add(title);
+
+        java.util.List<java.lang.reflect.Field> fields = com.ignis.core.ScriptSerializationHelper.getSerializedFields(script.getClass());
+        boolean hasFields = false;
+
+        for (java.lang.reflect.Field field : fields) {
+            Class<?> type = field.getType();
+            if (com.ignis.core.ScriptSerializationHelper.isSupportedType(type)) {
+                hasFields = true;
+                panel.getChildren().add(createFieldEditorNode(script, field));
+            }
+        }
+
+        return hasFields ? panel : null;
+    }
+
+    private javafx.scene.Node createFieldEditorNode(com.ignis.core.IgnisScript script, java.lang.reflect.Field field) {
+        String displayName = formatFieldName(field.getName());
+        Label label = new Label(displayName);
+        label.getStyleClass().add("field-label");
+        label.setMinWidth(90);
+        label.setWrapText(true);
+
+        javafx.scene.Node editor = createFieldEditorFx(script, field);
+        HBox row = new HBox(6, label, editor);
+        row.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(editor, Priority.ALWAYS);
+        return row;
+    }
+
+    private String formatFieldName(String name) {
+        if (name == null || name.isEmpty()) return name;
+        StringBuilder result = new StringBuilder();
+        result.append(Character.toUpperCase(name.charAt(0)));
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (Character.isUpperCase(c)) {
+                result.append(' ');
+            }
+            result.append(c);
+        }
+        return result.toString();
+    }
+
+    private javafx.scene.Node createFieldEditorFx(com.ignis.core.IgnisScript script, java.lang.reflect.Field field) {
+        Class<?> type = field.getType();
+        if (type == boolean.class || type == Boolean.class) {
+            CheckBox cb = new CheckBox();
+            try {
+                field.setAccessible(true);
+                cb.setSelected(field.getBoolean(script));
+            } catch (Exception ignore) {}
+            cb.selectedProperty().addListener((obs, oldV, newV) -> {
+                try {
+                    field.setAccessible(true);
+                    field.setBoolean(script, newV);
+                    saveScriptVariablesToPending(script);
+                } catch (Exception ex) {
+                    System.err.println("Erro ao salvar variavel booleana: " + ex.getMessage());
+                }
+            });
+            return cb;
+        } else if (GameObject.class.isAssignableFrom(type)) {
+            return createGameObjectEditorFx(script, field);
+        } else {
+            TextField tf = new TextField();
+            try {
+                field.setAccessible(true);
+                Object val = field.get(script);
+                tf.setText(val != null ? val.toString() : "");
+            } catch (Exception ignore) {}
+            
+            Runnable apply = () -> {
+                try {
+                    field.setAccessible(true);
+                    String text = tf.getText();
+                    if (type == int.class || type == Integer.class) {
+                        field.set(script, Integer.parseInt(text.trim()));
+                    } else if (type == double.class || type == Double.class) {
+                        field.set(script, Double.parseDouble(text.trim()));
+                    } else if (type == float.class || type == Float.class) {
+                        field.set(script, Float.parseFloat(text.trim()));
+                    } else if (type == long.class || type == Long.class) {
+                        field.set(script, Long.parseLong(text.trim()));
+                    } else if (type == String.class) {
+                        field.set(script, text);
+                    }
+                    saveScriptVariablesToPending(script);
+                } catch (NumberFormatException ignore) {
+                    try {
+                        Object val = field.get(script);
+                        tf.setText(val != null ? val.toString() : "");
+                    } catch (Exception ignored) {}
+                } catch (Exception ex) {
+                    System.err.println("Erro ao definir variavel: " + ex.getMessage());
+                }
+            };
+            
+            tf.setOnAction(e -> apply.run());
+            tf.focusedProperty().addListener((obs, oldV, focused) -> {
+                if (!focused) apply.run();
+            });
+            return tf;
+        }
+    }
+
+    private javafx.scene.Node createGameObjectEditorFx(com.ignis.core.IgnisScript script, java.lang.reflect.Field field) {
+        HBox panel = new HBox(4);
+        panel.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(panel, Priority.ALWAYS);
+
+        ComboBox<String> comboBox = new ComboBox<>();
+        comboBox.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(comboBox, Priority.ALWAYS);
+
+        comboBox.getItems().add("None");
+        for (GameObject entity : game.getEntities()) {
+            if (entity != script.getGameObject()) {
+                comboBox.getItems().add(entity.getName());
+            }
+        }
+
+        try {
+            field.setAccessible(true);
+            Object currentValue = field.get(script);
+            if (currentValue instanceof GameObject) {
+                comboBox.setValue(((GameObject) currentValue).getName());
+            } else {
+                comboBox.setValue("None");
+            }
+        } catch (Exception e) {
+            comboBox.setValue("None");
+        }
+
+        comboBox.setOnAction(e -> {
+            String selectedName = comboBox.getValue();
+            try {
+                field.setAccessible(true);
+                if ("None".equals(selectedName) || selectedName == null) {
+                    field.set(script, null);
+                } else {
+                    GameObject target = null;
+                    for (GameObject entity : game.getEntities()) {
+                        if (entity.getName().equals(selectedName)) {
+                            target = entity;
+                            break;
+                        }
+                    }
+                    field.set(script, target);
+                }
+                saveScriptVariablesToPending(script);
+            } catch (Exception ex) {
+                System.err.println("Erro ao definir referencia: " + ex.getMessage());
+            }
+        });
+
+        Button pickButton = new Button("◎");
+        pickButton.setTooltip(new Tooltip("Selecionar objeto clicando no viewport"));
+        pickButton.setOnAction(e -> {
+            javafx.scene.Cursor originalCursor = viewportCanvas.getCursor();
+            viewportCanvas.setCursor(javafx.scene.Cursor.CROSSHAIR);
+            
+            javafx.event.EventHandler<javafx.scene.input.MouseEvent> pickHandler = new javafx.event.EventHandler<>() {
+                @Override
+                public void handle(javafx.scene.input.MouseEvent me) {
+                    GameObject clicked = game.getObjectAt((int) me.getX(), (int) me.getY());
+                    if (clicked != null && clicked != script.getGameObject()) {
+                        try {
+                            field.setAccessible(true);
+                            field.set(script, clicked);
+                            comboBox.setValue(clicked.getName());
+                            saveScriptVariablesToPending(script);
+                        } catch (Exception ex) {
+                            System.err.println("Erro ao associar objeto clicado: " + ex.getMessage());
+                        }
+                    }
+                    viewportCanvas.setCursor(originalCursor);
+                    viewportCanvas.removeEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, this);
+                }
+            };
+            viewportCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, pickHandler);
+            
+            javafx.event.EventHandler<javafx.scene.input.KeyEvent> escHandler = new javafx.event.EventHandler<>() {
+                @Override
+                public void handle(javafx.scene.input.KeyEvent ke) {
+                    if (ke.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+                        viewportCanvas.setCursor(originalCursor);
+                        viewportCanvas.removeEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, pickHandler);
+                        viewportCanvas.removeEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, this);
+                    }
+                }
+            };
+            viewportCanvas.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, escHandler);
+        });
+
+        // Configura Drag & Drop Target
+        comboBox.setOnDragOver(e -> {
+            if (e.getDragboard().hasString()) {
+                comboBox.setStyle("-fx-border-color: -ignis-primary; -fx-border-width: 1px;");
+                e.acceptTransferModes(javafx.scene.input.TransferMode.ANY);
+            }
+            e.consume();
+        });
+
+        comboBox.setOnDragExited(e -> {
+            comboBox.setStyle("");
+            e.consume();
+        });
+
+        comboBox.setOnDragDropped(e -> {
+            javafx.scene.input.Dragboard db = e.getDragboard();
+            boolean success = false;
+            if (db.hasString()) {
+                String goName = db.getString();
+                GameObject target = null;
+                for (GameObject entity : game.getEntities()) {
+                    if (entity.getName().equals(goName)) {
+                        if (entity != script.getGameObject()) {
+                            target = entity;
+                            break;
+                        }
+                    }
+                }
+                if (target != null) {
+                    try {
+                        field.setAccessible(true);
+                        field.set(script, target);
+                        comboBox.setValue(target.getName());
+                        saveScriptVariablesToPending(script);
+                        success = true;
+                    } catch (Exception ex) {
+                        System.err.println("Erro ao associar drag-drop: " + ex.getMessage());
+                    }
+                }
+            }
+            e.setDropCompleted(success);
+            e.consume();
+        });
+
+        panel.getChildren().addAll(comboBox, pickButton);
+        return panel;
+    }
+
+    private void saveScriptVariablesToPending(com.ignis.core.IgnisScript script) {
+        if (currentProject != null && currentProject.getCurrentScene() != null) {
+            org.json.JSONObject variables = com.ignis.core.ScriptSerializationHelper.saveScriptVariables(script);
+            String key = script.getGameObject().getId() + ":" + script.getClass().getSimpleName();
+            currentProject.getCurrentScene().getPendingScriptVariables().put(key, variables);
+            markProjectDirty();
+        }
+    }
+
+    public void reloadAllScriptInstances() {
+        com.ignis.core.ScriptManager sm = game.getScriptManager();
+        if (sm == null) return;
+        
+        Scene currentScene = (currentProject != null) ? currentProject.getCurrentScene() : null;
+        
+        for (GameObject obj : game.getEntities()) {
+            java.util.List<String> scriptNames = new java.util.ArrayList<>(obj.getScriptNames());
+            obj.getScripts().clear();
+            
+            for (String scriptName : scriptNames) {
+                com.ignis.core.IgnisScript newInstance = sm.createScriptInstance(scriptName, obj, game);
+                if (newInstance != null) {
+                    obj.getScripts().add(newInstance);
+                    if (currentScene != null) {
+                        currentScene.applyPendingScriptVariables(obj, newInstance);
+                    }
+                }
+            }
+        }
+        
+        Platform.runLater(() -> {
+            if (selected != null) {
+                rebuildInspectorExtras(selected);
+            }
+        });
     }
 
     // Anexa um script (da pasta do projeto) ao objeto — espelha o editor Swing:
@@ -2472,7 +2883,7 @@ public class IgnisEditorApp extends Application {
         try {
             com.ignis.core.ScriptManager sm = game.getScriptManager();
             if (sm == null) { sm = new com.ignis.core.ScriptManager(projectFolder); game.setScriptManager(sm); }
-            new FxCodeEditor(null, sm, scriptName).show();
+            new FxCodeEditor(this, sm, scriptName).show();
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir script:\n" + ex.getMessage()).showAndWait();
         }

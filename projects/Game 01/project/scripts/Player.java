@@ -7,6 +7,9 @@ public class Player extends IgnisScript {
 
     @Serialize
     private float movementSpeed = 4.0f; // Speed at which the player moves
+    
+    @Serialize
+    public GameObject other;
 
 
     @Override

@@ -296,6 +296,8 @@ public class ScriptManager {
         StringBuilder sb = new StringBuilder();
         
         sb.append("import com.ignis.core.IgnisScript;\n");
+        sb.append("import com.ignis.core.Serialize;\n");
+        sb.append("import com.ignis.core.GameObject;\n");
         sb.append("\n");
         sb.append("public class ").append(className).append(" extends IgnisScript {\n");
         sb.append("\n");
