@@ -30,6 +30,18 @@
             <version>20231013</version>
         </dependency>
 
+        <!-- Model Context Protocol SDK -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+            <version>2.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json-jackson2</artifactId>
+            <version>2.0.0</version>
+        </dependency>
+
         <!-- JavaFX (migracao da UI do editor — branch main). A ponte BufferedImage
              -> JavaFX usa FxImageBridge (PixelWriter), sem o modulo javafx-swing
              (removido na F4-C; SwingFXUtils eliminado). -->

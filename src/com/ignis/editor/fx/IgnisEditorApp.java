@@ -2593,7 +2593,45 @@ public class IgnisEditorApp extends Application {
     }
 
     public static void main(String[] args) {
-        launch(args);
+        boolean mcpMode = false;
+        String projectPath = null;
+        for (int i = 0; i < args.length; i++) {
+            if ("--mcp-server".equals(args[i])) {
+                mcpMode = true;
+                if (i + 1 < args.length) {
+                    projectPath = args[i + 1];
+                }
+            }
+        }
+
+        if (mcpMode) {
+            // Silencia o standard output redirecionando logs para o System.err
+            System.setOut(System.err);
+            
+            if (projectPath == null) {
+                System.err.println("Erro: Caminho do projeto nao especificado para o modo MCP.");
+                System.exit(1);
+            }
+            File folder = new File(projectPath);
+            if (!folder.exists() || !folder.isDirectory()) {
+                System.err.println("Erro: Diretorio do projeto invalido: " + projectPath);
+                System.exit(1);
+            }
+
+            // Inicia o JavaFX Platform em modo Headless
+            try {
+                Platform.startup(() -> {
+                    System.err.println("[IgnisMCP] Runtime JavaFX inicializado em modo headless.");
+                });
+            } catch (IllegalStateException e) {
+                // JavaFX runtime ja iniciado
+            }
+
+            // Inicia o servidor MCP
+            com.ignis.mcp.McpServerManager.start(folder);
+        } else {
+            launch(args);
+        }
     }
 
     private void zoomCamera(double factor) {
