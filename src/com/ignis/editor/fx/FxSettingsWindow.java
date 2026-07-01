@@ -11,19 +11,30 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
+import com.ignis.collab.CollabSession;
+import com.ignis.mcp.McpService;
+
 import java.io.File;
+import java.util.List;
 
 /**
  * Janela de Configuracoes centralizada do editor JavaFX.
@@ -40,10 +51,16 @@ import java.io.File;
 public class FxSettingsWindow extends Stage {
 
     private final Game game;
+    private final File projectFolder;
     private final StackPane contentArea = new StackPane();
 
     public FxSettingsWindow(Stage owner, Game game) {
+        this(owner, game, null);
+    }
+
+    public FxSettingsWindow(Stage owner, Game game, File projectFolder) {
         this.game = game;
+        this.projectFolder = projectFolder;
         setTitle("Configuracoes");
         initModality(Modality.NONE);
         if (owner != null) initOwner(owner);
@@ -79,7 +96,9 @@ public class FxSettingsWindow extends Stage {
                 navItem(topics, "Geral", this::buildGeneralPane, true),
                 navItem(topics, "Aparencia", this::buildAppearancePane, false),
                 navItem(topics, "Editor de Scripts", this::buildScriptsPane, false),
-                navItem(topics, "Viewport", this::buildViewportPane, false)
+                navItem(topics, "Viewport", this::buildViewportPane, false),
+                navItem(topics, "IA & MCP", this::buildAiMcpPane, false),
+                navItem(topics, "Colaboracao", this::buildCollabPane, false)
         );
 
         ScrollPane navScroll = new ScrollPane(nav);
@@ -292,6 +311,241 @@ public class FxSettingsWindow extends Stage {
                 hint("Tambem usado como padrao ao iniciar o editor.")
         );
         return box;
+    }
+
+    // ================= IA & MCP =================
+
+    private Node buildAiMcpPane() {
+        VBox box = section("IA & MCP");
+
+        // ---- Servidor MCP (bridge HTTP local) ----
+        Label mcpTitle = new Label("Servidor MCP (ferramentas para agentes de IA)");
+        mcpTitle.getStyleClass().add("field-label");
+
+        boolean projectOpen = projectFolder != null && projectFolder.isDirectory();
+
+        Label statusLabel = new Label();
+        statusLabel.getStyleClass().add("field-label");
+
+        TextField urlField = new TextField();
+        urlField.setEditable(false);
+        urlField.setPromptText("Servidor desativado");
+        HBox.setHgrow(urlField, Priority.ALWAYS);
+
+        Button copyBtn = new Button("Copiar URL");
+        copyBtn.setOnAction(e -> copyToClipboard(urlField.getText()));
+
+        Spinner<Integer> portSpinner = new Spinner<>(1024, 65535, EditorPrefs.getMcpPort(), 1);
+        portSpinner.setEditable(true);
+        portSpinner.valueProperty().addListener((o, a, b) -> { if (b != null) EditorPrefs.setMcpPort(b); });
+
+        CheckBox exposeNet = new CheckBox("Expor na rede/VPN (0.0.0.0) — permite conexao de outras maquinas");
+        exposeNet.setSelected(EditorPrefs.isMcpExposeNetwork());
+        exposeNet.selectedProperty().addListener((o, a, b) -> EditorPrefs.setMcpExposeNetwork(b));
+
+        TextField tokenField = new TextField(EditorPrefs.getMcpToken());
+        tokenField.setPromptText("(opcional) token Bearer para proteger o acesso");
+        tokenField.textProperty().addListener((o, a, b) -> EditorPrefs.setMcpToken(b));
+
+        ToggleButton mcpToggle = new ToggleButton();
+        Runnable refreshMcp = () -> {
+            boolean running = McpService.isRunning();
+            mcpToggle.setSelected(running);
+            mcpToggle.setText(running ? "Desativar servidor MCP" : "Ativar servidor MCP");
+            statusLabel.setText(running
+                    ? "Status: ATIVO — " + McpService.getRegistry().list().size() + " ferramentas expostas"
+                    : (projectOpen ? "Status: desativado" : "Status: abra um projeto para ativar"));
+            urlField.setText(running && McpService.getUrl() != null ? McpService.getUrl() : "");
+            copyBtn.setDisable(!running);
+            mcpToggle.setDisable(!projectOpen);
+        };
+        mcpToggle.setOnAction(e -> {
+            try {
+                if (McpService.isRunning()) {
+                    McpService.stop();
+                    EditorPrefs.setMcpEnabled(false);
+                } else {
+                    McpService.start(projectFolder, EditorPrefs.isMcpExposeNetwork(),
+                            EditorPrefs.getMcpPort(), EditorPrefs.getMcpToken());
+                    EditorPrefs.setMcpEnabled(true);
+                }
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao alternar o servidor MCP:\n" + ex.getMessage()).showAndWait();
+            }
+            refreshMcp.run();
+        });
+        refreshMcp.run();
+
+        box.getChildren().addAll(
+                mcpTitle,
+                statusLabel,
+                mcpToggle,
+                labeledRow("Porta", portSpinner),
+                exposeNet,
+                labeledRow("Token (opcional)", tokenField),
+                new HBox(8, urlField, copyBtn),
+                hint("Cole esta URL na configuracao do agente. Endpoints: GET /mcp/tools e POST /mcp/call. "
+                        + "Uma IA agentica local (futura) e as APIs Gemini/NVIDIA usam exatamente as mesmas ferramentas."),
+                new Separator()
+        );
+
+        // ---- Agentes de IA (Gemini / NVIDIA) ----
+        Label aiTitle = new Label("Agente de IA (APIs gratuitas)");
+        aiTitle.getStyleClass().add("field-label");
+
+        ComboBox<String> provider = new ComboBox<>();
+        provider.getItems().addAll("Gemini", "NVIDIA");
+        provider.setValue(EditorPrefs.getAiProvider());
+        provider.valueProperty().addListener((o, a, b) -> { if (b != null) EditorPrefs.setAiProvider(b); });
+
+        PasswordField geminiKey = new PasswordField();
+        geminiKey.setText(EditorPrefs.getGeminiApiKey());
+        geminiKey.setPromptText("Chave da API Gemini (aistudio.google.com)");
+        geminiKey.textProperty().addListener((o, a, b) -> EditorPrefs.setGeminiApiKey(b));
+
+        PasswordField nvidiaKey = new PasswordField();
+        nvidiaKey.setText(EditorPrefs.getNvidiaApiKey());
+        nvidiaKey.setPromptText("Chave da API NVIDIA (build.nvidia.com)");
+        nvidiaKey.textProperty().addListener((o, a, b) -> EditorPrefs.setNvidiaApiKey(b));
+
+        CheckBox aiTools = new CheckBox("Permitir que o agente use as ferramentas do MCP (function-calling)");
+        aiTools.setSelected(EditorPrefs.isAiToolsEnabled());
+        aiTools.selectedProperty().addListener((o, a, b) -> EditorPrefs.setAiToolsEnabled(b));
+
+        box.getChildren().addAll(
+                aiTitle,
+                labeledRow("Provedor ativo", provider),
+                labeledRow("Chave Gemini", geminiKey),
+                labeledRow("Chave NVIDIA", nvidiaKey),
+                aiTools,
+                hint("Quando o MCP esta ativo e o function-calling ligado, o agente pode ler a arvore do projeto, "
+                        + "criar/editar scripts e compilar. Plano completo em doc/AGENTIC_AI_PLAN.md.")
+        );
+        return box;
+    }
+
+    // ================= Colaboracao =================
+
+    private Node buildCollabPane() {
+        VBox box = section("Colaboracao em tempo real");
+
+        CollabSession collab = CollabSession.get();
+
+        TextField nameField = new TextField(EditorPrefs.getCollabDisplayName());
+        nameField.setPromptText("Seu nome de exibicao");
+        nameField.textProperty().addListener((o, a, b) -> {
+            EditorPrefs.setCollabDisplayName(b);
+            collab.setDisplayName(b);
+        });
+
+        Label statusLabel = new Label();
+        statusLabel.getStyleClass().add("field-label");
+        statusLabel.setWrapText(true);
+
+        ListView<String> participantsView = new ListView<>();
+        participantsView.setPrefHeight(120);
+
+        // ---- Host ----
+        Spinner<Integer> portSpinner = new Spinner<>(1024, 65535, EditorPrefs.getCollabPort(), 1);
+        portSpinner.setEditable(true);
+        portSpinner.valueProperty().addListener((o, a, b) -> { if (b != null) EditorPrefs.setCollabPort(b); });
+
+        TextField shareField = new TextField();
+        shareField.setEditable(false);
+        shareField.setPromptText("Endereco para compartilhar aparece aqui ao hospedar");
+        HBox.setHgrow(shareField, Priority.ALWAYS);
+        Button copyShare = new Button("Copiar");
+        copyShare.setOnAction(e -> copyToClipboard(shareField.getText()));
+
+        Button hostBtn = new Button("Hospedar sessao");
+        Button stopBtn = new Button("Encerrar");
+
+        // ---- Guest ----
+        TextField hostAddr = new TextField();
+        hostAddr.setPromptText("IP do host (ex.: 25.x.x.x da Radmin VPN)");
+        Spinner<Integer> joinPort = new Spinner<>(1024, 65535, EditorPrefs.getCollabPort(), 1);
+        joinPort.setEditable(true);
+        Button joinBtn = new Button("Entrar na sessao");
+
+        Runnable refresh = () -> {
+            boolean active = collab.isActive();
+            boolean host = collab.getRole() == CollabSession.Role.HOST;
+            hostBtn.setDisable(active);
+            joinBtn.setDisable(active);
+            stopBtn.setDisable(!active);
+            shareField.setText(host && collab.getShareAddress() != null ? collab.getShareAddress() : "");
+            copyShare.setDisable(!host);
+            statusLabel.setText(active
+                    ? (host ? "Hospedando — " + collab.participantCount() + " participante(s)"
+                            : "Conectado como convidado")
+                    : "Sem sessao ativa");
+        };
+
+        // Ouve eventos da sessao para atualizar presenca/status na UI Thread.
+        CollabSession.Listener uiListener = new CollabSession.Listener() {
+            @Override public void onPresence(List<String> participants) {
+                javafx.application.Platform.runLater(() -> {
+                    participantsView.getItems().setAll(participants);
+                    refresh.run();
+                });
+            }
+            @Override public void onStatus(String message, boolean connected) {
+                javafx.application.Platform.runLater(() -> { statusLabel.setText(message); refresh.run(); });
+            }
+        };
+        collab.addListener(uiListener);
+        setOnHidden(e -> collab.removeListener(uiListener));
+
+        hostBtn.setOnAction(e -> {
+            try {
+                collab.setDisplayName(nameField.getText());
+                collab.host(portSpinner.getValue());
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao hospedar:\n" + ex.getMessage()).showAndWait();
+            }
+            refresh.run();
+        });
+        stopBtn.setOnAction(e -> { collab.stop(); participantsView.getItems().clear(); refresh.run(); });
+        joinBtn.setOnAction(e -> {
+            try {
+                collab.setDisplayName(nameField.getText());
+                collab.join(hostAddr.getText().trim(), joinPort.getValue());
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao conectar:\n" + ex.getMessage()).showAndWait();
+            }
+            refresh.run();
+        });
+        refresh.run();
+
+        box.getChildren().addAll(
+                labeledRow("Nome de exibicao", nameField),
+                statusLabel,
+                new Separator(),
+                new Label("Hospedar (voce vira o host):"),
+                labeledRow("Porta", portSpinner),
+                new HBox(8, hostBtn, stopBtn),
+                new HBox(8, shareField, copyShare),
+                hint("Funciona por IP direto ou por VPN (Radmin/Hamachi/Tailscale). Compartilhe o endereco acima."),
+                new Separator(),
+                new Label("Entrar em uma sessao existente:"),
+                labeledRow("Endereco do host", hostAddr),
+                labeledRow("Porta", joinPort),
+                joinBtn,
+                new Separator(),
+                new Label("Participantes:"),
+                participantsView,
+                hint("Fundacao de transporte pronta (presenca, chat e canais scene/script/play/cursor). "
+                        + "O detalhamento da sincronizacao esta em doc/COLLABORATION_GUIDE.md.")
+        );
+        return box;
+    }
+
+    // Copia texto para a area de transferencia (no-op se vazio).
+    private void copyToClipboard(String text) {
+        if (text == null || text.isEmpty()) return;
+        ClipboardContent content = new ClipboardContent();
+        content.putString(text);
+        Clipboard.getSystemClipboard().setContent(content);
     }
 
     // ================= Helpers de UI =================

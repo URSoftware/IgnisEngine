@@ -370,6 +370,8 @@ public class IgnisEditorApp extends Application {
             saveLayout();
             if (console != null) console.stopCapture();
             stopGameLoop();
+            try { com.ignis.mcp.McpService.stop(); } catch (Exception ignore) {}
+            try { com.ignis.collab.CollabSession.get().stop(); } catch (Exception ignore) {}
             Platform.exit();
             System.exit(0);
         });
@@ -698,6 +700,7 @@ public class IgnisEditorApp extends Application {
             try {
                 game.setScriptManager(new com.ignis.core.ScriptManager(projectFolder));
             } catch (Exception ignore) { /* scripts opcionais para Play */ }
+            maybeAutoStartMcp();
             game.getEntities().clear();
             setSelected(null);
             Scene scene = project.getCurrentScene();
@@ -762,6 +765,7 @@ public class IgnisEditorApp extends Application {
             try {
                 game.setScriptManager(new com.ignis.core.ScriptManager(projectFolder));
             } catch (Exception ignore) { /* scripts opcionais */ }
+            maybeAutoStartMcp();
             refreshHierarchy();
             refreshAssetBrowser();
             undoManager.clear();
@@ -1109,10 +1113,24 @@ public class IgnisEditorApp extends Application {
                 settingsWindow.requestFocus();
                 return;
             }
-            settingsWindow = new FxSettingsWindow(primaryStage, game);
+            settingsWindow = new FxSettingsWindow(primaryStage, game, projectFolder);
             settingsWindow.show();
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir Configuracoes:\n" + ex.getMessage()).showAndWait();
+        }
+    }
+
+    // Sobe o bridge HTTP do MCP ao abrir um projeto, se o usuario deixou habilitado
+    // nas Configuracoes (IA & MCP). Best-effort: nunca quebra o carregamento do projeto.
+    private void maybeAutoStartMcp() {
+        try {
+            if (EditorPrefs.isMcpEnabled() && projectFolder != null && projectFolder.isDirectory()) {
+                com.ignis.mcp.McpService.start(projectFolder, EditorPrefs.isMcpExposeNetwork(),
+                        EditorPrefs.getMcpPort(), EditorPrefs.getMcpToken());
+                System.out.println("[IgnisMCP] Bridge HTTP iniciado: " + com.ignis.mcp.McpService.getUrl());
+            }
+        } catch (Exception ex) {
+            System.err.println("[IgnisMCP] Falha ao auto-iniciar o bridge: " + ex.getMessage());
         }
     }
 

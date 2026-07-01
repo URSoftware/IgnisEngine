@@ -240,6 +240,124 @@ public final class EditorPrefs {
         write(json);
     }
 
+    // ---------------- Servidor MCP / Bridge HTTP ----------------
+    // Configuracao da interface de IA & MCP (janela de Configuracoes).
+
+    /** Bridge HTTP do MCP habilitado ao abrir projeto? (default: desligado). */
+    public static boolean isMcpEnabled() {
+        return read().optBoolean("mcpEnabled", false);
+    }
+
+    public static void setMcpEnabled(boolean on) {
+        JSONObject json = read();
+        json.put("mcpEnabled", on);
+        write(json);
+    }
+
+    /** Porta TCP do bridge HTTP do MCP (default 8790, faixa 1024..65535). */
+    public static int getMcpPort() {
+        int v = read().optInt("mcpPort", 8790);
+        return Math.max(1024, Math.min(65535, v));
+    }
+
+    public static void setMcpPort(int port) {
+        JSONObject json = read();
+        json.put("mcpPort", Math.max(1024, Math.min(65535, port)));
+        write(json);
+    }
+
+    /** Expor o bridge na rede (0.0.0.0) para VPN/LAN, ou apenas local (127.0.0.1). */
+    public static boolean isMcpExposeNetwork() {
+        return read().optBoolean("mcpExposeNetwork", false);
+    }
+
+    public static void setMcpExposeNetwork(boolean on) {
+        JSONObject json = read();
+        json.put("mcpExposeNetwork", on);
+        write(json);
+    }
+
+    /** Token Bearer opcional para proteger o bridge HTTP (vazio = sem auth). */
+    public static String getMcpToken() {
+        return read().optString("mcpToken", "");
+    }
+
+    public static void setMcpToken(String token) {
+        JSONObject json = read();
+        json.put("mcpToken", token == null ? "" : token);
+        write(json);
+    }
+
+    // ---------------- Agentes de IA (Gemini / NVIDIA) ----------------
+
+    /** Provedor de IA ativo: "Gemini" ou "NVIDIA". */
+    public static String getAiProvider() {
+        return read().optString("aiProvider", "Gemini");
+    }
+
+    public static void setAiProvider(String provider) {
+        JSONObject json = read();
+        json.put("aiProvider", provider == null ? "Gemini" : provider);
+        write(json);
+    }
+
+    public static String getGeminiApiKey() {
+        return read().optString("geminiApiKey", "");
+    }
+
+    public static void setGeminiApiKey(String key) {
+        JSONObject json = read();
+        json.put("geminiApiKey", key == null ? "" : key);
+        write(json);
+    }
+
+    public static String getNvidiaApiKey() {
+        return read().optString("nvidiaApiKey", "");
+    }
+
+    public static void setNvidiaApiKey(String key) {
+        JSONObject json = read();
+        json.put("nvidiaApiKey", key == null ? "" : key);
+        write(json);
+    }
+
+    /** Permitir que o agente de IA use as ferramentas do MCP (function-calling). */
+    public static boolean isAiToolsEnabled() {
+        return read().optBoolean("aiToolsEnabled", true);
+    }
+
+    public static void setAiToolsEnabled(boolean on) {
+        JSONObject json = read();
+        json.put("aiToolsEnabled", on);
+        write(json);
+    }
+
+    // ---------------- Colaboracao em tempo real ----------------
+
+    /** Porta TCP padrao do servidor de colaboracao (host). */
+    public static int getCollabPort() {
+        int v = read().optInt("collabPort", 8791);
+        return Math.max(1024, Math.min(65535, v));
+    }
+
+    public static void setCollabPort(int port) {
+        JSONObject json = read();
+        json.put("collabPort", Math.max(1024, Math.min(65535, port)));
+        write(json);
+    }
+
+    /** Nome de exibicao do usuario em sessoes de colaboracao. */
+    public static String getCollabDisplayName() {
+        String v = read().optString("collabDisplayName", "");
+        return (v == null || v.isEmpty()) ? System.getProperty("user.name", "Usuario") : v;
+    }
+
+    public static void setCollabDisplayName(String name) {
+        JSONObject json = read();
+        json.put("collabDisplayName", name == null ? "" : name);
+        write(json);
+    }
+
     // ---------------- Layout da janela (Fase F4-B) ----------------
     // Persistencia estilo VSCode do tamanho/posicao da janela principal e das
     // posicoes dos divisores dos SplitPane. Tudo opcional: se ausente, o editor
