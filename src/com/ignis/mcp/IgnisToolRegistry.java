@@ -374,6 +374,20 @@ public final class IgnisToolRegistry {
                 return "Script '" + scriptName + "' anexado a " + go.getName();
             });
 
+        // delete_object
+        add("delete_object",
+            "Remove um GameObject da cena ativa pelo nome.",
+            schemaWith(Map.of("name", "Nome do objeto a remover"), List.of("name")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                GameObject go = findObject(name);
+                if (go == null) return "Erro: objeto nao encontrado: " + name;
+                liveGame.removeEntity(go);
+                if (refreshHook != null) refreshHook.run();
+                return "Objeto removido: " + name;
+            });
+
         // play_game
         add("play_game",
             "Inicia a simulacao (Play) no editor, como apertar o botao Play.",

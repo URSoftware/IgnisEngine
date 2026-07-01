@@ -113,6 +113,7 @@ que permitem a um agente **montar e testar um jogo de ponta a ponta**:
 | `create_object` | `name`, `type?`, `x?`, `y?`, `width?`, `height?` | Cria uma forma (`square`/`circle`/`triangle`/`star`/`pentagon`/`player`) na cena |
 | `set_object_transform` | `name`, `x?`, `y?`, `width?`, `height?`, `rotation?` | Move/redimensiona/rotaciona um objeto |
 | `set_object_sprite` | `name`, `path` | Define o sprite (imagem) do objeto |
+| `delete_object` | `name` | Remove um GameObject da cena |
 | `attach_script` | `objectName`, `scriptName` | Anexa um IgnisScript ao objeto |
 | `play_game` | — | Inicia o Play (equivale ao botão Play do editor) |
 | `stop_game` | — | Para e volta ao modo de edição |
@@ -123,7 +124,7 @@ Como `GameObject` é abstrato, `create_object` instancia formas concretas via f�
 `IgnisMcpBridge`; os hooks invocam os métodos reais do editor (`playWorld`,
 `stopWorld`, `refreshHierarchy`, `saveProjectSilently`), então botões e viewport
 ficam sincronizados. No modo headless, essas 8 ferramentas simplesmente não são
-registradas (o total cai de 15 para 7).
+registradas (o total cai de 16 para 7).
 
 > Importante: as ferramentas vivas exigem reiniciar o editor após atualizar o build
 > (Java não faz hot-reload). Ao reabrir com o MCP habilitado, o bridge sobe já com o
