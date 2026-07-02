@@ -385,7 +385,18 @@ public class IgnisEditorApp extends Application {
         startRenderBridge(canvas);
 
         // Tela inicial de selecao de projeto (analoga ao startup do editor Swing).
-        Platform.runLater(() -> showProjectStartup(stage, true));
+        Platform.runLater(() -> {
+            String last = EditorPrefs.getLastProject();
+            if (last != null) {
+                File lastFile = new File(last);
+                if (lastFile.exists() && lastFile.isFile()) {
+                    if (openProjectFile(lastFile)) {
+                        return; // Carregado com sucesso!
+                    }
+                }
+            }
+            showProjectStartup(stage, true);
+        });
     }
 
     private void seedSampleScene() {

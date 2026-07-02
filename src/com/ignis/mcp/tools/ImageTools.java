@@ -220,5 +220,80 @@ public final class ImageTools {
                 return new CallToolResult(List.<Content>of(new TextContent("Erro ao criar asset: " + e.getMessage())), true, null, null);
             }
         }));
+
+        // --- 6. Tool: remove_sprite_background ---
+        Tool removeBg = Tool.builder()
+            .name("remove_sprite_background")
+            .description("Remove uma cor solida de fundo de uma imagem no projeto (ex: branco, preto ou verde), tornando-a transparente.")
+            .inputSchema(Map.of(
+                "type", (Object) "object",
+                "properties", Map.of(
+                    "imagePath", Map.of("type", "string", "description", "Caminho relativo para a imagem (ex: assets/sprites/hero.png)"),
+                    "targetColorHex", Map.of("type", "string", "description", "Cor em hexadecimal (ex: #ffffff para branco, #000000 para preto)"),
+                    "tolerance", Map.of("type", "integer", "description", "Tolerancia de cor (0 a 255, padrao 20)")
+                ),
+                "required", List.of("imagePath", "targetColorHex")
+            ))
+            .build();
+        server.addTool(new SyncToolSpecification(removeBg, (exchange, args) -> {
+            try {
+                String imgPath = (String) args.arguments().get("imagePath").toString();
+                String targetHex = (String) args.arguments().get("targetColorHex").toString();
+                int tolerance = args.arguments().containsKey("tolerance") ? ((Number) args.arguments().get("tolerance")).intValue() : 20;
+
+                File imgFile = new File(projectFolder, imgPath);
+                if (!imgFile.exists()) {
+                    return new CallToolResult(List.<Content>of(new TextContent("Arquivo nao encontrado: " + imgPath)), true, null, null);
+                }
+
+                BufferedImage src = ImageIO.read(imgFile);
+                if (src == null) {
+                    return new CallToolResult(List.<Content>of(new TextContent("Nao foi possivel ler a imagem.")), true, null, null);
+                }
+
+                // Parse target color
+                String hex = targetHex.trim();
+                if (hex.startsWith("#")) hex = hex.substring(1);
+                if (hex.length() != 6 && hex.length() != 3) {
+                    return new CallToolResult(List.<Content>of(new TextContent("Erro: targetColorHex deve ser uma cor hexadecimal valida de 3 ou 6 caracteres.")), true, null, null);
+                }
+                int tr, tg, tb;
+                if (hex.length() == 6) {
+                    tr = Integer.parseInt(hex.substring(0, 2), 16);
+                    tg = Integer.parseInt(hex.substring(2, 4), 16);
+                    tb = Integer.parseInt(hex.substring(4, 6), 16);
+                } else {
+                    tr = Integer.parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
+                    tg = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
+                    tb = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
+                }
+
+                int w = src.getWidth();
+                int h = src.getHeight();
+                BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+
+                for (int y = 0; y < h; y++) {
+                    for (int x = 0; x < w; x++) {
+                        int rgb = src.getRGB(x, y);
+                        int a = (rgb >> 24) & 0xff;
+                        int r = (rgb >> 16) & 0xff;
+                        int g = (rgb >> 8) & 0xff;
+                        int b = rgb & 0xff;
+
+                        double dist = Math.sqrt((r - tr) * (r - tr) + (g - tg) * (g - tg) + (b - tb) * (b - tb));
+                        if (dist <= tolerance) {
+                            dst.setRGB(x, y, 0x00000000); // transparent
+                        } else {
+                            dst.setRGB(x, y, rgb);
+                        }
+                    }
+                }
+
+                ImageIO.write(dst, "PNG", imgFile);
+                return new CallToolResult(List.<Content>of(new TextContent("Fundo removido com sucesso e imagem salva em " + imgPath)), false, null, null);
+            } catch (Exception e) {
+                return new CallToolResult(List.<Content>of(new TextContent("Erro ao processar imagem: " + e.getMessage())), true, null, null);
+            }
+        }));
     }
 }
