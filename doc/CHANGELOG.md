@@ -9,10 +9,13 @@
 
 ### Adicionado
 - **Console Dashboard Web Premium para o MCP**: Implementacao do endpoint raiz `/` (e `/index.html`) no `McpHttpBridge`, servindo um dashboard interativo moderno e responsivo (HTML5/CSS3/JS, sem dependencias adicionais). A interface oferece busca instantanea em tempo real de todas as 66 ferramentas registradas, visualizacao interativa do schema de parametros com campos de formulario gerados dinamicamente para execucao imediata no sandbox (com saida formatada em console escuro), monitoramento visual do status do bridge e botoes de atalhos rapidos (Status da Cena, Listar Objetos, Play Game, Stop Game e Salvar Projeto) sem emojis ou placeholders, creditando o autor ThyagoToledo.
-- **Polimento de Sprites 2D dos Personagens**: Geracao e substituicao dos sprites do heroi (`hero.png`) e do slime (`slime.png`) na pasta de assets do projeto (`projects/MyGame/project/assets/sprites/`) por sprites autorais transparentes em alta resolucao de pixel art 2D, eliminando os antigos placeholders e melhorando a fidelidade visual do jogo de combate em turnos.
+- **Polimento de Sprites 2D dos Personagens e Remocao de Quadriculados**: Geracao e substituicao dos sprites do heroi (`hero.png`) e do slime (`slime.png`) na pasta de assets do projeto (`projects/MyGame/project/assets/sprites/`) por sprites autorais transparentes em alta resolucao de pixel art 2D. Aprimoramento da ferramenta `remove_sprite_background` no MCP para aceitar o modo `"auto"` (que coleta cores de bordas/cantos) e listas separadas por virgula, limpando completamente fundos quadriculados (checkerboards) de transparencia e deixando os personagens transparentes sobre o gramado.
+- **Mecanica de Exploracao com HUD de Instrucoes**: Adicionado cenario de fundo (`grass.jpg`) em Z-order `0`, fase de exploracao controlada por WASD/Setas com camera seguindo o jogador e aviso amarelo no HUD (*"EXPLORACAO: Mova o Heroi usando as teclas WASD ou Setas ate o Slime!"*) limpando ao iniciar o combate por proximidade.
+- **Z-Order Explicito no MCP**: Aprimorada a ferramenta `list_scene_objects` para retornar o indice numerico de empilhamento de renderizacao de cada GameObject (Z-index `[0]` ate `[N]`), permitindo a agentes remotos e programadores controlarem e entenderem quais objetos estao na frente/atras de quais na cena.
 
 ### Corrigido
 - **Compatibilidade de Escape de Text Block em Java**: Correcao de erros de compilacao relacionados aos caracteres de escape em literais de template JavaScript (`\\${...}`) inseridos dentro do text block Java de `McpHttpBridge.java`.
+- **Auto-carregamento do Ultimo Projeto no Startup**: Resolvido problema de bloqueio de inicializacao do MCP na porta 8898 adicionando auto-load do ultimo projeto ativo (`EditorPrefs.getLastProject()`) direto no startup do editor JavaFX.
 
 ## [1.0.7] - 2026-07-01
 
