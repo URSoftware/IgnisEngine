@@ -821,13 +821,17 @@ public final class IgnisToolRegistry {
     private void registerSceneTools() {
         // list_scene_objects
         add("list_scene_objects",
-            "Lista os GameObjects da cena ativa (nome, posicao, tamanho, scripts).",
+            "Lista os GameObjects da cena ativa em ordem de renderizacao (Z-index: menor atras, maior na frente).",
             objectSchema(),
             args -> {
                 if (liveGame == null) return "Erro: editor nao disponivel.";
                 StringBuilder sb = new StringBuilder();
-                for (GameObject go : liveGame.getEntities()) {
-                    sb.append(go.getName())
+                sb.append("Ordem de renderizacao (Z-order): indices menores sao desenhados primeiro (ficam atras), indices maiores sao desenhados por cima.\n\n");
+                java.util.List<GameObject> list = liveGame.getEntities();
+                for (int i = 0; i < list.size(); i++) {
+                    GameObject go = list.get(i);
+                    sb.append("[").append(i).append("] ")
+                      .append(go.getName())
                       .append(" @ (").append((int) go.getX()).append(',').append((int) go.getY()).append(')')
                       .append(" ").append(go.getWidth()).append('x').append(go.getHeight())
                       .append(" scripts=").append(go.getScriptNames())

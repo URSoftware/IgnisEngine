@@ -224,12 +224,12 @@ public final class ImageTools {
         // --- 6. Tool: remove_sprite_background ---
         Tool removeBg = Tool.builder()
             .name("remove_sprite_background")
-            .description("Remove uma cor solida de fundo de uma imagem no projeto (ex: branco, preto ou verde), tornando-a transparente.")
+            .description("Remove cor solida ou padrao quadriculado (checkerboard) de fundo de uma imagem. targetColorHex pode ser 'auto' (detecta cantos/bordas), uma cor ex: '#ffffff' ou lista ex: '#ffffff,#cccccc'.")
             .inputSchema(Map.of(
                 "type", (Object) "object",
                 "properties", Map.of(
                     "imagePath", Map.of("type", "string", "description", "Caminho relativo para a imagem (ex: assets/sprites/hero.png)"),
-                    "targetColorHex", Map.of("type", "string", "description", "Cor em hexadecimal (ex: #ffffff para branco, #000000 para preto)"),
+                    "targetColorHex", Map.of("type", "string", "description", "Cor hex (ex: #ffffff), lista de cores (ex: #ffffff,#cccccc) ou 'auto' para auto-detectar fundo pelas bordas"),
                     "tolerance", Map.of("type", "integer", "description", "Tolerancia de cor (0 a 255, padrao 20)")
                 ),
                 "required", List.of("imagePath", "targetColorHex")
@@ -251,38 +251,73 @@ public final class ImageTools {
                     return new CallToolResult(List.<Content>of(new TextContent("Nao foi possivel ler a imagem.")), true, null, null);
                 }
 
-                // Parse target color
-                String hex = targetHex.trim();
-                if (hex.startsWith("#")) hex = hex.substring(1);
-                if (hex.length() != 6 && hex.length() != 3) {
-                    return new CallToolResult(List.<Content>of(new TextContent("Erro: targetColorHex deve ser uma cor hexadecimal valida de 3 ou 6 caracteres.")), true, null, null);
-                }
-                int tr, tg, tb;
-                if (hex.length() == 6) {
-                    tr = Integer.parseInt(hex.substring(0, 2), 16);
-                    tg = Integer.parseInt(hex.substring(2, 4), 16);
-                    tb = Integer.parseInt(hex.substring(4, 6), 16);
-                } else {
-                    tr = Integer.parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
-                    tg = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
-                    tb = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
-                }
-
                 int w = src.getWidth();
                 int h = src.getHeight();
+                List<java.awt.Color> colorsToRemove = new ArrayList<>();
+
+                if ("auto".equalsIgnoreCase(targetHex.trim())) {
+                    // Coleta cores solidas das bordas da imagem (top, bottom, left, right)
+                    for (int x = 0; x < w; x++) {
+                        collectSolidColor(src.getRGB(x, 0), colorsToRemove);
+                        collectSolidColor(src.getRGB(x, h - 1), colorsToRemove);
+                    }
+                    for (int y = 0; y < h; y++) {
+                        collectSolidColor(src.getRGB(0, y), colorsToRemove);
+                        collectSolidColor(src.getRGB(w - 1, y), colorsToRemove);
+                    }
+                } else {
+                    // Parse de uma ou mais cores separadas por virgula
+                    String[] parts = targetHex.split(",");
+                    for (String part : parts) {
+                        String hex = part.trim();
+                        if (hex.startsWith("#")) hex = hex.substring(1);
+                        if (hex.length() != 6 && hex.length() != 3) {
+                            return new CallToolResult(List.<Content>of(new TextContent("Erro: cor hex invalida: " + part)), true, null, null);
+                        }
+                        int tr, tg, tb;
+                        if (hex.length() == 6) {
+                            tr = Integer.parseInt(hex.substring(0, 2), 16);
+                            tg = Integer.parseInt(hex.substring(2, 4), 16);
+                            tb = Integer.parseInt(hex.substring(4, 6), 16);
+                        } else {
+                            tr = Integer.parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
+                            tg = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
+                            tb = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
+                        }
+                        colorsToRemove.add(new java.awt.Color(tr, tg, tb));
+                    }
+                }
+
                 BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+                int removedCount = 0;
 
                 for (int y = 0; y < h; y++) {
                     for (int x = 0; x < w; x++) {
                         int rgb = src.getRGB(x, y);
                         int a = (rgb >> 24) & 0xff;
+                        if (a < 50) {
+                            dst.setRGB(x, y, rgb); // Mantem transparente
+                            continue;
+                        }
+
                         int r = (rgb >> 16) & 0xff;
                         int g = (rgb >> 8) & 0xff;
                         int b = rgb & 0xff;
 
-                        double dist = Math.sqrt((r - tr) * (r - tr) + (g - tg) * (g - tg) + (b - tb) * (b - tb));
-                        if (dist <= tolerance) {
-                            dst.setRGB(x, y, 0x00000000); // transparent
+                        boolean matches = false;
+                        for (java.awt.Color tc : colorsToRemove) {
+                            double dist = Math.sqrt((r - tc.getRed()) * (r - tc.getRed()) +
+                                                    (g - tc.getGreen()) * (g - tc.getGreen()) +
+                                                    (b - tc.getBlue()) * (b - tc.getBlue()));
+                            if (dist <= tolerance) {
+                                matches = true;
+                                break;
+                            }
+                        }
+
+                        if (matches) {
+                            dst.setRGB(x, y, 0x00000000);
+                            removedCount++;
                         } else {
                             dst.setRGB(x, y, rgb);
                         }
@@ -290,10 +325,25 @@ public final class ImageTools {
                 }
 
                 ImageIO.write(dst, "PNG", imgFile);
-                return new CallToolResult(List.<Content>of(new TextContent("Fundo removido com sucesso e imagem salva em " + imgPath)), false, null, null);
+                return new CallToolResult(List.<Content>of(new TextContent("Processamento concluido. Removidos " + removedCount + " pixels de fundo de " + imgPath)), false, null, null);
             } catch (Exception e) {
                 return new CallToolResult(List.<Content>of(new TextContent("Erro ao processar imagem: " + e.getMessage())), true, null, null);
             }
         }));
+    }
+
+    private static void collectSolidColor(int rgb, List<java.awt.Color> list) {
+        int a = (rgb >> 24) & 0xff;
+        if (a < 50) return;
+        java.awt.Color c = new java.awt.Color(rgb);
+        for (java.awt.Color existing : list) {
+            double dist = Math.sqrt(
+                (c.getRed() - existing.getRed()) * (c.getRed() - existing.getRed()) +
+                (c.getGreen() - existing.getGreen()) * (c.getGreen() - existing.getGreen()) +
+                (c.getBlue() - existing.getBlue()) * (c.getBlue() - existing.getBlue())
+            );
+            if (dist < 5.0) return; // Cor ja representada
+        }
+        list.add(c);
     }
 }
