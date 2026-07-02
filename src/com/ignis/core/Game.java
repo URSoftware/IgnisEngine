@@ -1247,12 +1247,10 @@ public class Game extends Canvas implements Runnable {
             // Save entity transform
             AffineTransform entityTransform = g2d.getTransform();
 
-            // Apply entity rotation around its center
-            if (entity.getRotation() != 0) {
-                double centerX = entity.getX() + entity.getWidth() / 2.0;
-                double centerY = entity.getY() + entity.getHeight() / 2.0;
-                g2d.rotate(Math.toRadians(entity.getRotation()), centerX, centerY);
-            }
+            // NAO rotacionar aqui: cada GameObject concreto (Square, Circle, Player,
+            // MergedShape, ...) ja aplica a propria rotacao dentro de render().
+            // Rotacionar tambem no pipeline dobrava o angulo visual (objeto a 30
+            // graus desenhado a 60), desalinhando contorno de selecao e colliders.
 
             // Render entity
             entity.render(g);
@@ -1377,11 +1375,8 @@ public class Game extends Canvas implements Runnable {
             if (entity instanceof Camera) continue;
 
             AffineTransform entityTransform = g2d.getTransform();
-            if (entity.getRotation() != 0) {
-                double centerX = entity.getX() + entity.getWidth() / 2.0;
-                double centerY = entity.getY() + entity.getHeight() / 2.0;
-                g2d.rotate(Math.toRadians(entity.getRotation()), centerX, centerY);
-            }
+            // NAO rotacionar aqui: as formas concretas ja rotacionam dentro de
+            // render() — rotacionar no pipeline dobrava o angulo (ver render()).
             entity.render(g2d);
             g2d.setTransform(entityTransform);
         }

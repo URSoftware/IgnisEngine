@@ -221,115 +221,106 @@ public final class ImageTools {
             }
         }));
 
-        // --- 6. Tool: remove_sprite_background ---
-        Tool removeBg = Tool.builder()
-            .name("remove_sprite_background")
-            .description("Remove cor solida ou padrao quadriculado (checkerboard) de fundo de uma imagem. targetColorHex pode ser 'auto' (detecta cantos/bordas), uma cor ex: '#ffffff' ou lista ex: '#ffffff,#cccccc'.")
-            .inputSchema(Map.of(
-                "type", (Object) "object",
-                "properties", Map.of(
-                    "imagePath", Map.of("type", "string", "description", "Caminho relativo para a imagem (ex: assets/sprites/hero.png)"),
-                    "targetColorHex", Map.of("type", "string", "description", "Cor hex (ex: #ffffff), lista de cores (ex: #ffffff,#cccccc) ou 'auto' para auto-detectar fundo pelas bordas"),
-                    "tolerance", Map.of("type", "integer", "description", "Tolerancia de cor (0 a 255, padrao 20)")
-                ),
-                "required", List.of("imagePath", "targetColorHex")
-            ))
-            .build();
-        server.addTool(new SyncToolSpecification(removeBg, (exchange, args) -> {
-            try {
-                String imgPath = (String) args.arguments().get("imagePath").toString();
-                String targetHex = (String) args.arguments().get("targetColorHex").toString();
-                int tolerance = args.arguments().containsKey("tolerance") ? ((Number) args.arguments().get("tolerance")).intValue() : 20;
+        // Nota: remove_sprite_background migrou para o IgnisToolRegistry (fonte
+        // canonica servida aos DOIS transportes); a logica compartilhada segue
+        // aqui em removeBackground(...) abaixo.
+    }
 
-                File imgFile = new File(projectFolder, imgPath);
-                if (!imgFile.exists()) {
-                    return new CallToolResult(List.<Content>of(new TextContent("Arquivo nao encontrado: " + imgPath)), true, null, null);
-                }
-
-                BufferedImage src = ImageIO.read(imgFile);
-                if (src == null) {
-                    return new CallToolResult(List.<Content>of(new TextContent("Nao foi possivel ler a imagem.")), true, null, null);
-                }
-
-                int w = src.getWidth();
-                int h = src.getHeight();
-                List<java.awt.Color> colorsToRemove = new ArrayList<>();
-
-                if ("auto".equalsIgnoreCase(targetHex.trim())) {
-                    // Coleta cores solidas das bordas da imagem (top, bottom, left, right)
-                    for (int x = 0; x < w; x++) {
-                        collectSolidColor(src.getRGB(x, 0), colorsToRemove);
-                        collectSolidColor(src.getRGB(x, h - 1), colorsToRemove);
-                    }
-                    for (int y = 0; y < h; y++) {
-                        collectSolidColor(src.getRGB(0, y), colorsToRemove);
-                        collectSolidColor(src.getRGB(w - 1, y), colorsToRemove);
-                    }
-                } else {
-                    // Parse de uma ou mais cores separadas por virgula
-                    String[] parts = targetHex.split(",");
-                    for (String part : parts) {
-                        String hex = part.trim();
-                        if (hex.startsWith("#")) hex = hex.substring(1);
-                        if (hex.length() != 6 && hex.length() != 3) {
-                            return new CallToolResult(List.<Content>of(new TextContent("Erro: cor hex invalida: " + part)), true, null, null);
-                        }
-                        int tr, tg, tb;
-                        if (hex.length() == 6) {
-                            tr = Integer.parseInt(hex.substring(0, 2), 16);
-                            tg = Integer.parseInt(hex.substring(2, 4), 16);
-                            tb = Integer.parseInt(hex.substring(4, 6), 16);
-                        } else {
-                            tr = Integer.parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
-                            tg = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
-                            tb = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
-                        }
-                        colorsToRemove.add(new java.awt.Color(tr, tg, tb));
-                    }
-                }
-
-                BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-                int removedCount = 0;
-
-                for (int y = 0; y < h; y++) {
-                    for (int x = 0; x < w; x++) {
-                        int rgb = src.getRGB(x, y);
-                        int a = (rgb >> 24) & 0xff;
-                        if (a < 50) {
-                            dst.setRGB(x, y, rgb); // Mantem transparente
-                            continue;
-                        }
-
-                        int r = (rgb >> 16) & 0xff;
-                        int g = (rgb >> 8) & 0xff;
-                        int b = rgb & 0xff;
-
-                        boolean matches = false;
-                        for (java.awt.Color tc : colorsToRemove) {
-                            double dist = Math.sqrt((r - tc.getRed()) * (r - tc.getRed()) +
-                                                    (g - tc.getGreen()) * (g - tc.getGreen()) +
-                                                    (b - tc.getBlue()) * (b - tc.getBlue()));
-                            if (dist <= tolerance) {
-                                matches = true;
-                                break;
-                            }
-                        }
-
-                        if (matches) {
-                            dst.setRGB(x, y, 0x00000000);
-                            removedCount++;
-                        } else {
-                            dst.setRGB(x, y, rgb);
-                        }
-                    }
-                }
-
-                ImageIO.write(dst, "PNG", imgFile);
-                return new CallToolResult(List.<Content>of(new TextContent("Processamento concluido. Removidos " + removedCount + " pixels de fundo de " + imgPath)), false, null, null);
-            } catch (Exception e) {
-                return new CallToolResult(List.<Content>of(new TextContent("Erro ao processar imagem: " + e.getMessage())), true, null, null);
+    /**
+     * Remove cor solida ou padrao quadriculado (checkerboard) do fundo de uma imagem,
+     * sobrescrevendo-a como PNG com transparencia. Logica compartilhada entre o
+     * transporte STDIO (tool acima) e o IgnisToolRegistry (bridge HTTP).
+     *
+     * @param imgFile   arquivo de imagem a processar (sobrescrito no local).
+     * @param targetHex "auto" (detecta cores das bordas), uma cor "#ffffff" ou lista "#fff,#ccc".
+     * @param tolerance distancia de cor euclidiana 0-255 para considerar um pixel como fundo.
+     * @return mensagem de sucesso ("Processamento concluido...") ou comecando com "Erro".
+     */
+    public static String removeBackground(File imgFile, String targetHex, int tolerance) {
+        try {
+            if (imgFile == null || !imgFile.isFile()) {
+                return "Erro: arquivo nao encontrado" + (imgFile != null ? ": " + imgFile.getName() : ".");
             }
-        }));
+            BufferedImage src = ImageIO.read(imgFile);
+            if (src == null) return "Erro: nao foi possivel ler a imagem.";
+
+            int w = src.getWidth();
+            int h = src.getHeight();
+            List<java.awt.Color> colorsToRemove = new ArrayList<>();
+
+            if ("auto".equalsIgnoreCase(targetHex.trim())) {
+                // Coleta cores solidas das bordas da imagem (top, bottom, left, right)
+                for (int x = 0; x < w; x++) {
+                    collectSolidColor(src.getRGB(x, 0), colorsToRemove);
+                    collectSolidColor(src.getRGB(x, h - 1), colorsToRemove);
+                }
+                for (int y = 0; y < h; y++) {
+                    collectSolidColor(src.getRGB(0, y), colorsToRemove);
+                    collectSolidColor(src.getRGB(w - 1, y), colorsToRemove);
+                }
+            } else {
+                // Parse de uma ou mais cores separadas por virgula
+                for (String part : targetHex.split(",")) {
+                    String hex = part.trim();
+                    if (hex.startsWith("#")) hex = hex.substring(1);
+                    if (hex.length() != 6 && hex.length() != 3) {
+                        return "Erro: cor hex invalida: " + part;
+                    }
+                    int tr, tg, tb;
+                    if (hex.length() == 6) {
+                        tr = Integer.parseInt(hex.substring(0, 2), 16);
+                        tg = Integer.parseInt(hex.substring(2, 4), 16);
+                        tb = Integer.parseInt(hex.substring(4, 6), 16);
+                    } else {
+                        tr = Integer.parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
+                        tg = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
+                        tb = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
+                    }
+                    colorsToRemove.add(new java.awt.Color(tr, tg, tb));
+                }
+            }
+
+            BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            int removedCount = 0;
+
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    int rgb = src.getRGB(x, y);
+                    int a = (rgb >> 24) & 0xff;
+                    if (a < 50) {
+                        dst.setRGB(x, y, rgb); // Mantem transparente
+                        continue;
+                    }
+
+                    int r = (rgb >> 16) & 0xff;
+                    int g = (rgb >> 8) & 0xff;
+                    int b = rgb & 0xff;
+
+                    boolean matches = false;
+                    for (java.awt.Color tc : colorsToRemove) {
+                        double dist = Math.sqrt((r - tc.getRed()) * (r - tc.getRed()) +
+                                                (g - tc.getGreen()) * (g - tc.getGreen()) +
+                                                (b - tc.getBlue()) * (b - tc.getBlue()));
+                        if (dist <= tolerance) {
+                            matches = true;
+                            break;
+                        }
+                    }
+
+                    if (matches) {
+                        dst.setRGB(x, y, 0x00000000);
+                        removedCount++;
+                    } else {
+                        dst.setRGB(x, y, rgb);
+                    }
+                }
+            }
+
+            ImageIO.write(dst, "PNG", imgFile);
+            return "Processamento concluido. Removidos " + removedCount + " pixels de fundo";
+        } catch (Exception e) {
+            return "Erro ao processar imagem: " + e.getMessage();
+        }
     }
 
     private static void collectSolidColor(int rgb, List<java.awt.Color> list) {

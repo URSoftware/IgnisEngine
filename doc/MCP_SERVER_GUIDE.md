@@ -1,9 +1,10 @@
 # Servidor MCP e Bridge HTTP do IgnisEngine
 
-> Documento vivo — atualizado em 01/07/2026. Descreve a interface de **IA & MCP**
+> Documento vivo — atualizado em 02/07/2026. Descreve a interface de **IA & MCP**
 > nas Configurações do editor, o servidor MCP e o bridge HTTP local que expõe as
-> ferramentas do motor para agentes de IA. **66 ferramentas** registradas (25
-> disponíveis sempre, 41 adicionais com o editor vivo).
+> ferramentas do motor para agentes de IA. **67 ferramentas** no registry (26
+> disponíveis sempre, 41 adicionais com o editor vivo) + 9 exclusivas do STDIO
+> (processamento WAV e edição de imagem em camadas).
 
 ---
 
@@ -16,7 +17,18 @@ dois transportes para essas mesmas ferramentas:
 | Transporte | Classe | Uso |
 |-----------|--------|-----|
 | **STDIO** (MCP clássico) | `com.ignis.mcp.McpServerManager` | Clientes MCP que *lançam* o processo (Claude Desktop, Cursor). Ativado por `--mcp <projeto>`. |
-| **HTTP local (URL)** | `com.ignis.mcp.McpHttpBridge` | Agentes que se conectam por **URL** — inclusive IAs usando APIs Gemini/NVIDIA e a futura IA embarcada. |
+| **HTTP local (URL)** | `com.ignis.mcp.McpHttpBridge` | Agentes que se conectam por **URL** — inclusive IAs usando APIs Gemini/NVIDIA e a futura IA embarcada. Serve também um dashboard web em `/`. |
+
+**Paridade entre transportes (02/07/2026):** o STDIO agora serve o mesmo conjunto
+base do registry via um adapter genérico (`McpServerManager.registerRegistryTools`
+converte cada `ToolDef` para uma tool do SDK). As classes legadas `CoreTools`,
+`NoteTools` e `AnimationTools` foram **desregistradas** (duplicavam o registry;
+os arquivos permanecem no repositório apenas como histórico). Continuam exclusivas
+do STDIO apenas as ferramentas com estado em memória ou processamento pesado:
+`AudioTools` (WAV: `read_wav_info`, `trim_wav`, `apply_wav_fades`, `mix_wav_tracks`)
+e `ImageTools` (documentos de imagem em camadas: `create_image_document`,
+`add_image_layer`, `import_image_to_layer`, `composite_and_save_image`,
+`save_flat_image_asset`).
 
 A **fonte canônica** das ferramentas é a classe `com.ignis.mcp.IgnisToolRegistry`.
 Ela descreve cada ferramenta (nome, descrição, schema JSON, executor) de forma
@@ -86,13 +98,13 @@ curl -X POST http://127.0.0.1:8790/mcp/call \
 
 ## 4. Ferramentas registradas
 
-### 4.1 Sempre disponíveis (25) — `IgnisToolRegistry.registerDefaults()`
+### 4.1 Sempre disponíveis (26) — `IgnisToolRegistry.registerDefaults()`
 
 Funcionam mesmo no modo headless (`--mcp <projeto>`, transporte STDIO), pois operam
 em arquivos do projeto ou em singletons estáticos do motor — não exigem o editor
 JavaFX aberto.
 
-**Projeto e scripts (8)**
+**Projeto, scripts e imagem (9)**
 
 | Ferramenta | Argumentos | O que faz |
 |-----------|-----------|-----------|
@@ -104,6 +116,7 @@ JavaFX aberto.
 | `compile_project` | — | Compila todos os scripts e retorna o total |
 | `read_file` | `path` | Lê arquivo texto (relativo à raiz, com proteção anti path-traversal) |
 | `generate_sprite` | `name`, `shape?`, `width?`, `height?`, `color?`, `outlineColor?`, `symbol?` | Gera um sprite 2D procedural (forma+cor+símbolo) via `Graphics2D`, sem depender de imagem externa |
+| `remove_sprite_background` | `imagePath`, `targetColorHex` (`auto`/cor/lista), `tolerance?` | Remove cor sólida ou quadriculado (checkerboard) do fundo de uma imagem, deixando-a transparente (lógica compartilhada com o STDIO em `ImageTools.removeBackground`) |
 
 **Áudio (7)** — via `com.ignis.core.IgnisSoundEngine.getInstance()` (singleton estático)
 
@@ -318,9 +331,11 @@ movimento inteiramente por conta dos scripts anexados.
 
 ## 7. Pendências / próximos passos
 
-- **Paridade STDIO ↔ Registry:** hoje o `McpServerManager` (STDIO) ainda registra as
-  ferramentas legadas diretamente no SDK; migrá-lo para consumir o `IgnisToolRegistry`
-  elimina a duplicação e garante o mesmo conjunto nos dois transportes.
+- ~~**Paridade STDIO ↔ Registry**~~ — **feito em 02/07/2026** (adapter genérico em
+  `McpServerManager.registerRegistryTools`; legadas duplicadas desregistradas).
+- ~~**Auditoria/log**~~ — **feito em 02/07/2026**: `IgnisToolRegistry.call()` loga
+  cada chamada (`[MCP] nome {args} -> ok/ERRO (Xms)`) via `System.out`, que o
+  Console do editor (`FxConsolePanel`) já captura e exibe ao vivo.
 - **Transporte MCP-over-HTTP oficial (SSE):** o bridge atual é um JSON/HTTP simples
   (suficiente para function-calling de LLMs). Para clientes MCP nativos por rede,
   avaliar o `HttpServletSseServerTransportProvider` do SDK.
@@ -338,6 +353,5 @@ movimento inteiramente por conta dos scripts anexados.
   rodada (foco em ferramentas que operam localmente/offline).
 - **Mais ferramentas:** UI com layout automático populando dinamicamente
   (data-binding), colisão com raycast exposto via MCP, câmera shake com tween.
-- **Auditoria/log:** painel no editor mostrando cada chamada de ferramenta recebida.
 
 Ver também: [[AGENTIC_AI_PLAN]] e [[COLLABORATION_GUIDE]].

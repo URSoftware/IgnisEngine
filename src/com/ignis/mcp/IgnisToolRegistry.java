@@ -135,13 +135,27 @@ public final class IgnisToolRegistry {
         ToolDef def = tools.get(name);
         if (def == null) throw new IllegalArgumentException("Ferramenta desconhecida: " + name);
         final JSONObject safeArgs = (arguments != null) ? arguments : new JSONObject();
-        return IgnisMcpBridge.runOnFxThread(() -> {
+        long startNanos = System.nanoTime();
+        String result = IgnisMcpBridge.runOnFxThread(() -> {
             try {
                 return def.handler.execute(safeArgs);
             } catch (Exception e) {
                 return "Erro ao executar '" + name + "': " + e.getMessage();
             }
         });
+        // Auditoria: cada chamada de agente aparece no Console do editor
+        // (FxConsolePanel captura System.out). Args truncados para nao inundar
+        // o log com conteudos grandes (ex: write_script).
+        long ms = (System.nanoTime() - startNanos) / 1_000_000;
+        String argsPreview = safeArgs.isEmpty() ? "" : " " + truncate(safeArgs.toString(), 120);
+        boolean isError = result != null && result.startsWith("Erro");
+        System.out.println("[MCP] " + name + argsPreview + " -> "
+                + (isError ? "ERRO" : "ok") + " (" + ms + "ms)");
+        return result;
+    }
+
+    private static String truncate(String s, int max) {
+        return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
     /** Serializa as definicoes das ferramentas (para o endpoint HTTP GET /mcp/tools). */
@@ -296,6 +310,24 @@ public final class IgnisToolRegistry {
                 } catch (Exception e) {
                     return "Erro ao gerar sprite: " + e.getMessage();
                 }
+            });
+
+        // remove_sprite_background (mesma logica do transporte STDIO, em ImageTools)
+        Map<String, String> removeBgProps = new LinkedHashMap<>();
+        removeBgProps.put("imagePath", "Caminho relativo da imagem (ex: assets/sprites/hero.png)");
+        removeBgProps.put("targetColorHex", "'auto' (detecta cores das bordas), uma cor '#ffffff' ou lista '#fff,#ccc'");
+        removeBgProps.put("tolerance", "Tolerancia de cor 0-255 (padrao 20)");
+        add("remove_sprite_background",
+            "Remove cor solida ou quadriculado (checkerboard) do fundo de uma imagem, deixando-a transparente (sobrescreve como PNG).",
+            schemaWith(removeBgProps, List.of("imagePath", "targetColorHex")),
+            args -> {
+                String imagePath = args.optString("imagePath", "");
+                File imgFile = resolveInProject(imagePath);
+                if (imgFile == null) return "Erro: imagePath invalido (caminho fora do projeto): " + imagePath;
+                int tolerance = Math.max(0, Math.min(255, args.optInt("tolerance", 20)));
+                String result = com.ignis.mcp.tools.ImageTools.removeBackground(
+                        imgFile, args.optString("targetColorHex", "auto"), tolerance);
+                return result.startsWith("Erro") ? result : result + " de " + imagePath;
             });
 
         registerAudioTools();

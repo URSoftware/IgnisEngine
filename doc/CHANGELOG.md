@@ -5,6 +5,16 @@
 
 ---
 
+## [1.0.9] - 2026-07-02
+
+### Corrigido
+- **Rotação dupla no render de GameObjects (motor 2D):** os dois pipelines de renderização (`Game.render()` legado/AWT e `Game.renderWorldTo()` do editor JavaFX) aplicavam a rotação da entidade **antes** de chamar `entity.render()`, mas todas as 7 formas concretas (`Square`, `Circle`, `Triangle`, `Star`, `Pentagon`, `Player`, `MergedShape`) já rotacionam internamente no próprio `render()`. Resultado: um objeto com rotação 30° era desenhado a 60°, desalinhado do contorno de seleção/gizmos (que rotacionam 1×) e da física de colisão (que usa o ângulo lógico 1×). A rotação externa foi removida dos dois pipelines — o desenho agora bate com o ângulo lógico, a seleção e os colliders.
+
+### Adicionado
+- **Paridade STDIO ↔ Registry no MCP:** `McpServerManager` agora serve o mesmo conjunto base do `IgnisToolRegistry` via adapter genérico (`registerRegistryTools`, ToolDef→SDK). As classes legadas `CoreTools`, `NoteTools` e `AnimationTools` foram desregistradas (duplicavam o registry; arquivos mantidos como histórico). Permanecem exclusivas do STDIO apenas `AudioTools` (processamento WAV) e `ImageTools` (documentos de imagem em camadas, com estado em memória).
+- **`remove_sprite_background` no registry HTTP:** a ferramenta de remoção de fundo (antes exclusiva do STDIO) foi portada para o `IgnisToolRegistry` com validação anti path-traversal — agora disponível no bridge HTTP/dashboard e nos dois transportes, a partir de uma única implementação compartilhada (`ImageTools.removeBackground`, extraída como método estático público). Total do registry: **67 ferramentas** (26 base + 41 com editor vivo).
+- **Log de auditoria das chamadas MCP:** `IgnisToolRegistry.call()` registra cada chamada de agente (`[MCP] nome {args truncados} -> ok/ERRO (Xms)`) via `System.out`, exibida ao vivo no Console do editor (`FxConsolePanel`) — fecha a pendência de auditoria documentada no guia do MCP.
+
 ## [1.0.8] - 2026-07-02
 
 ### Adicionado
