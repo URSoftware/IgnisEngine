@@ -5,6 +5,19 @@
 
 ---
 
+## [1.4.0] - 2026-07-03
+
+### Adicionado — Coordenação multi-agente pelo MCP
+Permite que **várias IAs** (ex.: Claude + Gemini) trabalhem no mesmo projeto ao mesmo tempo, **conversando e dividindo o trabalho pelo próprio MCP**, sem conflitos. Nova classe `com.ignis.mcp.McpCoordination` (singleton em memória) com quatro áreas: presença de agentes, mural de mensagens (broadcast e direcionadas, com `seq` para polling incremental), *claims* (reserva de recurso com expiração de 10 min) e quadro de tarefas.
+
+- **11 ferramentas MCP:** `agent_join`, `agent_list`, `send_message`, `read_messages`, `claim`, `release`, `list_claims`, `create_task`, `assign_task`, `complete_task`, `list_tasks`.
+- **Enforcement de conflito:** `write_script` e `create_script` aceitam um `agent` opcional; se o script (`script:<nome>`) estiver reservado por **outro** agente, a edição é recusada com instrução para combinar pelo mural. Sem `agent`, comportamento inalterado (retrocompatível).
+- Estado acessado sempre na thread de UI (via `IgnisMcpBridge`), logo serializado; ainda assim os métodos são `synchronized`. Validado por teste isolado (2 agentes: presença, claim negado, mensagens diretas/broadcast, release, tarefas).
+
+Fluxo típico: cada IA chama `agent_join` → o usuário cria tarefas (`create_task`) e as distribui (`assign_task`) → as IAs reservam o que vão editar (`claim`), conversam (`send_message`/`read_messages`) e liberam ao terminar (`release`). Total do registry: **95 ferramentas**.
+
+> Limitação: o estado é em memória (perde ao fechar o editor) — persistência em disco fica como follow-up. Próximo passo pedido pelo usuário: garantir a colaboração em tempo real (`com.ignis.collab`) 100%.
+
 ## [1.3.1] - 2026-07-03
 
 ### Corrigido

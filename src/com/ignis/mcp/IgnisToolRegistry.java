@@ -199,6 +199,19 @@ public final class IgnisToolRegistry {
         return new ScriptManager(projectFolder);
     }
 
+    // Coordenacao multi-agente: se 'agent' foi informado e o recurso esta reservado
+    // por OUTRO agente, retorna a mensagem de conflito (a ferramenta deve abortar).
+    // Retorna null quando pode prosseguir (sem agente, recurso livre, ou dono e voce).
+    private String coordConflict(String resource, String agent) {
+        if (agent == null || agent.trim().isEmpty()) return null;
+        String holder = McpCoordination.get().holderOf(resource);
+        if (holder != null && !holder.equalsIgnoreCase(agent.trim())) {
+            return "CONFLITO: '" + resource + "' esta reservado por " + holder
+                    + ". Combine pelo mural (send_message) antes de editar.";
+        }
+        return null;
+    }
+
     private void registerDefaults() {
         // get_project_tree
         add("get_project_tree",
@@ -232,27 +245,35 @@ public final class IgnisToolRegistry {
             });
 
         // write_script
+        Map<String, String> writeScriptProps = new LinkedHashMap<>();
+        writeScriptProps.put("scriptName", "Nome do script (ex: PlayerController)");
+        writeScriptProps.put("content", "Conteudo Java completo do script");
+        writeScriptProps.put("agent", "Seu nome de agente (opcional; respeita claim de outro agente)");
         add("write_script",
-            "Sobrescreve o conteudo-fonte de um script existente.",
-            schemaWith(new LinkedHashMap<>(Map.of(
-                    "scriptName", "Nome do script (ex: PlayerController)",
-                    "content", "Conteudo Java completo do script")),
-                List.of("scriptName", "content")),
+            "Sobrescreve o conteudo-fonte de um script existente. Respeita claim (coordenacao multi-agente) se 'agent' for informado.",
+            schemaWith(writeScriptProps, List.of("scriptName", "content")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
                 String content = args.optString("content", "");
                 if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
+                String conflict = coordConflict("script:" + name, args.optString("agent", ""));
+                if (conflict != null) return conflict;
                 boolean ok = scriptManager().saveScriptContent(name, content);
                 return ok ? "Script salvo: " + name : "Erro ao salvar script: " + name;
             });
 
         // create_script
+        Map<String, String> createScriptProps = new LinkedHashMap<>();
+        createScriptProps.put("scriptName", "Nome do novo script (ex: EnemyAI)");
+        createScriptProps.put("agent", "Seu nome de agente (opcional; respeita claim de outro agente)");
         add("create_script",
             "Cria um novo script Java a partir do template padrao do motor.",
-            schemaWith(Map.of("scriptName", "Nome do novo script (ex: EnemyAI)"), List.of("scriptName")),
+            schemaWith(createScriptProps, List.of("scriptName")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
                 if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
+                String conflict = coordConflict("script:" + name, args.optString("agent", ""));
+                if (conflict != null) return conflict;
                 boolean ok = scriptManager().createNewScript(name);
                 return ok ? "Script criado: " + name : "Erro: script ja existe ou nome invalido: " + name;
             });
@@ -334,6 +355,7 @@ public final class IgnisToolRegistry {
         registerAudioTools();
         registerAssetNoteTools();
         registerAnimationBaseTools();
+        registerCoordinationTools();
     }
 
     // Desenha um sprite procedural simples (forma + contorno + simbolo opcional) com fundo transparente.
@@ -720,6 +742,126 @@ public final class IgnisToolRegistry {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // ----------------------------------------------------------------------
+    // Coordenacao multi-agente (varias IAs trabalhando juntas pelo MCP).
+    // Estado compartilhado em McpCoordination. Ferramentas base (sempre ativas).
+    // ----------------------------------------------------------------------
+
+    private void registerCoordinationTools() {
+        final McpCoordination coord = McpCoordination.get();
+
+        // agent_join
+        Map<String, String> joinProps = new LinkedHashMap<>();
+        joinProps.put("agent", "Seu nome de agente (ex: Claude, Gemini)");
+        joinProps.put("role", "Papel/especialidade (opcional, ex: 'scripts', 'arte')");
+        add("agent_join",
+            "Registra sua presenca como agente e lista quem mais esta trabalhando no projeto. Chame ao comecar.",
+            schemaWith(joinProps, List.of("agent")),
+            args -> {
+                String agent = args.optString("agent", "").trim();
+                if (agent.isEmpty()) return "Erro: 'agent' obrigatorio.";
+                return coord.join(agent, args.optString("role", ""));
+            });
+
+        // agent_list
+        add("agent_list",
+            "Lista os agentes registrados e se estao ativos (presenca).",
+            objectSchema(),
+            args -> coord.listAgents());
+
+        // send_message
+        Map<String, String> msgProps = new LinkedHashMap<>();
+        msgProps.put("from", "Seu nome de agente");
+        msgProps.put("text", "Mensagem");
+        msgProps.put("to", "Destinatario (opcional; vazio = para todos)");
+        add("send_message",
+            "Envia uma mensagem no mural compartilhado para coordenar com os outros agentes (e o usuario).",
+            schemaWith(msgProps, List.of("from", "text")),
+            args -> {
+                String from = args.optString("from", "").trim();
+                if (from.isEmpty()) return "Erro: 'from' obrigatorio.";
+                return coord.sendMessage(from, args.optString("to", ""), args.optString("text", ""));
+            });
+
+        // read_messages
+        Map<String, String> readProps = new LinkedHashMap<>();
+        readProps.put("agent", "Seu nome de agente (recebe broadcast + mensagens a voce)");
+        readProps.put("since", "Ultimo seq lido (opcional; 0 = tudo). Use o lastSeq retornado.");
+        add("read_messages",
+            "Le as mensagens novas do mural (broadcast + direcionadas a voce). Faca polling passando o 'since'.",
+            schemaWith(readProps, List.of("agent")),
+            args -> {
+                String agent = args.optString("agent", "").trim();
+                if (agent.isEmpty()) return "Erro: 'agent' obrigatorio.";
+                return coord.readMessages(agent, args.optLong("since", 0));
+            });
+
+        // claim
+        Map<String, String> claimProps = new LinkedHashMap<>();
+        claimProps.put("agent", "Seu nome de agente");
+        claimProps.put("resource", "Recurso a reservar (ex: script:PlayerController, objeto:Hero)");
+        add("claim",
+            "Reserva um recurso (script/objeto/area) para voce trabalhar, evitando que outro agente mexa junto.",
+            schemaWith(claimProps, List.of("agent", "resource")),
+            args -> {
+                String agent = args.optString("agent", "").trim();
+                String resource = args.optString("resource", "").trim();
+                if (agent.isEmpty() || resource.isEmpty()) return "Erro: 'agent' e 'resource' obrigatorios.";
+                return coord.claim(agent, resource);
+            });
+
+        // release
+        add("release",
+            "Libera um recurso que voce havia reservado.",
+            schemaWith(claimProps, List.of("agent", "resource")),
+            args -> {
+                String agent = args.optString("agent", "").trim();
+                String resource = args.optString("resource", "").trim();
+                if (agent.isEmpty() || resource.isEmpty()) return "Erro: 'agent' e 'resource' obrigatorios.";
+                return coord.release(agent, resource);
+            });
+
+        // list_claims
+        add("list_claims",
+            "Lista os recursos reservados no momento e por quem.",
+            objectSchema(),
+            args -> coord.listClaims());
+
+        // create_task
+        Map<String, String> taskProps = new LinkedHashMap<>();
+        taskProps.put("title", "Titulo da tarefa");
+        taskProps.put("description", "Detalhe (opcional)");
+        add("create_task",
+            "Cria uma tarefa no quadro compartilhado (o usuario usa para dividir o trabalho entre os agentes).",
+            schemaWith(taskProps, List.of("title")),
+            args -> {
+                String title = args.optString("title", "").trim();
+                if (title.isEmpty()) return "Erro: 'title' obrigatorio.";
+                return coord.createTask(title, args.optString("description", ""));
+            });
+
+        // assign_task
+        Map<String, String> assignProps = new LinkedHashMap<>();
+        assignProps.put("id", "Numero da tarefa");
+        assignProps.put("agent", "Agente responsavel");
+        add("assign_task",
+            "Atribui uma tarefa a um agente (marca como em andamento).",
+            schemaWith(assignProps, List.of("id", "agent")),
+            args -> coord.assignTask(args.optInt("id", -1), args.optString("agent", "").trim()));
+
+        // complete_task
+        add("complete_task",
+            "Marca uma tarefa como concluida.",
+            schemaWith(Map.of("id", "Numero da tarefa"), List.of("id")),
+            args -> coord.completeTask(args.optInt("id", -1)));
+
+        // list_tasks
+        add("list_tasks",
+            "Lista as tarefas do quadro compartilhado com status e responsavel.",
+            objectSchema(),
+            args -> coord.listTasks());
     }
 
     private File notesFolder() {
