@@ -18,10 +18,16 @@ public class Scene {
 
     private String sceneName;
     private List<GameObject> entities;
-    
+
     // Camera reference for the scene
     private Camera activeCamera;
     private List<Camera> cameras = new ArrayList<>();
+
+    // Mundo da cena (limites do mapa + barreiras). Pode ser null (sem mundo).
+    private World world = null;
+
+    public World getWorld() { return world; }
+    public void setWorld(World world) { this.world = world; }
     
     // Stores pending script variables to be applied when scripts are instantiated
     // Key: entity ID + ":" + scriptName, Value: variable values JSON
@@ -125,6 +131,7 @@ public class Scene {
             entityJson.put("flipY", entity.isFlipY());
             entityJson.put("scaleX", entity.getScaleX());
             entityJson.put("scaleY", entity.getScaleY());
+            entityJson.put("worldCollision", entity.isWorldCollision());
 
             if (entity.getSpritePath() != null) {
                 entityJson.put("sprite", entity.getSpritePath());
@@ -168,6 +175,11 @@ public class Scene {
             entitiesArray.put(entityJson);
         }
         json.put("entities", entitiesArray);
+
+        // Mundo da cena (limites + barreiras), se houver.
+        if (world != null) {
+            json.put("world", world.toJSON());
+        }
 
         return json;
     }
@@ -216,6 +228,7 @@ public class Scene {
             entity.setFlipY(entityJson.optBoolean("flipY", false));
             entity.setScaleX(entityJson.optDouble("scaleX", 1.0));
             entity.setScaleY(entityJson.optDouble("scaleY", 1.0));
+            entity.setWorldCollision(entityJson.optBoolean("worldCollision", false));
 
             if (entityJson.has("sprite")) {
                 entity.setSpritePath(entityJson.getString("sprite"));
@@ -272,9 +285,14 @@ public class Scene {
             }
         }
 
+        // Mundo da cena (limites + barreiras), se serializado.
+        if (json.has("world")) {
+            scene.setWorld(World.fromJSON(json.getJSONObject("world")));
+        }
+
         return scene;
     }
-    
+
     /**
      * Applies pending script variables to a script instance.
      * This should be called after scripts are instantiated.

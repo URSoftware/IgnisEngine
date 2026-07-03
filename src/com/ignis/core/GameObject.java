@@ -27,6 +27,10 @@ public abstract class GameObject {
     protected double scaleX = 1.0;           // multiplicador visual de largura
     protected double scaleY = 1.0;           // multiplicador visual de altura
     protected int zIndex = 0;                // ordem de render (maior = na frente)
+
+    // Se true, o Game clampa a posicao deste objeto contra os limites e barreiras
+    // do World ativo a cada tick (Fase 1 do sistema de mundos). Default: desligado.
+    protected boolean worldCollision = false;
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
@@ -113,6 +117,9 @@ public abstract class GameObject {
 
     public int getZIndex() { return zIndex; }
     public void setZIndex(int zIndex) { this.zIndex = zIndex; }
+
+    public boolean isWorldCollision() { return worldCollision; }
+    public void setWorldCollision(boolean worldCollision) { this.worldCollision = worldCollision; }
 
     public abstract void tick();
 

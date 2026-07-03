@@ -1150,6 +1150,19 @@ public class Game extends Canvas implements Runnable {
                 entity.tickScripts();
             }
 
+            // Resolve limites/barreiras do World para objetos com worldCollision.
+            // Usa o transform anterior (prevX/prevY) como origem do movimento.
+            if (world != null && world.isActive()) {
+                for (int i = 0; i < entities.size(); i++) {
+                    GameObject e = entities.get(i);
+                    if (!e.isWorldCollision() || e instanceof Camera) continue;
+                    double[] r = world.resolveMovement(e.getPrevX(), e.getPrevY(),
+                            e.getX(), e.getY(), e.getWidth(), e.getHeight());
+                    e.setX(r[0]);
+                    e.setY(r[1]);
+                }
+            }
+
             // Run collision detection using the advanced collision system
             if (collisionManager != null) {
                 collisionManager.update();
@@ -1159,6 +1172,12 @@ public class Game extends Canvas implements Runnable {
             Camera activeCam = getActiveCamera();
             if (activeCam != null) {
                 activeCam.update(1.0 / 60.0);
+                // Limites do mundo mandam na camera: ela nao mostra alem do mapa.
+                // Clampe DIRETO na posicao final (funciona com follow, shake ou
+                // posicionamento manual por script — independe de cam.update()).
+                if (world != null && world.hasBounds()) {
+                    clampCameraToWorld(activeCam);
+                }
             }
 
             // Marca o instante do tick para o calculo do alpha de interpolacao.
@@ -1241,6 +1260,79 @@ public class Game extends Canvas implements Runnable {
     // retangulo visivel da camera. Conservador — usa a diagonal como meio-lado
     // (cobre qualquer rotacao do objeto) e uma folga fixa, entao nunca corta algo
     // parcialmente visivel. So chamado quando a transform de camera esta aplicada.
+    // ---- Sistema de mundos (Fase 1: limites + barreiras) ----
+    private World world = null;
+
+    public World getWorld() { return world; }
+    public void setWorld(World world) { this.world = world; }
+
+    /** Retorna o World ativo, criando um vazio se ainda nao houver. */
+    public World getOrCreateWorld() {
+        if (world == null) world = new World();
+        return world;
+    }
+
+    // Clampa a posicao da camera para que o retangulo visivel nao ultrapasse os
+    // limites do mundo (inset por metade da area visivel). Se o mundo e menor que
+    // a tela naquele eixo, centraliza. Chamado por tick() quando o World tem bounds.
+    private void clampCameraToWorld(Camera cam) {
+        double halfVisW = (getWidth() / 2.0) / Math.max(0.0001, cam.getZoom());
+        double halfVisH = (getHeight() / 2.0) / Math.max(0.0001, cam.getZoom());
+        double x = cam.getX(), y = cam.getY();
+        if (world.getMaxX() - world.getMinX() <= 2 * halfVisW) {
+            x = (world.getMinX() + world.getMaxX()) / 2.0;
+        } else {
+            x = Math.max(world.getMinX() + halfVisW, Math.min(world.getMaxX() - halfVisW, x));
+        }
+        if (world.getMaxY() - world.getMinY() <= 2 * halfVisH) {
+            y = (world.getMinY() + world.getMaxY()) / 2.0;
+        } else {
+            y = Math.max(world.getMinY() + halfVisH, Math.min(world.getMaxY() - halfVisH, y));
+        }
+        if (x != cam.getX() || y != cam.getY()) cam.setPosition(x, y);
+    }
+
+    // Desenha, no espaco do mundo, os limites do mapa (contorno) e as celulas de
+    // barreira (preenchimento vermelho translucido) — feedback visual no editor.
+    private void drawWorldOverlay(Graphics2D g2d) {
+        if (world == null) return;
+        // Barreiras: so as celulas dentro do retangulo visivel (culling barato).
+        if (world.getBlockedCount() > 0) {
+            double[] vis = null;
+            Camera cam = getActiveCamera();
+            if (cam != null) vis = cam.getVisibleWorldBounds();
+            int cs = world.getCellSize();
+            int c0, c1, r0, r1;
+            if (vis != null) {
+                c0 = world.cellCol(vis[0]); c1 = world.cellCol(vis[2]);
+                r0 = world.cellRow(vis[1]); r1 = world.cellRow(vis[3]);
+            } else {
+                c0 = r0 = -200; c1 = r1 = 200; // fallback limitado
+            }
+            g2d.setColor(new Color(220, 60, 60, 90));
+            java.awt.Color border = new Color(220, 60, 60, 160);
+            for (int c = c0; c <= c1; c++) {
+                for (int r = r0; r <= r1; r++) {
+                    if (!world.isCellBlocked(c, r)) continue;
+                    int cx = c * cs, cy = r * cs;
+                    g2d.setColor(new Color(220, 60, 60, 90));
+                    g2d.fillRect(cx, cy, cs, cs);
+                    g2d.setColor(border);
+                    g2d.drawRect(cx, cy, cs, cs);
+                }
+            }
+        }
+        // Limites do mapa: contorno azul-claro.
+        if (world.hasBounds()) {
+            g2d.setColor(new Color(80, 170, 255, 220));
+            g2d.setStroke(new java.awt.BasicStroke(2f));
+            int bx = (int) world.getMinX(), by = (int) world.getMinY();
+            int bw = (int) (world.getMaxX() - world.getMinX());
+            int bh = (int) (world.getMaxY() - world.getMinY());
+            g2d.drawRect(bx, by, bw, bh);
+        }
+    }
+
     private boolean isCulled(Camera cam, GameObject e) {
         if (cam == null) return false;
         double[] b = cam.getVisibleWorldBounds(); // [minX, minY, maxX, maxY]
@@ -1504,6 +1596,14 @@ public class Game extends Canvas implements Runnable {
             entity.render(g2d);
             g2d.setTransform(entityTransform);
             g2d.setComposite(oldComposite);
+        }
+
+        // Overlay do World (limites do mapa + barreiras) — so no editor, para o dev
+        // ver e ajustar. No espaco do mundo (transform de camera aplicada).
+        if (gameState == GameState.EDITING && world != null && world.isActive() && shouldApplyCameraTransform) {
+            AffineTransform worldTransform = g2d.getTransform();
+            drawWorldOverlay(g2d);
+            g2d.setTransform(worldTransform);
         }
 
         // Debug de colliders (espaco do mundo) — espelha o render() do editor Swing.

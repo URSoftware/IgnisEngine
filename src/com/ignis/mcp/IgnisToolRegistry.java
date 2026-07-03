@@ -12,6 +12,7 @@ import com.ignis.core.IgnisScript;
 import com.ignis.core.IgnisSoundEngine;
 import com.ignis.core.PrefabManager;
 import com.ignis.core.ScriptManager;
+import com.ignis.core.World;
 import com.ignis.core.ui.UIButton;
 import com.ignis.core.ui.UICanvas;
 import com.ignis.core.ui.UIComponent;
@@ -1016,6 +1017,7 @@ public final class IgnisToolRegistry {
         registerUiDirectTools();
         registerGameObjectExtraTools();
         registerSceneInfoTools();
+        registerWorldTools();
     }
 
     // ----------------------------------------------------------------------
@@ -1778,6 +1780,174 @@ public final class IgnisToolRegistry {
                         + "\nobjetos: " + liveGame.getEntities().size()
                         + "\ncameras: " + liveGame.getCameras().size()
                         + "\ncamera ativa: " + (active != null ? active.getCameraName() : "(nenhuma)");
+            });
+    }
+
+    // ----------------------------------------------------------------------
+    // Sistema de mundos (Fase 1: limites do mapa + barreiras em grade)
+    // ----------------------------------------------------------------------
+
+    private void registerWorldTools() {
+        // set_world_bounds
+        Map<String, String> boundsProps = new LinkedHashMap<>();
+        boundsProps.put("minX", "Limite esquerdo do mapa (mundo)");
+        boundsProps.put("minY", "Limite superior");
+        boundsProps.put("maxX", "Limite direito");
+        boundsProps.put("maxY", "Limite inferior");
+        add("set_world_bounds",
+            "Define os limites do mapa (retangulo). Objetos com world_collision e a camera ficam contidos nele.",
+            schemaWith(boundsProps, List.of("minX", "minY", "maxX", "maxY")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getOrCreateWorld();
+                w.setBounds(args.optDouble("minX"), args.optDouble("minY"),
+                            args.optDouble("maxX"), args.optDouble("maxY"));
+                if (refreshHook != null) refreshHook.run();
+                return "Limites do mundo: (" + (int) w.getMinX() + "," + (int) w.getMinY() + ") -> ("
+                        + (int) w.getMaxX() + "," + (int) w.getMaxY() + ")";
+            });
+
+        // clear_world_bounds
+        add("clear_world_bounds",
+            "Remove os limites do mapa (o mundo passa a ser infinito).",
+            objectSchema(),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                if (liveGame.getWorld() != null) liveGame.getWorld().clearBounds();
+                if (refreshHook != null) refreshHook.run();
+                return "Limites do mundo removidos.";
+            });
+
+        // set_world_grid
+        add("set_world_grid",
+            "Define o tamanho (px) das celulas da grade de barreiras.",
+            schemaWith(Map.of("cellSize", "Tamanho da celula em px (ex: 64)"), List.of("cellSize")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getOrCreateWorld();
+                w.setCellSize(args.optInt("cellSize", 64));
+                if (refreshHook != null) refreshHook.run();
+                return "Tamanho da celula: " + w.getCellSize() + "px";
+            });
+
+        // block_rect
+        Map<String, String> rectProps = new LinkedHashMap<>();
+        rectProps.put("x", "X do canto do retangulo (mundo)");
+        rectProps.put("y", "Y do canto");
+        rectProps.put("width", "Largura do retangulo");
+        rectProps.put("height", "Altura do retangulo");
+        add("block_rect",
+            "Marca como barreira (solido) todas as celulas que tocam um retangulo do mundo — 'desenhar' uma parede.",
+            schemaWith(rectProps, List.of("x", "y", "width", "height")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getOrCreateWorld();
+                int n = w.blockRect(args.optDouble("x"), args.optDouble("y"),
+                                    args.optDouble("width"), args.optDouble("height"));
+                if (refreshHook != null) refreshHook.run();
+                return "Barreira aplicada (" + n + " celulas). Total: " + w.getBlockedCount();
+            });
+
+        // unblock_rect
+        add("unblock_rect",
+            "Remove barreiras de todas as celulas que tocam um retangulo do mundo.",
+            schemaWith(rectProps, List.of("x", "y", "width", "height")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                if (liveGame.getWorld() == null) return "Sem mundo definido.";
+                int n = liveGame.getWorld().unblockRect(args.optDouble("x"), args.optDouble("y"),
+                                    args.optDouble("width"), args.optDouble("height"));
+                if (refreshHook != null) refreshHook.run();
+                return "Barreiras removidas (" + n + " celulas). Total: " + liveGame.getWorld().getBlockedCount();
+            });
+
+        // block_cell
+        Map<String, String> cellProps = new LinkedHashMap<>();
+        cellProps.put("col", "Coluna da celula (indice inteiro)");
+        cellProps.put("row", "Linha da celula (indice inteiro)");
+        add("block_cell",
+            "Marca uma unica celula da grade como barreira (por indice col,row).",
+            schemaWith(cellProps, List.of("col", "row")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getOrCreateWorld();
+                w.blockCell(args.optInt("col"), args.optInt("row"));
+                if (refreshHook != null) refreshHook.run();
+                return "Celula (" + args.optInt("col") + "," + args.optInt("row") + ") bloqueada. Total: " + w.getBlockedCount();
+            });
+
+        // unblock_cell
+        add("unblock_cell",
+            "Remove a barreira de uma unica celula da grade (por indice col,row).",
+            schemaWith(cellProps, List.of("col", "row")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                if (liveGame.getWorld() == null) return "Sem mundo definido.";
+                liveGame.getWorld().unblockCell(args.optInt("col"), args.optInt("row"));
+                if (refreshHook != null) refreshHook.run();
+                return "Celula (" + args.optInt("col") + "," + args.optInt("row") + ") liberada.";
+            });
+
+        // clear_barriers
+        add("clear_barriers",
+            "Remove todas as barreiras do mundo (mantem os limites).",
+            objectSchema(),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                if (liveGame.getWorld() != null) liveGame.getWorld().clearBarriers();
+                if (refreshHook != null) refreshHook.run();
+                return "Barreiras limpas.";
+            });
+
+        // set_object_world_collision
+        Map<String, String> wcProps = new LinkedHashMap<>();
+        wcProps.put("name", "Nome do objeto (ex: Hero)");
+        wcProps.put("enabled", "true para o objeto colidir com limites/barreiras do mundo");
+        add("set_object_world_collision",
+            "Liga/desliga a colisao de um objeto com os limites e barreiras do mundo (tipicamente o jogador).",
+            schemaWith(wcProps, List.of("name", "enabled")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                go.setWorldCollision(args.optBoolean("enabled", true));
+                return "world_collision de " + go.getName() + " = " + go.isWorldCollision();
+            });
+
+        // set_world_property
+        Map<String, String> wpProps = new LinkedHashMap<>();
+        wpProps.put("name", "Nome do mundo (opcional)");
+        wpProps.put("ambientColor", "Cor ambiente em hex, ex: #204060 (opcional; vazio remove)");
+        add("set_world_property",
+            "Ajusta propriedades do mundo: nome e cor ambiente.",
+            schemaWith(wpProps, List.of()),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getOrCreateWorld();
+                if (args.has("name")) w.setName(args.optString("name"));
+                if (args.has("ambientColor")) {
+                    String hex = args.optString("ambientColor", "").trim();
+                    w.setAmbientColor(hex.isEmpty() ? null : safeColor(hex, null));
+                }
+                return "Mundo '" + w.getName() + "' atualizado.";
+            });
+
+        // get_world_info
+        add("get_world_info",
+            "Retorna o estado do mundo: nome, limites, tamanho da celula e numero de barreiras.",
+            objectSchema(),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                World w = liveGame.getWorld();
+                if (w == null) return "(nenhum mundo definido)";
+                StringBuilder sb = new StringBuilder();
+                sb.append("nome: ").append(w.getName()).append('\n');
+                sb.append("limites: ").append(w.hasBounds()
+                        ? "(" + (int) w.getMinX() + "," + (int) w.getMinY() + ") -> ("
+                          + (int) w.getMaxX() + "," + (int) w.getMaxY() + ")"
+                        : "(sem limites)").append('\n');
+                sb.append("cellSize: ").append(w.getCellSize()).append("px\n");
+                sb.append("barreiras: ").append(w.getBlockedCount()).append(" celulas");
+                return sb.toString();
             });
     }
 

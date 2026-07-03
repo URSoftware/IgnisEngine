@@ -722,6 +722,8 @@ public class IgnisEditorApp extends Application {
                     e.setGame(game);
                     game.addEntity(e);
                 }
+                // Carrega o mundo (limites/barreiras) da cena para o game vivo.
+                game.setWorld(scene.getWorld());
             }
             // Compila e recarrega os scripts para instanciá-los e carregar suas variáveis no editor
             com.ignis.core.ScriptManager sm = game.getScriptManager();
@@ -866,6 +868,8 @@ public class IgnisEditorApp extends Application {
         if (scene == null) return;
         scene.clear();
         for (GameObject e : game.getEntities()) scene.addEntity(e);
+        // Sincroniza o mundo vivo (limites/barreiras) para persistir no .ignis.
+        scene.setWorld(game.getWorld());
     }
 
     // Fecha o projeto atual e volta para a tela de selecao (espelha o ramo sem-projeto

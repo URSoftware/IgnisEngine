@@ -5,6 +5,18 @@
 
 ---
 
+## [1.3.0] - 2026-07-03
+
+### Sistema de Mundos — Fase 1 (limites + barreiras + colisão)
+Nova mecânica de mundo (vault: `ignisengine-sistema-de-mundos`), a partir do feedback de que o jogador não conseguia percorrer/enxergar o mapa todo e faltavam barreiras.
+
+- **Classe `com.ignis.core.World`:** limites do mapa (retângulo opcional) + grade de barreiras (`cellSize` + células sólidas), com colisão AABB resolvida **por eixo** (`resolveMovement` — permite deslizar em parede), propriedades (nome, cor ambiente) e serialização.
+- **Integração no motor:** `Game` tem um World vivo; `GameObject.worldCollision` (flag opt-in) faz o `tick()` clampar a posição contra limites/barreiras (usa `prevX/prevY` da interpolação como origem do movimento). A **câmera deixa de mostrar além do mapa**: quando há limites, o Game clampa a posição da câmera ativa a um retângulo *inset* pela metade da área visível (resolve "visibilidade centralizada") — funciona com follow, shake ou posicionamento manual por script. **Overlay no editor**: limites (contorno azul) e barreiras (células vermelhas) desenhados em modo de edição.
+- **Serialização:** o World é salvo junto da cena (`Scene.toJSON/fromJSON`) e o flag `worldCollision` por objeto; `IgnisEditorApp` sincroniza `game.world ↔ scene.world` no load/save. Também passou a serializar o `worldCollision` no nível do Scene.
+- **11 ferramentas MCP:** `set_world_bounds`, `clear_world_bounds`, `set_world_grid`, `block_rect`, `unblock_rect`, `block_cell`, `unblock_cell`, `clear_barriers`, `set_object_world_collision`, `set_world_property`, `get_world_info`. Total do registry: **84 ferramentas**.
+
+> Fase 2 (interiores/áreas trocáveis, portais, propriedades por mundo, persistência do jogador entre áreas) e Fase 1.5 (pintar barreiras arrastando o mouse no editor) estão desenhadas no plano do vault. Limitações da Fase 1: a colisão testa a posição-alvo (não o trajeto — risco de tunelar a velocidades > 1 célula/tick) e teleportar um objeto com `world_collision` para dentro de uma parede é revertido.
+
 ## [1.2.0] - 2026-07-02
 
 ### Motor gráfico 2D — Fase B (fundações de cena)
