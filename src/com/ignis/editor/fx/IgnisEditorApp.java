@@ -2652,6 +2652,56 @@ public class IgnisEditorApp extends Application {
             return cb;
         } else if (GameObject.class.isAssignableFrom(type)) {
             return createGameObjectEditorFx(script, field);
+        } else if (type == com.ignis.core.Texture2D.class) {
+            HBox panel = new HBox(4);
+            panel.setAlignment(Pos.CENTER_LEFT);
+            HBox.setHgrow(panel, Priority.ALWAYS);
+            
+            Label pathLabel = new Label();
+            pathLabel.getStyleClass().add("field-label");
+            pathLabel.setMaxWidth(160);
+            pathLabel.setWrapText(false);
+            
+            try {
+                field.setAccessible(true);
+                com.ignis.core.Texture2D tex = (com.ignis.core.Texture2D) field.get(script);
+                pathLabel.setText(tex != null ? tex.getPath() : "(nenhuma)");
+            } catch (Exception ignore) {}
+            
+            Button pick = new Button("...");
+            pick.setStyle("-fx-min-width: 24px;");
+            pick.setOnAction(e -> {
+                File f = chooseSpriteFile();
+                if (f != null) {
+                    String relative = importSpriteToProject(f);
+                    try {
+                        field.setAccessible(true);
+                        field.set(script, new com.ignis.core.Texture2D(relative));
+                        pathLabel.setText(relative);
+                        saveScriptVariablesToPending(script);
+                        markProjectDirty();
+                    } catch (Exception ex) {
+                        System.err.println("Erro ao definir Texture2D: " + ex.getMessage());
+                    }
+                }
+            });
+            
+            Button clear = new Button("X");
+            clear.setStyle("-fx-min-width: 24px;");
+            clear.setOnAction(e -> {
+                try {
+                    field.setAccessible(true);
+                    field.set(script, null);
+                    pathLabel.setText("(nenhuma)");
+                    saveScriptVariablesToPending(script);
+                    markProjectDirty();
+                } catch (Exception ex) {
+                    System.err.println("Erro ao limpar Texture2D: " + ex.getMessage());
+                }
+            });
+            
+            panel.getChildren().addAll(pathLabel, pick, clear);
+            return panel;
         } else {
             TextField tf = new TextField();
             try {

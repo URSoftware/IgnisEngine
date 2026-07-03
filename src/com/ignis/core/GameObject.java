@@ -305,6 +305,54 @@ public abstract class GameObject {
     // ==================== SISTEMA DE SCRIPTS ====================
     
     /**
+     * Adiciona um componente a este GameObject.
+     * @param component O componente a ser adicionado.
+     */
+    public void addComponent(Component component) {
+        if (component instanceof IgnisScript) {
+            addScript((IgnisScript) component);
+        }
+    }
+
+    /**
+     * Busca e retorna o primeiro componente que corresponda a classe informada.
+     * Retorna null se nao encontrar.
+     */
+    public <T extends Component> T getComponent(Class<T> componentClass) {
+        for (IgnisScript script : scripts) {
+            if (componentClass.isInstance(script)) {
+                return componentClass.cast(script);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Propaga o ciclo de update para todos os componentes anexados habilitados.
+     */
+    public void update(float deltaTime) {
+        for (int i = 0; i < scripts.size(); i++) {
+            IgnisScript script = scripts.get(i);
+            if (script.isEnabled()) {
+                script.update(deltaTime);
+            }
+        }
+    }
+
+    /**
+     * Tenta renderizar o SpriteComponent anexado.
+     * @return true se o SpriteComponent foi renderizado, false caso contrario.
+     */
+    public boolean renderSpriteComponent(java.awt.Graphics g) {
+        SpriteComponent spriteComp = getComponent(SpriteComponent.class);
+        if (spriteComp != null) {
+            spriteComp.draw((java.awt.Graphics2D) g);
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Adiciona um script a este GameObject
      * @param script O script a ser adicionado
      */
@@ -312,6 +360,7 @@ public abstract class GameObject {
         if (script != null && !scripts.contains(script)) {
             scripts.add(script);
             script.init(this, game);
+            script.callAwake(); // Inicializa imediatamente
             
             // Armazenar nome para serialização
             String scriptName = script.getScriptName();
@@ -320,7 +369,7 @@ public abstract class GameObject {
             }
         }
     }
-    
+
     /**
      * Remove um script deste GameObject
      * @param script O script a ser removido

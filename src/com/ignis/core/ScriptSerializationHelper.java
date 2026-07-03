@@ -49,7 +49,6 @@ public final class ScriptSerializationHelper {
         }
         return fieldList;
     }
-
     /**
      * Checks if a field type is supported for serialization.
      */
@@ -60,6 +59,7 @@ public final class ScriptSerializationHelper {
                type == long.class || type == Long.class ||
                type == boolean.class || type == Boolean.class ||
                type == String.class ||
+               type == Texture2D.class ||
                GameObject.class.isAssignableFrom(type);
     }
 
@@ -84,6 +84,9 @@ public final class ScriptSerializationHelper {
                     type == boolean.class || type == Boolean.class ||
                     type == String.class) {
                     variables.put(field.getName(), value);
+                } else if (type == Texture2D.class) {
+                    Texture2D tex = (Texture2D) value;
+                    variables.put(field.getName(), tex.getPath());
                 } else if (GameObject.class.isAssignableFrom(type)) {
                     GameObject ref = (GameObject) value;
                     JSONObject refData = new JSONObject();
@@ -128,8 +131,8 @@ public final class ScriptSerializationHelper {
                             GameObject referenced = resolver.resolve(refName);
                             if (referenced != null) {
                                 field.set(script, referenced);
-                            }
-                        }
+                             }
+                         }
                     } else if (type == int.class || type == Integer.class) {
                         field.set(script, variables.getInt(fieldName));
                     } else if (type == double.class || type == Double.class) {
@@ -142,6 +145,11 @@ public final class ScriptSerializationHelper {
                         field.set(script, variables.getBoolean(fieldName));
                     } else if (type == String.class) {
                         field.set(script, variables.getString(fieldName));
+                    } else if (type == Texture2D.class) {
+                        String path = variables.optString(fieldName, "");
+                        if (!path.isEmpty()) {
+                            field.set(script, new Texture2D(path));
+                        }
                     }
                 } catch (Exception ex) {
                     System.err.println("Failed to load field " + fieldName + ": " + ex.getMessage());

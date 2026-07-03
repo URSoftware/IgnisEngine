@@ -2,8 +2,20 @@
 
 > Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 > O formato é baseado no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e este projeto segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
-
 ---
+
+## [1.8.0] - 2026-07-03
+
+### Adicionado
+- **Arquitetura Entidade-Componente (EC) Unificada:** Criacao da classe abstrata `Component` contendo `gameObject` e hooks de ciclo de vida (`awake()`, `start()`, `update(deltaTime)`).
+- **Integracao de IgnisScript com Component:** `IgnisScript` passa a herdar de `Component`, removendo campos locais e adotando o gerenciamento robusto de `awoken` para evitar execuções redundantes.
+- **Metodos de Componentes em GameObject:** Adicionados os metodos `getComponent(Class<T>)`, `addComponent(Component)` e `update(float)` para obter, adicionar e atualizar pecas modulares acopladas.
+- **Componente SpriteComponent:** Componente especializado de renderizacao que desenha texturas respeitando posicao, escala, flip e rotacao do pai. Integrado de forma transparente em todas as formas geometricas (`Square`, `Circle`, etc.) para permitir renderizacao totalmente desacoplada se anexado.
+- **Componente InputComponent:** Componente de movimentacao por teclado (W, A, S, D) que atualiza a transformacao do GameObject usando velocidade e delta time.
+- **Classe Texture2D e Suporte no Inspector:** Wrapper `Texture2D` com suporte de serializacao em JSON. O Inspector do JavaFX (`IgnisEditorApp`) foi atualizado para exibir campos `Texture2D` com um seletor visual nativo de arquivos e botao de limpeza.
+
+### Corrigido
+- **Ambiguidade de Tipo em Editor.java:** Resolvido conflito de compilacao entre `java.awt.Component` e `com.ignis.core.Component` importando explicitamente a classe AWT.
 
 ## [1.7.0] - 2026-07-03
 

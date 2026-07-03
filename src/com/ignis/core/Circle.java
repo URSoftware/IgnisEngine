@@ -35,10 +35,10 @@ public class Circle extends GameObject {
         // No automatic movement logic
         // Movement will be done by user scripts
     }
-
     @Override
     public void render(Graphics g) {
         if (!visible) return;
+        if (renderSpriteComponent(g)) return;
         
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

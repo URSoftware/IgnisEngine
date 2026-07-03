@@ -36,10 +36,10 @@ public class Star extends GameObject {
         // No automatic movement logic
         // Movement will be done by user scripts
     }
-
     @Override
     public void render(Graphics g) {
         if (!visible) return;
+        if (renderSpriteComponent(g)) return;
         
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -47,8 +47,6 @@ public class Star extends GameObject {
         
         // Save original transform
         AffineTransform oldTransform = g2d.getTransform();
-        
-        // Apply rotation around center
         double centerX = x + width / 2.0;
         double centerY = y + height / 2.0;
         if (rotation != 0) {

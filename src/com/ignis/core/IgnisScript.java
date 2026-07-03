@@ -7,14 +7,14 @@ import java.awt.Color;
  * Classe base para scripts do motor Ignis.
  * Estenda esta classe para criar comportamentos personalizados.
  */
-public abstract class IgnisScript {
+public abstract class IgnisScript extends Component {
 
     // Referências do contexto
-    protected GameObject gameObject;
     protected Transform transform;
     protected Game game;
     
     // Estado interno
+    private boolean awoken = false;
     private boolean started = false;
     private boolean enabled = true;
     private String scriptName;
@@ -77,14 +77,26 @@ public abstract class IgnisScript {
     /**
      * Chamado quando colide com outro objeto.
      */
-    public void onCollision(GameObject other) {}
+    public void onCollision(GameObject other) {
+    }
 
     // ==================== MÉTODOS INTERNOS ====================
+
+    public final void callAwake() {
+        if (!awoken) {
+            awake();
+            awoken = true;
+        }
+    }
 
     public final void internalTick() {
         if (!enabled) return;
         
         transform.sync();
+        
+        if (!awoken) {
+            callAwake();
+        }
         
         if (!started) {
             start();
@@ -92,12 +104,14 @@ public abstract class IgnisScript {
         }
         
         tick();
+        update((float) getDeltaTime());
         
         transform.apply();
     }
 
     public final void reset() {
         started = false;
+        awoken = false;
     }
 
     // ==================== GETTERS/SETTERS ====================

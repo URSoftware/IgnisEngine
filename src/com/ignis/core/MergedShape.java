@@ -165,10 +165,10 @@ public class MergedShape extends GameObject {
     public void tick() {
         // No automatic movement logic
     }
-
     @Override
     public void render(Graphics g) {
         if (!visible) return;
+        if (renderSpriteComponent(g)) return;
         
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

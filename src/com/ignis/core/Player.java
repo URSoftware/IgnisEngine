@@ -34,14 +34,14 @@ public class Player extends GameObject {
             x = -width;
         }
     }
-
     @Override
     public void render(Graphics g) {
+        if (!visible) return;
+        if (renderSpriteComponent(g)) return;
+        
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        
-        // Save original transform
         AffineTransform oldTransform = g2d.getTransform();
         
         // Apply rotation around center

@@ -16,6 +16,7 @@ import java.util.List;
 import org.json.JSONObject;
 import com.ignis.core.*;
 import com.ignis.core.ui.*;
+import java.awt.Component;
 
 public class Editor extends JFrame {
     private JSplitPane mainSplit;
