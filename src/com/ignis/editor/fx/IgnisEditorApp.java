@@ -3044,8 +3044,14 @@ public class IgnisEditorApp extends Application {
 
                 updateCameraLabels();
                 updateInspectorFields();
+
+                // Colaboracao em tempo real: o host transmite o snapshot da cena
+                // (throttle interno ~12 Hz); o convidado aplica via listener.
+                com.ignis.collab.CollabBridge bridge = com.ignis.collab.CollabBridge.get();
+                if (bridge != null) bridge.onEditorFrame();
             }
         };
+        com.ignis.collab.CollabBridge.init(game);
         timer.start();
     }
 

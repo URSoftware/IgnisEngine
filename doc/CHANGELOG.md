@@ -5,6 +5,17 @@
 
 ---
 
+## [1.5.0] - 2026-07-03
+
+### Colaboração em tempo real — Parte 2.1 (sincronização de cena)
+Primeira etapa para deixar a colaboração (`com.ignis.collab`) 100%. Modelo **host-autoritativo**: o host é a fonte da verdade e os convidados espelham a cena em tempo real.
+
+- **`com.ignis.collab.CollabBridge`:** liga a `CollabSession` (transporte TCP) ao `Game` do editor. **Host** transmite, a ~12 Hz, um snapshot da cena pelo canal `scene` — nome, tipo, transform, zIndex, visibilidade e todas as propriedades visuais (opacity/flip/scale), sprite, além da câmera (posição/zoom) e do estado de Play. **Convidado** aplica o snapshot ao seu próprio `Game` na thread de UI: cria/atualiza/remove objetos para espelhar o host (sprite só recarrega se mudou), sem rodar a simulação local — puro espelho.
+- **Efeito:** o convidado vê os objetos se movendo, sendo criados/removidos e o **host jogando (Play)** em tempo real, com o mesmo enquadramento de câmera. Funciona por IP direto ou VPN (o transporte já era TCP linha-JSON).
+- Integrado ao `AnimationTimer` do editor (`CollabBridge.init(game)` + `onEditorFrame()` por frame, com throttle interno).
+
+> Escopo desta etapa: espelhamento **host → convidado** (o mais visual). Faltam, na Parte 2.2: comandos **convidado → host** (colaborador editando de fato), sincronização de **código** (`script`) e de **cursores**, streaming de assets, e interpolação no convidado (hoje o movimento chega a 12 Hz). Pré-requisito de uso: convidado e host no **mesmo projeto** (assets locais). Guia completo no vault.
+
 ## [1.4.0] - 2026-07-03
 
 ### Adicionado — Coordenação multi-agente pelo MCP
