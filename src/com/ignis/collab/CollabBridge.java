@@ -28,7 +28,18 @@ import java.util.Set;
  */
 public final class CollabBridge implements CollabSession.Listener {
 
+    /**
+     * Executor de comandos vindos de convidados, aplicado no host. Recebe o nome
+     * da ferramenta e seus argumentos e devolve o resultado (texto). Setado pelo
+     * editor com base no registry do MCP — assim o convidado edita a cena do host
+     * reusando TODAS as ferramentas de cena, mantendo o host autoritativo.
+     */
+    public interface CommandExecutor {
+        String execute(String tool, JSONObject args);
+    }
+
     private static CollabBridge instance;
+    private static CommandExecutor commandExecutor;
 
     private final Game game;
     private long lastBroadcastNanos = 0L;
@@ -37,6 +48,11 @@ public final class CollabBridge implements CollabSession.Listener {
 
     private CollabBridge(Game game) {
         this.game = game;
+    }
+
+    /** Liga o executor de comandos do host (chamado pelo editor). */
+    public static void setCommandExecutor(CommandExecutor executor) {
+        commandExecutor = executor;
     }
 
     /** Instala (ou reinstala) o bridge para o Game informado. */
@@ -102,11 +118,40 @@ public final class CollabBridge implements CollabSession.Listener {
     // Convidado: aplica o snapshot recebido
     // ------------------------------------------------------------------
 
+    /**
+     * Encaminha um comando de edicao do convidado para o host (uma chamada de
+     * ferramenta MCP a ser executada no host). Chamado por {@code IgnisToolRegistry}
+     * quando o editor esta como convidado numa sessao.
+     */
+    public static void sendCommand(String tool, JSONObject args) {
+        JSONObject cmd = new JSONObject()
+                .put("cmd", tool)
+                .put("args", args == null ? new JSONObject() : args);
+        CollabSession.get().sendEvent(CollabSession.CH_SCENE, cmd);
+    }
+
     @Override
     public void onEvent(String channel, String from, JSONObject payload) {
-        if (!CollabSession.CH_SCENE.equals(channel)) return;
+        if (!CollabSession.CH_SCENE.equals(channel) || payload == null) return;
+
+        // Comando de edicao vindo de um convidado -> executado NO HOST (autoritativo).
+        if (payload.has("cmd")) {
+            if (CollabSession.get().getRole() != CollabSession.Role.HOST) return;
+            final String tool = payload.optString("cmd", "");
+            final JSONObject args = payload.optJSONObject("args");
+            javafx.application.Platform.runLater(() -> {
+                try {
+                    if (commandExecutor != null && !tool.isEmpty()) {
+                        String res = commandExecutor.execute(tool, args == null ? new JSONObject() : args);
+                        System.out.println("[Collab] comando de " + from + ": " + tool + " -> " + res);
+                    }
+                } catch (Exception ignore) { /* comando invalido nao derruba o host */ }
+            });
+            return;
+        }
+
+        // Snapshot da cena vindo do host -> aplicado no convidado (espelho).
         if (CollabSession.get().getRole() != CollabSession.Role.GUEST) return;
-        // Aplica na thread de UI do JavaFX (find/create/remove no scene graph).
         javafx.application.Platform.runLater(() -> {
             try {
                 applySnapshot(payload);

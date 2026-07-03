@@ -3052,6 +3052,16 @@ public class IgnisEditorApp extends Application {
             }
         };
         com.ignis.collab.CollabBridge.init(game);
+        // Executor de comandos do host: aplica comandos de convidados reusando o
+        // registry do MCP (host-autoritativo). Sem registry ativo, ignora.
+        com.ignis.collab.CollabBridge.setCommandExecutor((tool, args) -> {
+            try {
+                com.ignis.mcp.IgnisToolRegistry reg = com.ignis.mcp.McpService.getRegistry();
+                return reg != null ? reg.call(tool, args) : "(host sem registry MCP ativo)";
+            } catch (Exception e) {
+                return "erro ao aplicar comando: " + e.getMessage();
+            }
+        });
         timer.start();
     }
 

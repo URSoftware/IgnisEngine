@@ -13,6 +13,8 @@ import com.ignis.core.IgnisSoundEngine;
 import com.ignis.core.PrefabManager;
 import com.ignis.core.ScriptManager;
 import com.ignis.core.World;
+import com.ignis.collab.CollabBridge;
+import com.ignis.collab.CollabSession;
 import com.ignis.core.ui.UIButton;
 import com.ignis.core.ui.UICanvas;
 import com.ignis.core.ui.UIComponent;
@@ -86,6 +88,21 @@ public final class IgnisToolRegistry {
     private final File projectFolder;
     private final Map<String, ToolDef> tools = new LinkedHashMap<>();
 
+    // Ferramentas que MUTAM a cena/mundo/camera: quando o editor e convidado numa
+    // sessao de colaboracao, sao encaminhadas ao host (host-autoritativo). As
+    // demais (list_/get_/read_, audio, coordenacao, scripts) rodam localmente.
+    private static final java.util.Set<String> FORWARD_TO_HOST = java.util.Set.of(
+            "create_object", "delete_object", "set_object_transform", "set_object_sprite",
+            "set_object_visual", "set_object_visible", "set_object_name_color", "reorder_object_z",
+            "attach_script", "remove_script_from_object", "set_object_collider",
+            "set_object_world_collision", "clear_scene", "instantiate_prefab",
+            "play_game", "stop_game", "save_project",
+            "attach_animation", "play_animation", "stop_animation",
+            "set_camera_follow", "stop_camera_follow", "camera_shake", "set_camera_bounds",
+            "clear_camera_bounds", "set_active_camera", "create_camera", "set_camera_transform",
+            "set_world_bounds", "clear_world_bounds", "set_world_grid", "block_rect", "unblock_rect",
+            "block_cell", "unblock_cell", "clear_barriers", "set_world_property");
+
     // Contexto vivo do editor (opcional): presente quando o bridge roda dentro do
     // editor JavaFX, habilitando ferramentas de cena e de Play. Nulo no modo headless.
     private Game liveGame;
@@ -136,6 +153,16 @@ public final class IgnisToolRegistry {
         ToolDef def = tools.get(name);
         if (def == null) throw new IllegalArgumentException("Ferramenta desconhecida: " + name);
         final JSONObject safeArgs = (arguments != null) ? arguments : new JSONObject();
+
+        // Colaboracao em tempo real (host-autoritativo): se este editor esta como
+        // CONVIDADO, ferramentas que mutam a cena sao encaminhadas ao host, que
+        // aplica e rebroadcasta. O convidado ve o resultado pelo snapshot.
+        if (FORWARD_TO_HOST.contains(name) && CollabSession.get().getRole() == CollabSession.Role.GUEST) {
+            CollabBridge.sendCommand(name, safeArgs);
+            System.out.println("[Collab] '" + name + "' encaminhado ao host.");
+            return "[colaboracao] '" + name + "' encaminhado ao host (aplicado na cena autoritativa).";
+        }
+
         long startNanos = System.nanoTime();
         String result = IgnisMcpBridge.runOnFxThread(() -> {
             try {

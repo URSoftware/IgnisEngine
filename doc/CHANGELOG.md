@@ -5,6 +5,17 @@
 
 ---
 
+## [1.6.0] - 2026-07-03
+
+### Colaboração em tempo real — Parte 2.2a (edição convidado → host)
+Agora os **convidados editam de fato** a cena, não só espelham. Mantém o modelo host-autoritativo.
+
+- **Comandos convidado → host:** quando o editor está como **convidado** numa sessão, as ferramentas MCP que **mutam a cena/mundo/câmera** (≈37 ferramentas: `create_object`, `set_object_transform`, `delete_object`, `attach_script`, `play_game`, `block_rect`, `set_camera_follow`, …) são **encaminhadas ao host** em vez de aplicadas localmente (`IgnisToolRegistry.call` intercepta quando `role==GUEST`). O host executa o comando na sua cena autoritativa (via `CollabBridge.setCommandExecutor`, que reusa o registry do MCP) e o snapshot de ~12 Hz rebroadcasta o resultado a todos — inclusive quem enviou.
+- **Reuso total:** o convidado edita usando **as mesmas 95 ferramentas** do MCP; nada de protocolo novo por ação. Ferramentas de leitura (`list_*`/`get_*`/`read_*`), áudio e coordenação continuam locais.
+- **Zero impacto no uso single-user:** sem sessão ativa (`role==NONE`), nada é encaminhado — comportamento idêntico ao anterior.
+
+> Ainda pendente na colaboração: sincronização de **código** (`script`) e **cursores**, streaming de assets, interpolação no convidado e delta. Segurança: hoje qualquer convidado pode comandar o host (adequado a colaboração confiável em VPN); permissões/papéis por convidado ficam para depois.
+
 ## [1.5.0] - 2026-07-03
 
 ### Colaboração em tempo real — Parte 2.1 (sincronização de cena)
