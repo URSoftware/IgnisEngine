@@ -1330,6 +1330,80 @@ public final class IgnisToolRegistry {
                         ? cam.screenToWorld(x, y) : cam.worldToScreen(x, y);
                 return "(" + p.x + ", " + p.y + ")";
             });
+
+        // set_camera_follow (Fase B): camera ativa segue um objeto
+        Map<String, String> followProps = new LinkedHashMap<>();
+        followProps.put("targetName", "Nome do objeto a seguir");
+        followProps.put("smoothing", "Suavidade 0.0-1.0 por tick (padrao 0.15; 1 = instantaneo)");
+        add("set_camera_follow",
+            "Faz a camera ativa seguir suavemente o centro de um objeto durante o Play.",
+            schemaWith(followProps, List.of("targetName")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                Camera cam = liveGame.getActiveCamera();
+                if (cam == null) return "Erro: nenhuma camera ativa.";
+                GameObject target = findObject(args.optString("targetName", ""));
+                if (target == null) return "Erro: objeto nao encontrado: " + args.optString("targetName", "");
+                cam.follow(target, args.optDouble("smoothing", 0.15));
+                return "Camera '" + cam.getCameraName() + "' seguindo " + target.getName();
+            });
+
+        // stop_camera_follow
+        add("stop_camera_follow",
+            "Faz a camera ativa parar de seguir qualquer objeto.",
+            objectSchema(),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                Camera cam = liveGame.getActiveCamera();
+                if (cam == null) return "Erro: nenhuma camera ativa.";
+                cam.stopFollow();
+                return "Camera '" + cam.getCameraName() + "' parou de seguir.";
+            });
+
+        // camera_shake
+        Map<String, String> shakeProps = new LinkedHashMap<>();
+        shakeProps.put("intensity", "Amplitude do tremor em px (ex: 8)");
+        shakeProps.put("duration", "Duracao em segundos (ex: 0.4)");
+        add("camera_shake",
+            "Dispara um tremor na camera ativa com decaimento linear (efeito de impacto).",
+            schemaWith(shakeProps, List.of("intensity", "duration")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                Camera cam = liveGame.getActiveCamera();
+                if (cam == null) return "Erro: nenhuma camera ativa.";
+                cam.shake(args.optDouble("intensity", 8), args.optDouble("duration", 0.4));
+                return "Tremor disparado na camera '" + cam.getCameraName() + "'.";
+            });
+
+        // set_camera_bounds
+        Map<String, String> boundsProps = new LinkedHashMap<>();
+        boundsProps.put("minX", "Limite minimo X do centro da camera");
+        boundsProps.put("minY", "Limite minimo Y");
+        boundsProps.put("maxX", "Limite maximo X");
+        boundsProps.put("maxY", "Limite maximo Y");
+        add("set_camera_bounds",
+            "Limita o centro da camera ativa a um retangulo do mundo (evita mostrar fora do nivel).",
+            schemaWith(boundsProps, List.of("minX", "minY", "maxX", "maxY")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                Camera cam = liveGame.getActiveCamera();
+                if (cam == null) return "Erro: nenhuma camera ativa.";
+                cam.setBounds(args.optDouble("minX"), args.optDouble("minY"),
+                              args.optDouble("maxX"), args.optDouble("maxY"));
+                return "Limites da camera definidos.";
+            });
+
+        // clear_camera_bounds
+        add("clear_camera_bounds",
+            "Remove os limites de movimento da camera ativa.",
+            objectSchema(),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                Camera cam = liveGame.getActiveCamera();
+                if (cam == null) return "Erro: nenhuma camera ativa.";
+                cam.clearBounds();
+                return "Limites da camera removidos.";
+            });
     }
 
     // ----------------------------------------------------------------------
@@ -1567,28 +1641,58 @@ public final class IgnisToolRegistry {
 
         // reorder_object_z
         add("reorder_object_z",
-            "Altera a profundidade (z-order) de um objeto na cena: 'top', 'bottom', 'up', 'down' ou um indice numerico.",
-            schemaWith(Map.of("name", "Nome do objeto", "position", "'top', 'bottom', 'up', 'down' ou indice numerico"),
+            "Altera o zIndex (profundidade de render) de um objeto: 'top', 'bottom', 'up', 'down' ou um valor numerico. Maior zIndex = na frente; empate mantem a ordem da hierarquia.",
+            schemaWith(Map.of("name", "Nome do objeto", "position", "'top', 'bottom', 'up', 'down' ou zIndex numerico"),
                     List.of("name", "position")),
             args -> {
                 if (liveGame == null) return "Erro: editor nao disponivel.";
                 GameObject go = findObject(args.optString("name", ""));
                 if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
                 String pos = args.optString("position", "").trim().toLowerCase();
+                int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+                for (GameObject e : liveGame.getEntities()) {
+                    minZ = Math.min(minZ, e.getZIndex());
+                    maxZ = Math.max(maxZ, e.getZIndex());
+                }
                 switch (pos) {
-                    case "top": liveGame.moveEntityToIndex(go, liveGame.getEntities().size()); break;
-                    case "bottom": liveGame.moveEntityToIndex(go, 0); break;
-                    case "up": liveGame.moveEntityUp(go); break;
-                    case "down": liveGame.moveEntityDown(go); break;
+                    case "top": go.setZIndex((maxZ == Integer.MIN_VALUE ? 0 : maxZ) + 1); break;
+                    case "bottom": go.setZIndex((minZ == Integer.MAX_VALUE ? 0 : minZ) - 1); break;
+                    case "up": go.setZIndex(go.getZIndex() + 1); break;
+                    case "down": go.setZIndex(go.getZIndex() - 1); break;
                     default:
                         try {
-                            liveGame.moveEntityToIndex(go, Integer.parseInt(pos));
+                            go.setZIndex(Integer.parseInt(pos));
                         } catch (NumberFormatException nfe) {
-                            return "Erro: 'position' deve ser top/bottom/up/down ou um indice numerico.";
+                            return "Erro: 'position' deve ser top/bottom/up/down ou um zIndex numerico.";
                         }
                 }
                 if (refreshHook != null) refreshHook.run();
-                return "Z-order atualizado: " + go.getName() + " -> " + pos;
+                return "zIndex de " + go.getName() + " -> " + go.getZIndex();
+            });
+
+        // set_object_visual (Fase B: opacity, flip, escala visual)
+        Map<String, String> visualProps = new LinkedHashMap<>();
+        visualProps.put("name", "Nome do objeto");
+        visualProps.put("opacity", "Opacidade 0.0-1.0 (opcional)");
+        visualProps.put("flipX", "Espelhar horizontalmente (true/false, opcional)");
+        visualProps.put("flipY", "Espelhar verticalmente (true/false, opcional)");
+        visualProps.put("scaleX", "Multiplicador visual de largura (opcional)");
+        visualProps.put("scaleY", "Multiplicador visual de altura (opcional)");
+        add("set_object_visual",
+            "Ajusta as propriedades visuais de um objeto: opacidade, espelhamento (flip) e escala visual.",
+            schemaWith(visualProps, List.of("name")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                if (args.has("opacity")) go.setOpacity(args.optDouble("opacity"));
+                if (args.has("flipX")) go.setFlipX(args.optBoolean("flipX"));
+                if (args.has("flipY")) go.setFlipY(args.optBoolean("flipY"));
+                if (args.has("scaleX")) go.setScaleX(args.optDouble("scaleX"));
+                if (args.has("scaleY")) go.setScaleY(args.optDouble("scaleY"));
+                if (refreshHook != null) refreshHook.run();
+                return "Visual atualizado: " + go.getName() + " (opacity=" + go.getOpacity()
+                        + " flipX=" + go.isFlipX() + " flipY=" + go.isFlipY()
+                        + " scaleX=" + go.getScaleX() + " scaleY=" + go.getScaleY() + ")";
             });
 
         // get_object_info

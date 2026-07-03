@@ -1155,6 +1155,12 @@ public class Game extends Canvas implements Runnable {
                 collisionManager.update();
             }
 
+            // Avanca os comportamentos nativos da camera ativa (follow/shake/bounds).
+            Camera activeCam = getActiveCamera();
+            if (activeCam != null) {
+                activeCam.update(1.0 / 60.0);
+            }
+
             // Marca o instante do tick para o calculo do alpha de interpolacao.
             lastTickNanos = System.nanoTime();
         }
@@ -1200,6 +1206,35 @@ public class Game extends Canvas implements Runnable {
         double dy = e.getY() - e.getPrevY();
         if (dx * dx + dy * dy > INTERP_SNAP_SQ) return e.getY();
         return e.getPrevY() + dy * alpha;
+    }
+
+    // ---- Ordem de render por zIndex (Fase B) ----
+    // Buffer reutilizado (evita alocacao por frame). Chamado apenas dentro dos
+    // metodos de render, que sao synchronized(this) — sem concorrencia sobre ele.
+    private final java.util.ArrayList<GameObject> renderOrder = new java.util.ArrayList<>();
+
+    private java.util.List<GameObject> entitiesInRenderOrder() {
+        renderOrder.clear();
+        renderOrder.addAll(entities);
+        // Sort estavel (TimSort): empates de zIndex mantem a ordem da hierarquia.
+        renderOrder.sort(java.util.Comparator.comparingInt(GameObject::getZIndex));
+        return renderOrder;
+    }
+
+    // Aplica interpolacao de posicao + flip/escala visual (em torno do centro) ao
+    // Graphics2D antes de desenhar a entidade. A opacidade e tratada no loop via
+    // AlphaComposite (precisa ser restaurada separadamente do transform).
+    private void applyEntityVisual(Graphics2D g2d, GameObject e, double alpha) {
+        g2d.translate(interpX(e, alpha) - e.getX(), interpY(e, alpha) - e.getY());
+        double vsx = (e.isFlipX() ? -1.0 : 1.0) * e.getScaleX();
+        double vsy = (e.isFlipY() ? -1.0 : 1.0) * e.getScaleY();
+        if (vsx != 1.0 || vsy != 1.0) {
+            double cx = e.getX() + e.getWidth() / 2.0;
+            double cy = e.getY() + e.getHeight() / 2.0;
+            g2d.translate(cx, cy);
+            g2d.scale(vsx, vsy);
+            g2d.translate(-cx, -cy);
+        }
     }
 
     // Culling em espaco de mundo: true se o AABB da entidade nao intersecta o
@@ -1307,12 +1342,10 @@ public class Game extends Canvas implements Runnable {
             drawGrid(g2d);
         }
 
-        // 4. Render all entities (respecting Z-Index by list order)
+        // 4. Render all entities (ordenadas por zIndex; empate = ordem da lista)
         Camera cullCamera = shouldApplyCameraTransform ? activeCamera : null;
         double renderAlpha = getRenderAlpha();
-        for (int i = 0; i < entities.size(); i++) {
-            GameObject entity = entities.get(i);
-
+        for (GameObject entity : entitiesInRenderOrder()) {
             // Skip invisible entities
             if (!entity.isVisible()) continue;
 
@@ -1322,20 +1355,24 @@ public class Game extends Canvas implements Runnable {
             // Culling: pula entidades totalmente fora do retangulo visivel.
             if (isCulled(cullCamera, entity)) continue;
 
-            // Save entity transform
+            // Save entity transform + composite
             AffineTransform entityTransform = g2d.getTransform();
+            java.awt.Composite oldComposite = g2d.getComposite();
 
-            // Interpolacao de posicao (prevX/prevY -> x/y) para suavizar o
-            // movimento entre ticks; identidade fora do Play. NAO rotacionar
-            // aqui: cada forma ja aplica a propria rotacao dentro de render().
-            g2d.translate(interpX(entity, renderAlpha) - entity.getX(),
-                          interpY(entity, renderAlpha) - entity.getY());
+            // Interpolacao de posicao + flip/escala visual (NAO rotaciona aqui:
+            // cada forma ja aplica a propria rotacao dentro de render()).
+            applyEntityVisual(g2d, entity, renderAlpha);
+            if (entity.getOpacity() < 1.0) {
+                g2d.setComposite(java.awt.AlphaComposite.getInstance(
+                        java.awt.AlphaComposite.SRC_OVER, (float) entity.getOpacity()));
+            }
 
             // Render entity
             entity.render(g);
 
-            // Restore entity transform
+            // Restore entity transform + composite
             g2d.setTransform(entityTransform);
+            g2d.setComposite(oldComposite);
         }
 
         // 5. Restore original transform for UI and editor overlays
@@ -1447,23 +1484,26 @@ public class Game extends Canvas implements Runnable {
             drawGrid(g2d);
         }
 
-        // Entidades (respeita Z por ordem da lista)
+        // Entidades (ordenadas por zIndex; empate = ordem da lista/hierarquia)
         Camera cullCamera = shouldApplyCameraTransform ? activeCamera : null;
         double renderAlpha = getRenderAlpha();
-        for (int i = 0; i < entities.size(); i++) {
-            GameObject entity = entities.get(i);
+        for (GameObject entity : entitiesInRenderOrder()) {
             if (!entity.isVisible()) continue;
             if (entity instanceof Camera) continue;
             if (isCulled(cullCamera, entity)) continue;
 
             AffineTransform entityTransform = g2d.getTransform();
-            // Interpolacao de posicao (suaviza movimento em monitores > 60 Hz);
-            // identidade fora do Play. NAO rotacionar aqui: as formas concretas
-            // ja rotacionam dentro de render() (rotacionar dobrava o angulo).
-            g2d.translate(interpX(entity, renderAlpha) - entity.getX(),
-                          interpY(entity, renderAlpha) - entity.getY());
+            java.awt.Composite oldComposite = g2d.getComposite();
+            // Interpolacao de posicao + flip/escala visual (suaviza movimento em
+            // monitores > 60 Hz; identidade fora do Play). NAO rotacionar aqui.
+            applyEntityVisual(g2d, entity, renderAlpha);
+            if (entity.getOpacity() < 1.0) {
+                g2d.setComposite(java.awt.AlphaComposite.getInstance(
+                        java.awt.AlphaComposite.SRC_OVER, (float) entity.getOpacity()));
+            }
             entity.render(g2d);
             g2d.setTransform(entityTransform);
+            g2d.setComposite(oldComposite);
         }
 
         // Debug de colliders (espaco do mundo) — espelha o render() do editor Swing.

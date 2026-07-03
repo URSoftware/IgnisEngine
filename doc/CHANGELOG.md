@@ -5,6 +5,20 @@
 
 ---
 
+## [1.2.0] - 2026-07-02
+
+### Motor gráfico 2D — Fase B (fundações de cena)
+Segunda fase do plano do motor gráfico (vault: `ignisengine-plano-motor-grafico`).
+
+- **Propriedades visuais no GameObject (B.1):** novos campos `opacity` (0–1), `flipX`/`flipY` (espelhamento), `scaleX`/`scaleY` (multiplicadores visuais), aplicados pelo pipeline de render (`AlphaComposite` para opacidade; transform em torno do centro para flip/escala) — valem para **todas** as formas sem editar cada `render()`. Expostos via MCP `set_object_visual`. *Tint (multiply) fica deferido: Java2D não tem blend multiply nativo.*
+- **zIndex serializado + ordem de render (B.2):** cada `GameObject` tem `zIndex` (int); o render passou a ordenar por ele (sort estável — empate mantém a ordem da hierarquia, modelo "Order in Layer" da Unity), em vez de depender só da posição na lista. MCP `reorder_object_z` agora seta `zIndex` (`top`/`bottom`/`up`/`down`/numérico).
+- **Câmera nativa: follow / shake / bounds (B.7):** `Camera.follow(target, smoothing)`, `shake(intensity, duration)` (decaimento linear, aplicado sobre a posição-base sem contaminá-la — corrige o shake antigo via script que deslocava sem restaurar) e `setBounds(...)`; avançados por `Camera.update(dt)`, chamado por `Game.tick()` para a câmera ativa no Play. MCP: `set_camera_follow`, `stop_camera_follow`, `camera_shake`, `set_camera_bounds`, `clear_camera_bounds`.
+- **Bug corrigido — rotação não era persistida:** `rotation` do GameObject **não era serializada** no `.ignis` (girar → salvar → reabrir perdia o ângulo). Agora `rotation` (e os novos `zIndex`/`opacity`/`flip*`/`scale*`) são serializados no nível do `Scene` (`toJSON`/`fromJSON`), todos opcionais na leitura para compatibilidade com projetos antigos.
+
+Total de ferramentas MCP: **73** (as 67 anteriores + `set_object_visual`, `set_camera_follow`, `stop_camera_follow`, `camera_shake`, `set_camera_bounds`, `clear_camera_bounds`).
+
+> Limitação conhecida: a interpolação de render (Fase A) suaviza as **entidades**, mas a **câmera** ainda não é interpolada — panorâmicas rápidas com `follow` podem apresentar leve judder em monitores > 60 Hz. Anotado como follow-up (extensão da A.2).
+
 ## [1.1.0] - 2026-07-02
 
 ### Motor gráfico 2D — Fase A (fundações do pipeline de render)

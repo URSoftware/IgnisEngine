@@ -18,6 +18,15 @@ public abstract class GameObject {
     // (Fase A do plano do motor grafico). Nao serializado. Atualizado por
     // capturePreviousTransform() no comeco de cada tick de simulacao.
     protected transient double prevX, prevY, prevRotation;
+
+    // Propriedades visuais (Fase B do plano). Aplicadas pelo pipeline de render
+    // (Game), nao pelo render() de cada forma — valem para todos os GameObjects.
+    protected double opacity = 1.0;          // 0 = transparente, 1 = opaco
+    protected boolean flipX = false;         // espelha horizontalmente
+    protected boolean flipY = false;         // espelha verticalmente
+    protected double scaleX = 1.0;           // multiplicador visual de largura
+    protected double scaleY = 1.0;           // multiplicador visual de altura
+    protected int zIndex = 0;                // ordem de render (maior = na frente)
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
@@ -82,6 +91,28 @@ public abstract class GameObject {
     public double getPrevX() { return prevX; }
     public double getPrevY() { return prevY; }
     public double getPrevRotation() { return prevRotation; }
+
+    // ---- Propriedades visuais (Fase B) ----
+
+    public double getOpacity() { return opacity; }
+    public void setOpacity(double opacity) {
+        this.opacity = Math.max(0.0, Math.min(1.0, opacity));
+    }
+
+    public boolean isFlipX() { return flipX; }
+    public void setFlipX(boolean flipX) { this.flipX = flipX; }
+
+    public boolean isFlipY() { return flipY; }
+    public void setFlipY(boolean flipY) { this.flipY = flipY; }
+
+    public double getScaleX() { return scaleX; }
+    public void setScaleX(double scaleX) { this.scaleX = scaleX; }
+
+    public double getScaleY() { return scaleY; }
+    public void setScaleY(double scaleY) { this.scaleY = scaleY; }
+
+    public int getZIndex() { return zIndex; }
+    public void setZIndex(int zIndex) { this.zIndex = zIndex; }
 
     public abstract void tick();
 

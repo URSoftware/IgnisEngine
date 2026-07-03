@@ -115,6 +115,17 @@ public class Scene {
             size.put("height", entity.getHeight());
             entityJson.put("size", size);
 
+            // Transform e propriedades visuais comuns (Fase B). A rotacao nao era
+            // persistida antes desta versao — bug corrigido aqui. Tudo opcional na
+            // leitura (fromJSON) para compatibilidade com projetos antigos.
+            entityJson.put("rotation", entity.getRotation());
+            entityJson.put("zIndex", entity.getZIndex());
+            entityJson.put("opacity", entity.getOpacity());
+            entityJson.put("flipX", entity.isFlipX());
+            entityJson.put("flipY", entity.isFlipY());
+            entityJson.put("scaleX", entity.getScaleX());
+            entityJson.put("scaleY", entity.getScaleY());
+
             if (entity.getSpritePath() != null) {
                 entityJson.put("sprite", entity.getSpritePath());
             }
@@ -195,6 +206,16 @@ public class Scene {
                 entity.setWidth(size.getInt("width"));
                 entity.setHeight(size.getInt("height"));
             }
+
+            // Transform e propriedades visuais comuns (Fase B). Todas opcionais:
+            // projetos salvos antes desta versao caem nos defaults.
+            entity.setRotation(entityJson.optDouble("rotation", 0.0));
+            entity.setZIndex(entityJson.optInt("zIndex", 0));
+            entity.setOpacity(entityJson.optDouble("opacity", 1.0));
+            entity.setFlipX(entityJson.optBoolean("flipX", false));
+            entity.setFlipY(entityJson.optBoolean("flipY", false));
+            entity.setScaleX(entityJson.optDouble("scaleX", 1.0));
+            entity.setScaleY(entityJson.optDouble("scaleY", 1.0));
 
             if (entityJson.has("sprite")) {
                 entity.setSpritePath(entityJson.getString("sprite"));

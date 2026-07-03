@@ -49,6 +49,19 @@ public class Camera extends GameObject {
     // Name for identification
     private String cameraName = "MainCamera";
 
+    // ---- Comportamentos nativos da camera (Fase B do plano do motor grafico) ----
+    // Antes so existiam como wrappers protected em IgnisScript; agora vivem na
+    // Camera e sao avancados por update(dt), chamado pelo Game a cada tick de Play.
+    private transient GameObject followTarget = null;   // alvo a seguir (ou null)
+    private double followSmoothing = 0.15;               // 0..1 por tick (1 = instantaneo)
+    private double baseX, baseY;                         // posicao "logica" sem o shake
+    private boolean hasBounds = false;                   // limites do mundo ativos?
+    private double boundMinX, boundMinY, boundMaxX, boundMaxY;
+    private double shakeIntensity = 0.0;                 // amplitude do tremor (px)
+    private double shakeDuration = 0.0;                  // duracao total (s)
+    private double shakeElapsed = Double.MAX_VALUE;      // tempo decorrido (>= duration = parado)
+    private final transient java.util.Random shakeRng = new java.util.Random();
+
     /**
      * Creates a camera at the origin with default viewport.
      */
@@ -385,6 +398,86 @@ public class Camera extends GameObject {
     public void tick() {
         // Camera typically doesn't have automatic behavior
         // Movement is controlled by scripts or the editor
+    }
+
+    // ---- Follow / shake / bounds (Fase B) ----
+
+    /** Faz a camera seguir suavemente o centro de um objeto. smoothing 0..1 por tick. */
+    public void follow(GameObject target, double smoothing) {
+        this.followTarget = target;
+        this.followSmoothing = Math.max(0.0, Math.min(1.0, smoothing));
+        this.baseX = getX();
+        this.baseY = getY();
+    }
+
+    /** Para de seguir; a camera fica onde estava. */
+    public void stopFollow() {
+        this.followTarget = null;
+    }
+
+    public GameObject getFollowTarget() { return followTarget; }
+
+    /** Limita o centro da camera a um retangulo do mundo. */
+    public void setBounds(double minX, double minY, double maxX, double maxY) {
+        this.boundMinX = Math.min(minX, maxX);
+        this.boundMinY = Math.min(minY, maxY);
+        this.boundMaxX = Math.max(minX, maxX);
+        this.boundMaxY = Math.max(minY, maxY);
+        this.hasBounds = true;
+    }
+
+    public void clearBounds() { this.hasBounds = false; }
+
+    /** Dispara um tremor de camera com decaimento linear ao longo de duration (s). */
+    public void shake(double intensity, double duration) {
+        // Captura a base atual apenas se ainda nao ha shake em andamento nem follow
+        // (senao a base ja e gerenciada e capturar leria a posicao ja tremida).
+        if (followTarget == null && shakeElapsed >= shakeDuration) {
+            this.baseX = getX();
+            this.baseY = getY();
+        }
+        this.shakeIntensity = Math.max(0.0, intensity);
+        this.shakeDuration = Math.max(0.0001, duration);
+        this.shakeElapsed = 0.0;
+    }
+
+    public boolean isShaking() { return shakeElapsed < shakeDuration; }
+
+    /**
+     * Avanca follow, bounds e shake em um passo de tempo. Chamado pelo
+     * {@link Game#tick()} para a camera ativa durante o Play. Nao faz nada se nao
+     * ha follow nem shake ativos (a posicao continua controlada externamente).
+     */
+    public void update(double dt) {
+        boolean shaking = shakeElapsed < shakeDuration;
+        if (followTarget == null && !shaking) return;
+
+        // 1. Posicao base: segue o centro do alvo, se houver.
+        if (followTarget != null) {
+            double tcx = followTarget.getX() + followTarget.getWidth() / 2.0;
+            double tcy = followTarget.getY() + followTarget.getHeight() / 2.0;
+            baseX += (tcx - baseX) * followSmoothing;
+            baseY += (tcy - baseY) * followSmoothing;
+        }
+
+        // 2. Limites do mundo.
+        if (hasBounds) {
+            baseX = Math.max(boundMinX, Math.min(boundMaxX, baseX));
+            baseY = Math.max(boundMinY, Math.min(boundMaxY, baseY));
+        }
+
+        // 3. Deslocamento do tremor (decaimento linear), aplicado por cima da base.
+        double ox = 0, oy = 0;
+        if (shaking) {
+            shakeElapsed += dt;
+            double k = Math.max(0.0, 1.0 - shakeElapsed / shakeDuration);
+            double mag = shakeIntensity * k;
+            ox = (shakeRng.nextDouble() * 2.0 - 1.0) * mag;
+            oy = (shakeRng.nextDouble() * 2.0 - 1.0) * mag;
+        }
+
+        // 4. Aplica base + shake sem contaminar a base (setPosition nao mexe em baseX/baseY).
+        setPosition(baseX + ox, baseY + oy);
     }
 
     @Override
