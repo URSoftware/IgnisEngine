@@ -734,11 +734,19 @@ public class IgnisEditorApp extends Application {
             refreshHierarchy();
             refreshAssetBrowser();
             undoManager.clear();
-            EditorPrefs.addRecent(ignisFile);
-            rebuildRecentMenu(primaryStage);
-            stage().setTitle("IgnisEngine — " + project.getProjectName() + " (JavaFX)");
-            setStatus("Projeto carregado: " + project.getProjectName()
-                    + " (" + game.getEntities().size() + " objetos)");
+            boolean sessionCopy = isCollabSessionProject();
+            if (!sessionCopy) {
+                // Copias temporarias de sessao nao entram nos recentes.
+                EditorPrefs.addRecent(ignisFile);
+                rebuildRecentMenu(primaryStage);
+            }
+            stage().setTitle("IgnisEngine — " + project.getProjectName()
+                    + (sessionCopy ? " [sessao colaborativa]" : "") + " (JavaFX)");
+            setStatus(sessionCopy
+                    ? "Projeto da sessao carregado: " + project.getProjectName()
+                            + " (" + game.getEntities().size() + " objetos, copia temporaria do host)"
+                    : "Projeto carregado: " + project.getProjectName()
+                            + " (" + game.getEntities().size() + " objetos)");
             return true;
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir projeto:\n" + ex.getMessage()).showAndWait();
@@ -801,10 +809,28 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // True quando o projeto aberto e a copia temporaria de uma sessao colaborativa
+    // (convidado). IgnisProjectIO.save forcaria uma copia em projects/ local, podendo
+    // sobrescrever um projeto do usuario com o mesmo nome — o host e quem salva.
+    private boolean isCollabSessionProject() {
+        try {
+            if (currentIgnisFile == null) return false;
+            java.nio.file.Path cache = com.ignis.collab.CollabProjectSync.cacheRoot()
+                    .getCanonicalFile().toPath();
+            return currentIgnisFile.getCanonicalFile().toPath().startsWith(cache);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // Salva o projeto atual (sincroniza game -> Scene, depois IgnisProjectIO.save).
     private void saveProject() {
         if (currentProject == null || currentIgnisFile == null) {
             setStatus("Nenhum projeto aberto para salvar.");
+            return;
+        }
+        if (isCollabSessionProject()) {
+            setStatus("Projeto da sessao colaborativa: quem salva e o host (suas edicoes ja vao para ele).");
             return;
         }
         try {
@@ -1280,11 +1306,13 @@ public class IgnisEditorApp extends Application {
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_MOVED);
             com.ignis.core.Input.getInstance().mouseMoved(awtEvent);
             game.dispatchEvent(awtEvent);
+            broadcastCollabCursor(e.getX(), e.getY());
         });
         canvas.setOnMouseDragged(e -> {
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_DRAGGED);
             com.ignis.core.Input.getInstance().mouseDragged(awtEvent);
             if (e.getButton() != javafx.scene.input.MouseButton.SECONDARY) game.dispatchEvent(awtEvent);
+            broadcastCollabCursor(e.getX(), e.getY());
         });
 
         canvas.setOnScroll(e -> {
@@ -1332,6 +1360,24 @@ public class IgnisEditorApp extends Application {
                 e.consume();
             }
         });
+    }
+
+    // Ponteiro virtual da colaboracao: transmite a posicao do mouse na Scene View
+    // (em coordenadas de mundo), a selecao atual e a ferramenta ativa. No-op sem
+    // sessao; throttle interno no CollabBridge (~20 Hz).
+    private void broadcastCollabCursor(double screenX, double screenY) {
+        if (!com.ignis.collab.CollabSession.get().isActive()) return;
+        java.awt.geom.Point2D.Double wp = game.screenToWorld(screenX, screenY);
+        com.ignis.collab.CollabBridge.broadcastCursor(wp.x, wp.y,
+                selected != null ? selected.getName() : "", currentToolLabel());
+    }
+
+    private String currentToolLabel() {
+        switch (game.getCurrentTool()) {
+            case ROTATE: return "Rotacionar";
+            case SCALE:  return "Redimensionar";
+            default:     return "Mover";
+        }
     }
 
     private java.awt.event.KeyEvent buildAwtKeyEvent(int id, int vk) {
@@ -1839,6 +1885,11 @@ public class IgnisEditorApp extends Application {
                 }
             }
             setSelected(go); // SEMPRE — atualiza o Inspector (fonte unica de verdade)
+            // Colaboracao: os demais participantes veem o que este esta manipulando.
+            if (com.ignis.collab.CollabSession.get().isActive()) {
+                com.ignis.collab.CollabBridge.broadcastActivity(
+                        go != null ? go.getName() : "", currentToolLabel());
+            }
         } finally {
             suppressSelectionEvents = false;
         }
@@ -1991,6 +2042,7 @@ public class IgnisEditorApp extends Application {
     // gravacao geraria um dialogo a cada intervalo). Erros vao so para a barra de status.
     private void saveProjectSilently() {
         if (currentProject == null || currentIgnisFile == null) return;
+        if (isCollabSessionProject()) return; // copia temporaria: o host e quem salva
         try {
             syncEntitiesToScene();
             IgnisProjectIO.save(currentProject, currentIgnisFile);
@@ -3230,12 +3282,32 @@ public class IgnisEditorApp extends Application {
                 updateInspectorFields();
 
                 // Colaboracao em tempo real: o host transmite o snapshot da cena
-                // (throttle interno ~12 Hz); o convidado aplica via listener.
+                // (throttle interno ~12 Hz); o convidado aplica via listener. Os
+                // ponteiros dos demais participantes sao desenhados por cima do frame.
                 com.ignis.collab.CollabBridge bridge = com.ignis.collab.CollabBridge.get();
-                if (bridge != null) bridge.onEditorFrame();
+                if (bridge != null) {
+                    bridge.onEditorFrame();
+                    bridge.renderOverlay(gc, w, h);
+                }
             }
         };
         com.ignis.collab.CollabBridge.init(game);
+        // Sincronizacao de projeto da colaboracao: convidado recebe uma copia
+        // temporaria do projeto do host e a abre; arquivos alterados no host
+        // chegam ao vivo (watcher) e atualizam o Asset Browser/scripts.
+        com.ignis.collab.CollabProjectSync.install();
+        com.ignis.collab.CollabProjectSync.setProjectOpener(this::openProjectFile);
+        com.ignis.collab.CollabProjectSync.setPreSyncHook(this::saveProjectSilently);
+        com.ignis.collab.CollabProjectSync.setFilesChangedCallback(rels -> {
+            refreshAssetBrowser();
+            boolean hasScript = rels.stream().anyMatch(r -> r.endsWith(".java"));
+            if (hasScript && game.getScriptManager() != null) {
+                try {
+                    game.getScriptManager().compileAllScripts();
+                    reloadAllScriptInstances();
+                } catch (Exception ignore) { /* recompila no proximo Play */ }
+            }
+        });
         // Executor de comandos do host: aplica comandos de convidados reusando o
         // registry do MCP (host-autoritativo). Sem registry ativo, ignora.
         com.ignis.collab.CollabBridge.setCommandExecutor((tool, args) -> {

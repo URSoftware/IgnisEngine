@@ -27,10 +27,12 @@ public final class CollabSession {
     public enum Role { HOST, GUEST, NONE }
 
     /** Canais logicos de evento retransmitidos entre os participantes. */
-    public static final String CH_SCENE  = "scene";
-    public static final String CH_SCRIPT = "script";
-    public static final String CH_PLAY   = "play";
-    public static final String CH_CURSOR = "cursor";
+    public static final String CH_SCENE   = "scene";
+    public static final String CH_SCRIPT  = "script";
+    public static final String CH_PLAY    = "play";
+    public static final String CH_CURSOR  = "cursor";
+    /** Sincronizacao de arquivos do projeto (manifesto + transferencia + watcher). */
+    public static final String CH_PROJECT = "project";
 
     /** Ouvinte de eventos da sessao (a UI/editor implementa). */
     public interface Listener {
@@ -53,6 +55,13 @@ public final class CollabSession {
     private CollabClient client;
     private String displayName = System.getProperty("user.name", "Usuario");
 
+    // Identificador unico deste participante na sessao. O host e sempre "host";
+    // convidados geram um id aleatorio no join. Usado para mensagens direcionadas
+    // (campo "to"), evitando retransmitir arquivos grandes a quem nao pediu.
+    private String localUid = "host";
+    // Endereco remoto do host (apenas como convidado) — chave do cache de projeto.
+    private String remoteAddress = null;
+
     private CollabSession() {}
 
     public void addListener(Listener l) { if (l != null) listeners.add(l); }
@@ -60,6 +69,9 @@ public final class CollabSession {
 
     public Role getRole() { return role; }
     public boolean isActive() { return role != Role.NONE; }
+    public String getLocalUid() { return localUid; }
+    /** Endereco {@code host_porta} da sessao em que se entrou (null se nao for convidado). */
+    public String getRemoteAddress() { return remoteAddress; }
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String name) {
         if (name != null && !name.isBlank()) this.displayName = name.trim();
@@ -72,6 +84,8 @@ public final class CollabSession {
     /** Inicia a sessao como host, escutando na porta informada. Token opcional (senha). */
     public synchronized void host(int port, String token) throws Exception {
         stop();
+        localUid = "host";
+        remoteAddress = null;
         server = new CollabServer(port, displayName, this, token);
         server.start();
         role = Role.HOST;
@@ -83,7 +97,9 @@ public final class CollabSession {
     /** Conecta como convidado a {@code host:port}. Token deve bater com o do host (se houver). */
     public synchronized void join(String host, int port, String token) throws Exception {
         stop();
-        client = new CollabClient(host, port, displayName, this, token);
+        localUid = "g-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        remoteAddress = host + "_" + port;
+        client = new CollabClient(host, port, displayName, localUid, this, token);
         client.connect();
         role = Role.GUEST;
         fireStatus("Conectado a " + host + ":" + port, true);
@@ -119,13 +135,24 @@ public final class CollabSession {
         route(msg);
     }
 
-    /** Envia um evento de canal (scene/script/play/cursor) para os demais. */
+    /** Envia um evento de canal (scene/script/play/cursor/project) para os demais. */
     public synchronized void sendEvent(String channel, JSONObject payload) {
+        sendEventTo(channel, payload, null);
+    }
+
+    /**
+     * Envia um evento de canal direcionado a um unico participante ({@code toUid}).
+     * Com {@code toUid} null, o evento vai a todos (broadcast). Usado pela
+     * sincronizacao de projeto para nao inundar os demais convidados com arquivos
+     * que so um deles pediu.
+     */
+    public synchronized void sendEventTo(String channel, JSONObject payload, String toUid) {
         JSONObject msg = new JSONObject()
                 .put("type", "event")
                 .put("channel", channel)
                 .put("from", displayName)
                 .put("payload", payload == null ? new JSONObject() : payload);
+        if (toUid != null && !toUid.isEmpty()) msg.put("to", toUid);
         route(msg);
     }
 
@@ -139,6 +166,9 @@ public final class CollabSession {
     // ------------------------------------------------------------------
 
     void dispatchInbound(JSONObject msg) {
+        // Mensagens direcionadas: ignora as que nao sao para este participante.
+        String to = msg.optString("to", "");
+        if (!to.isEmpty() && !to.equals(localUid)) return;
         String type = msg.optString("type", "");
         switch (type) {
             case "chat":

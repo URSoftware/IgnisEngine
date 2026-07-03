@@ -521,6 +521,20 @@ public class FxSettingsWindow extends Stage {
         });
         refresh.run();
 
+        // Cache de projetos sincronizados (copias temporarias recebidas do host).
+        Button clearCacheBtn = new Button("Limpar cache de sessoes");
+        clearCacheBtn.setOnAction(e -> {
+            if (collab.isActive()) {
+                new Alert(Alert.AlertType.WARNING,
+                        "Encerre a sessao atual antes de limpar o cache.").showAndWait();
+                return;
+            }
+            boolean ok = com.ignis.collab.CollabProjectSync.clearAllCaches();
+            new Alert(ok ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING,
+                    ok ? "Cache de sessoes colaborativas limpo."
+                       : "Nao foi possivel remover todo o cache (arquivos em uso?).").showAndWait();
+        });
+
         box.getChildren().addAll(
                 labeledRow("Nome de exibicao", nameField),
                 statusLabel,
@@ -537,11 +551,15 @@ public class FxSettingsWindow extends Stage {
                 labeledRow("Porta", joinPort),
                 labeledRow("Senha", joinToken),
                 joinBtn,
+                hint("Ao entrar, voce recebe uma copia temporaria do projeto do host (assets, scripts, cenas) "
+                        + "em ~/.ignis/collab-cache — nada sobrescreve seus projetos locais. Reentrar na mesma "
+                        + "sessao so baixa o que mudou."),
                 new Separator(),
                 new Label("Participantes:"),
                 participantsView,
-                hint("Fundacao de transporte pronta (presenca, chat e canais scene/script/play/cursor). "
-                        + "O detalhamento da sincronizacao esta em doc/COLLABORATION_GUIDE.md.")
+                labeledRow("Cache local", clearCacheBtn),
+                hint("Sincronizacao completa: projeto inicial + alteracoes ao vivo (cena, scripts, assets) + "
+                        + "ponteiro dos participantes na Scene View. Detalhes em doc/COLLABORATION_GUIDE.md.")
         );
         return box;
     }

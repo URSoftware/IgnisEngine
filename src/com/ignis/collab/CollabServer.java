@@ -69,11 +69,18 @@ final class CollabServer {
         try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignore) {}
     }
 
-    /** Retransmite uma mensagem a todos os clientes, exceto {@code except}. */
+    /**
+     * Retransmite uma mensagem a todos os clientes, exceto {@code except}.
+     * Mensagens com campo {@code to} (uid) sao entregues apenas ao destinatario —
+     * transferencias de arquivos de projeto nao inundam os demais convidados.
+     */
     void broadcast(JSONObject msg, ClientHandler except) {
         String line = msg.toString();
+        String to = msg.optString("to", "");
         for (ClientHandler c : clients) {
-            if (c != except) c.sendLine(line);
+            if (c == except) continue;
+            if (!to.isEmpty() && !to.equals(c.uid)) continue;
+            c.sendLine(line);
         }
     }
 
@@ -104,6 +111,7 @@ final class CollabServer {
         private final Socket socket;
         private final int id;
         private String name = "convidado";
+        private String uid = "";
         private OutputStream out;
         private volatile boolean open = true;
 
@@ -138,6 +146,7 @@ final class CollabServer {
                             break; // encerra a conexao deste convidado
                         }
                         this.name = msg.optString("name", "convidado");
+                        this.uid = msg.optString("uid", "g-" + id);
                         sendPresence();
                         session.firePresence();
                         continue;

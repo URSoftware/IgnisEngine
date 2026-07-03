@@ -25,6 +25,7 @@ final class CollabClient {
     private final String host;
     private final int port;
     private final String displayName;
+    private final String uid;
     private final CollabSession session;
 
     private Socket socket;
@@ -34,10 +35,11 @@ final class CollabClient {
 
     private final String token;
 
-    CollabClient(String host, int port, String displayName, CollabSession session, String token) {
+    CollabClient(String host, int port, String displayName, String uid, CollabSession session, String token) {
         this.host = host;
         this.port = port;
         this.displayName = displayName;
+        this.uid = (uid == null) ? "" : uid;
         this.session = session;
         this.token = (token == null) ? "" : token;
     }
@@ -52,8 +54,10 @@ final class CollabClient {
         reader.setDaemon(true);
         reader.start();
 
-        // Apresenta-se ao host (com o token da sessao, se houver).
-        send(new JSONObject().put("type", "hello").put("name", displayName).put("token", token));
+        // Apresenta-se ao host (com o token da sessao, se houver, e o uid local
+        // usado em mensagens direcionadas de sincronizacao de projeto).
+        send(new JSONObject().put("type", "hello").put("name", displayName)
+                .put("uid", uid).put("token", token));
     }
 
     private void readLoop() {
