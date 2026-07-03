@@ -5,6 +5,12 @@
 
 ---
 
+## [1.3.1] - 2026-07-03
+
+### Corrigido
+- **Orientação de z-order na hierarquia (A):** o painel de hierarquia agora mostra o `zIndex` ao lado de cada objeto (ex.: `Background   z:0`) e o nó raiz virou uma legenda (`Cena  (z menor = atras)`). Esclarece que a ordem de render segue o zIndex — não a posição na lista — resolvendo a confusão de "o Background aparece no topo da hierarquia mas é desenhado atrás". A seleção da hierarquia é por índice, então o texto novo não afeta o clique.
+- **Câmera fantasma (B):** ao abrir um projeto, `clearGameCameras()` limpava a lista de câmeras mas deixava a `mainCamera` órfã — `getActiveCamera()` a retornava, mas `getCameras()`/`list_cameras` (MCP) ficavam vazios. Agora a `mainCamera` é recolocada na lista após o clear, mantendo o estado consistente entre o motor, o editor e o MCP.
+
 ## [1.3.0] - 2026-07-03
 
 ### Sistema de Mundos — Fase 1 (limites + barreiras + colisão)

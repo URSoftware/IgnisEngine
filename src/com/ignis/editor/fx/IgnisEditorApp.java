@@ -856,6 +856,11 @@ public class IgnisEditorApp extends Application {
     private void clearGameCameras() {
         try {
             game.getCameras().clear();
+            // Recoloca a mainCamera na lista: sem isso ela vira "fantasma"
+            // (getActiveCamera() ainda a retorna, mas list_cameras/getCameras()
+            // fica vazio, confundindo o MCP e o editor).
+            com.ignis.core.Camera main = game.getMainCamera();
+            if (main != null) game.addCamera(main);
         } catch (Exception ignore) { /* best-effort */ }
     }
 
@@ -2138,9 +2143,12 @@ public class IgnisEditorApp extends Application {
     }
 
     private void refreshHierarchy() {
+        // Legenda de orientacao: a ordem de render segue o zIndex (mostrado ao lado
+        // de cada objeto). Menor zIndex = desenhado antes = fica ATRAS.
+        hierarchyRoot.setValue("Cena  (z menor = atras)");
         hierarchyRoot.getChildren().clear();
         for (GameObject go : game.getEntities()) {
-            hierarchyRoot.getChildren().add(new TreeItem<>(go.getName()));
+            hierarchyRoot.getChildren().add(new TreeItem<>(go.getName() + "   z:" + go.getZIndex()));
         }
         hierarchyRoot.setExpanded(true);
     }
