@@ -7,6 +7,8 @@ import com.ignis.core.IgnisProjectIO;
 import com.ignis.core.Project;
 import com.ignis.core.Scene;
 import com.ignis.core.Square;
+import com.ignis.core.SpriteComponent;
+import com.ignis.core.Texture2D;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -576,12 +578,11 @@ public class IgnisEditorApp extends Application {
     // Menu "Cena": criar/duplicar/renomear/deletar/reordenar entidades.
     private Menu buildSceneMenu() {
         Menu scene = new Menu("Cena");
-        Menu criar = new Menu("Criar objeto");
-        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
-            MenuItem mi = new MenuItem(t);
-            mi.setOnAction(e -> createEntity(t));
-            criar.getItems().add(mi);
-        }
+        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+        criarObjeto.setOnAction(e -> createEntity("GameObject"));
+        MenuItem criarCamera = new MenuItem("Criar Câmera");
+        criarCamera.setOnAction(e -> createEntity("Camera"));
+        
         MenuItem dup = new MenuItem("Duplicar selecionado");
         dup.setOnAction(e -> duplicateSelected());
         MenuItem ren = new MenuItem("Renomear selecionado…");
@@ -600,7 +601,7 @@ public class IgnisEditorApp extends Application {
         savePrefab.setOnAction(e -> saveSelectedAsPrefab());
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
-        scene.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+        scene.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem(), dup, ren, del,
                 new SeparatorMenuItem(), up, down, top, bottom,
                 new SeparatorMenuItem(), savePrefab, instPrefab);
         return scene;
@@ -608,12 +609,11 @@ public class IgnisEditorApp extends Application {
 
     private ContextMenu buildHierarchyContextMenu() {
         ContextMenu menu = new ContextMenu();
-        Menu criar = new Menu("Criar objeto");
-        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
-            MenuItem mi = new MenuItem(t);
-            mi.setOnAction(e -> createEntity(t));
-            criar.getItems().add(mi);
-        }
+        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+        criarObjeto.setOnAction(e -> createEntity("GameObject"));
+        MenuItem criarCamera = new MenuItem("Criar Câmera");
+        criarCamera.setOnAction(e -> createEntity("Camera"));
+        menu.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem());
         MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
         dup.setOnAction(e -> duplicateSelected());
         MenuItem ren = new MenuItem("Renomear… (F2)");
@@ -641,7 +641,7 @@ public class IgnisEditorApp extends Application {
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
 
-        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+        menu.getItems().addAll(dup, ren, del,
                 new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar,
                 new SeparatorMenuItem(), savePrefab, instPrefab);
         return menu;
@@ -1433,17 +1433,30 @@ public class IgnisEditorApp extends Application {
                 // O item com foco (ultimo clicado) vira o primario.
                 TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
                 if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
-                int primaryIdx = hierarchyRoot.getChildren().indexOf(focusedItem);
+                
+                TreeItem<String> goItem = focusedItem;
+                if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
+                    goItem = focusedItem.getParent();
+                }
+                
+                int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
                 GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
                 setSelected(primary);
+                
                 // Montar a lista de secundarios (os demais).
                 secondarySelection.clear();
                 for (TreeItem<String> ti : selItems) {
                     if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
-                    int idx = hierarchyRoot.getChildren().indexOf(ti);
+                    TreeItem<String> pItem = ti;
+                    if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
+                        pItem = ti.getParent();
+                    }
+                    int idx = hierarchyRoot.getChildren().indexOf(pItem);
                     if (idx >= 0 && idx < ents.size()) {
                         GameObject go = ents.get(idx);
-                        if (go != primary) secondarySelection.add(go);
+                        if (go != primary && !secondarySelection.contains(go)) {
+                            secondarySelection.add(go);
+                        }
                     }
                 }
                 syncHighlights();
@@ -1459,13 +1472,11 @@ public class IgnisEditorApp extends Application {
                     menu = buildHierarchyContextMenu();
                 } else {
                     menu = new ContextMenu();
-                    Menu createMenu = new Menu("Criar objeto");
-                    for (String type : com.ignis.core.EntityFactory.getSupportedTypes()) {
-                        MenuItem item = new MenuItem(type);
-                        item.setOnAction(e -> createEntity(type));
-                        createMenu.getItems().add(item);
-                    }
-                    menu.getItems().add(createMenu);
+                    MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+                    criarObjeto.setOnAction(e -> createEntity("GameObject"));
+                    MenuItem criarCamera = new MenuItem("Criar Câmera");
+                    criarCamera.setOnAction(e -> createEntity("Camera"));
+                    menu.getItems().addAll(criarObjeto, criarCamera);
                 }
                 menu.show(tree, ev.getScreenX(), ev.getScreenY());
             }
@@ -2143,12 +2154,27 @@ public class IgnisEditorApp extends Application {
     }
 
     private void refreshHierarchy() {
-        // Legenda de orientacao: a ordem de render segue o zIndex (mostrado ao lado
-        // de cada objeto). Menor zIndex = desenhado antes = fica ATRAS.
         hierarchyRoot.setValue("Cena  (z menor = atras)");
         hierarchyRoot.getChildren().clear();
         for (GameObject go : game.getEntities()) {
-            hierarchyRoot.getChildren().add(new TreeItem<>(go.getName() + "   z:" + go.getZIndex()));
+            TreeItem<String> goItem = new TreeItem<>(go.getName() + "   z:" + go.getZIndex());
+            
+            // Sub-item de Transform
+            goItem.getChildren().add(new TreeItem<>("Transform"));
+            
+            // Sub-item de SpriteComponent se anexado
+            if (go.getComponent(SpriteComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("SpriteComponent"));
+            }
+            
+            // Outros componentes / scripts
+            for (com.ignis.core.IgnisScript script : go.getScripts()) {
+                if (script instanceof SpriteComponent) continue;
+                goItem.getChildren().add(new TreeItem<>(script.getScriptName()));
+            }
+            
+            goItem.setExpanded(true);
+            hierarchyRoot.getChildren().add(goItem);
         }
         hierarchyRoot.setExpanded(true);
     }
@@ -2350,8 +2376,12 @@ public class IgnisEditorApp extends Application {
         if (inspectorExtras == null) return;
         inspectorExtras.getChildren().clear();
         if (go == null) return;
-        javafx.scene.Node appearance = buildAppearanceSection(go);
-        if (appearance != null) inspectorExtras.getChildren().add(appearance);
+        
+        SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
+        if (spriteComp != null) {
+            inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+        }
+        
         inspectorExtras.getChildren().add(buildColliderSection(go));
         if (go instanceof com.ignis.core.Camera) {
             inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
@@ -2445,47 +2475,131 @@ public class IgnisEditorApp extends Application {
     }
 
     // Cor (so para objetos que expoem getColor/setColor via reflexao) + Sprite.
-    private javafx.scene.Node buildAppearanceSection(GameObject go) {
+    private javafx.scene.Node buildSpriteComponentSection(GameObject go, SpriteComponent spriteComp) {
         VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Aparencia"));
+        sec.getChildren().add(sectionTitle("SpriteComponent"));
 
-        java.lang.reflect.Method getColor = methodOrNull(go, "getColor");
-        java.lang.reflect.Method setColor = setColorMethodOrNull(go);
-        if (getColor != null && setColor != null) {
-            ColorPicker picker = new ColorPicker();
-            try {
-                Object c = getColor.invoke(go);
-                if (c instanceof java.awt.Color) picker.setValue(awtToFx((java.awt.Color) c));
-            } catch (Exception ignore) { /* sem cor inicial */ }
-            picker.setOnAction(e -> {
-                try { setColor.invoke(go, fxToAwt(picker.getValue())); markProjectDirty(); }
-                catch (Exception ignore) { /* falha ao aplicar cor */ }
-            });
-            sec.getChildren().add(labeledInspectorRow("Cor", picker));
-        }
-
-        Label spriteVal = new Label(spriteLabel(go.getSpritePath()));
+        // 1. Textura / Sprite
+        Label spriteVal = new Label(spriteLabel(spriteComp.getTexture() != null ? spriteComp.getTexture().getPath() : null));
         spriteVal.getStyleClass().add("field-label");
         spriteVal.setWrapText(true);
         Button pick = new Button("Escolher…");
         pick.setOnAction(e -> {
             File f = chooseSpriteFile();
             if (f != null) {
-                go.setSpritePath(importSpriteToProject(f));
-                spriteVal.setText(spriteLabel(go.getSpritePath()));
+                String path = importSpriteToProject(f);
+                spriteComp.setTexture(new Texture2D(path));
+                spriteVal.setText(spriteLabel(path));
                 markProjectDirty();
+                // update hierarchy when texture changes
+                refreshHierarchy();
             }
         });
         Button clear = new Button("Limpar");
         clear.setOnAction(e -> {
-            go.setSpritePath(null);
+            spriteComp.setTexture(null);
             spriteVal.setText(spriteLabel(null));
             markProjectDirty();
+            refreshHierarchy();
         });
         Label spriteLbl = new Label("Sprite");
         spriteLbl.getStyleClass().add("field-label");
         sec.getChildren().add(new VBox(4, spriteLbl, spriteVal, new HBox(6, pick, clear)));
+
+        // 2. Tipo de Forma (shapeType)
+        ComboBox<String> shapeBox = new ComboBox<>();
+        shapeBox.getItems().addAll("None", "Square", "Circle", "Triangle", "Star", "Pentagon");
+        shapeBox.setValue(spriteComp.getShapeType());
+        shapeBox.setOnAction(e -> {
+            spriteComp.setShapeType(shapeBox.getValue());
+            markProjectDirty();
+        });
+        sec.getChildren().add(labeledInspectorRow("Forma", shapeBox));
+
+        // 3. Cor / Tint
+        ColorPicker tintPicker = new ColorPicker();
+        if (spriteComp.getTint() != null) {
+            tintPicker.setValue(awtToFx(spriteComp.getTint()));
+        }
+        tintPicker.setOnAction(e -> {
+            spriteComp.setTint(fxToAwt(tintPicker.getValue()));
+            markProjectDirty();
+        });
+        sec.getChildren().add(labeledInspectorRow("Cor / Tint", tintPicker));
+
+        // 4. FlipX e FlipY
+        CheckBox fxCheck = new CheckBox("Flip X");
+        fxCheck.setSelected(spriteComp.isFlipX());
+        fxCheck.setOnAction(e -> {
+            spriteComp.setFlipX(fxCheck.isSelected());
+            markProjectDirty();
+        });
+
+        CheckBox fyCheck = new CheckBox("Flip Y");
+        fyCheck.setSelected(spriteComp.isFlipY());
+        fyCheck.setOnAction(e -> {
+            spriteComp.setFlipY(fyCheck.isSelected());
+            markProjectDirty();
+        });
+
+        sec.getChildren().add(new HBox(12, fxCheck, fyCheck));
+
         return sec;
+    }
+
+    private void openAddComponentDialog(GameObject go) {
+        if (!requireProject()) return;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm == null) {
+                sm = new com.ignis.core.ScriptManager(projectFolder);
+                game.setScriptManager(sm);
+            }
+            
+            java.util.List<String> available = new java.util.ArrayList<>();
+            
+            // 1. SpriteComponent se nao anexado
+            if (go.getComponent(SpriteComponent.class) == null) {
+                available.add("SpriteComponent");
+            }
+            
+            // 2. Scripts disponiveis
+            for (String scriptName : sm.listAvailableScripts()) {
+                if (!go.getScriptNames().contains(scriptName)) {
+                    available.add(scriptName);
+                }
+            }
+
+            if (available.isEmpty()) {
+                setStatus("Nenhum componente disponível para adicionar.");
+                return;
+            }
+
+            FxAddComponentDialog dialog = new FxAddComponentDialog(primaryStage, available);
+            String selected = dialog.showAndGetResult();
+            
+            if (selected != null) {
+                if (selected.equals("SpriteComponent")) {
+                    SpriteComponent sprite = new SpriteComponent();
+                    go.addComponent(sprite);
+                    setStatus("SpriteComponent adicionado.");
+                } else {
+                    go.getScriptNames().add(selected);
+                    try {
+                        com.ignis.core.IgnisScript inst = sm.createScriptInstance(selected, go, game);
+                        if (inst != null) {
+                            go.addComponent(inst);
+                        }
+                    } catch (Exception ignore) {}
+                    setStatus("Script anexado: " + selected);
+                }
+                markProjectDirty();
+                refreshHierarchy();
+                rebuildInspectorExtras(go);
+            }
+        } catch (Exception ex) {
+            new Alert(Alert.AlertType.ERROR, "Falha ao adicionar componente:\n" + ex.getMessage()).showAndWait();
+        }
     }
 
     private javafx.scene.Node buildColliderSection(GameObject go) {
@@ -2545,33 +2659,53 @@ public class IgnisEditorApp extends Application {
 
     private javafx.scene.Node buildScriptsSection(GameObject go) {
         VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Scripts"));
+        sec.getChildren().add(sectionTitle("Componentes / Scripts"));
 
         ListView<String> list = new ListView<>();
-        list.getItems().setAll(go.getScriptNames());
+        java.util.List<String> listItems = new java.util.ArrayList<>();
+        if (go.getComponent(SpriteComponent.class) != null) {
+            listItems.add("SpriteComponent");
+        }
+        listItems.addAll(go.getScriptNames());
+        list.getItems().setAll(listItems);
         list.setPrefHeight(90);
 
-        Button attach = new Button("Anexar…");
-        attach.setOnAction(e -> { attachScriptTo(go); rebuildInspectorExtras(go); });
+        Button attach = new Button("Adicionar Componente…");
+        attach.setOnAction(e -> { openAddComponentDialog(go); });
+        
         Button remove = new Button("Remover");
         remove.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
             if (sel != null) {
-                go.removeScriptByName(sel);
+                if (sel.equals("SpriteComponent")) {
+                    SpriteComponent sprite = go.getComponent(SpriteComponent.class);
+                    if (sprite != null) go.removeComponent(sprite);
+                } else {
+                    go.removeScriptByName(sel);
+                }
                 rebuildInspectorExtras(go);
+                refreshHierarchy();
                 markProjectDirty();
             }
         });
+        
         Button open = new Button("Abrir");
         open.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null) openScriptByName(sel);
+            if (sel != null && !sel.equals("SpriteComponent")) openScriptByName(sel);
         });
+
+        // Habilita/Desabilita o botao Abrir dependendo do item selecionado
+        list.getSelectionModel().selectedItemProperty().addListener((o, oldV, newV) -> {
+            open.setDisable(newV == null || newV.equals("SpriteComponent"));
+        });
+        open.setDisable(list.getSelectionModel().getSelectedItem() == null || "SpriteComponent".equals(list.getSelectionModel().getSelectedItem()));
 
         sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
 
-        // Renderizar painel de variaveis para cada script instanciado
+        // Renderizar painel de variaveis para cada script instanciado (pulando SpriteComponent)
         for (com.ignis.core.IgnisScript script : go.getScripts()) {
+            if (script instanceof SpriteComponent) continue;
             javafx.scene.Node varsNode = createScriptVariablesNode(script);
             if (varsNode != null) {
                 sec.getChildren().add(varsNode);
@@ -3235,12 +3369,11 @@ public class IgnisEditorApp extends Application {
     private ContextMenu buildViewportContextMenu() {
         ContextMenu menu = new ContextMenu();
 
-        Menu criar = new Menu("Criar objeto");
-        for (String t : com.ignis.core.EntityFactory.getSupportedTypes()) {
-            MenuItem mi = new MenuItem(t);
-            mi.setOnAction(e -> createEntity(t));
-            criar.getItems().add(mi);
-        }
+        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+        criarObjeto.setOnAction(e -> createEntity("GameObject"));
+        MenuItem criarCamera = new MenuItem("Criar Câmera");
+        criarCamera.setOnAction(e -> createEntity("Camera"));
+        menu.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem());
 
         MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
         dup.setOnAction(e -> duplicateSelected());
@@ -3262,7 +3395,7 @@ public class IgnisEditorApp extends Application {
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
 
-        menu.getItems().addAll(criar, new SeparatorMenuItem(), dup, ren, del,
+        menu.getItems().addAll(dup, ren, del,
                 new SeparatorMenuItem(), copyItem, pasteItem,
                 new SeparatorMenuItem(), savePrefab, instPrefab);
         return menu;

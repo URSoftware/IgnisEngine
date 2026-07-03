@@ -121,56 +121,23 @@ public class Scene {
             size.put("height", entity.getHeight());
             entityJson.put("size", size);
 
-            // Transform e propriedades visuais comuns (Fase B). A rotacao nao era
-            // persistida antes desta versao — bug corrigido aqui. Tudo opcional na
-            // leitura (fromJSON) para compatibilidade com projetos antigos.
             entityJson.put("rotation", entity.getRotation());
             entityJson.put("zIndex", entity.getZIndex());
-            entityJson.put("opacity", entity.getOpacity());
-            entityJson.put("flipX", entity.isFlipX());
-            entityJson.put("flipY", entity.isFlipY());
-            entityJson.put("scaleX", entity.getScaleX());
-            entityJson.put("scaleY", entity.getScaleY());
-            entityJson.put("worldCollision", entity.isWorldCollision());
+            entityJson.put("visible", entity.isVisible());
 
-            if (entity.getSpritePath() != null) {
-                entityJson.put("sprite", entity.getSpritePath());
-            }
-            
-            // Save attached audio component
-            if (entity.getMusicPath() != null) {
-                entityJson.put("musicPath", entity.getMusicPath().toJSON());
-            }
-
-            // Save attached animation component
-            if (entity.getAnimator() != null && !entity.getAnimator().getAnimations().isEmpty()) {
-                entityJson.put("animator", entity.getAnimator().toJSON());
-            }
-
-            // Save attached scripts with their variable values
-            if (!entity.getScriptNames().isEmpty()) {
-                JSONArray scriptsArray = new JSONArray();
-                
-                for (int i = 0; i < entity.getScriptNames().size(); i++) {
-                    String scriptName = entity.getScriptNames().get(i);
-                    JSONObject scriptData = new JSONObject();
-                    scriptData.put("name", scriptName);
-                    
-                    // Save script variables if script instance exists
-                    if (i < entity.getScripts().size()) {
-                        IgnisScript script = entity.getScripts().get(i);
-                        JSONObject variables = saveScriptVariables(script);
-                        if (variables.length() > 0) {
-                            scriptData.put("variables", variables);
-                        }
-                    }
-                    
-                    scriptsArray.put(scriptData);
+            // Serializar todos os componentes anexados
+            JSONArray componentsArray = new JSONArray();
+            for (Component comp : entity.getComponents()) {
+                JSONObject compJson = new JSONObject();
+                String compType = comp.getClass().getSimpleName();
+                compJson.put("type", compType);
+                if (comp instanceof IgnisScript) {
+                    JSONObject vars = ScriptSerializationHelper.saveScriptVariables((IgnisScript) comp);
+                    compJson.put("properties", vars);
                 }
-                entityJson.put("scripts", scriptsArray);
+                componentsArray.put(compJson);
             }
-
-            entityJson.put("properties", entity.saveProperties());
+            entityJson.put("components", componentsArray);
 
             entitiesArray.put(entityJson);
         }
@@ -219,56 +186,81 @@ public class Scene {
                 entity.setHeight(size.getInt("height"));
             }
 
-            // Transform e propriedades visuais comuns (Fase B). Todas opcionais:
-            // projetos salvos antes desta versao caem nos defaults.
             entity.setRotation(entityJson.optDouble("rotation", 0.0));
             entity.setZIndex(entityJson.optInt("zIndex", 0));
-            entity.setOpacity(entityJson.optDouble("opacity", 1.0));
-            entity.setFlipX(entityJson.optBoolean("flipX", false));
-            entity.setFlipY(entityJson.optBoolean("flipY", false));
-            entity.setScaleX(entityJson.optDouble("scaleX", 1.0));
-            entity.setScaleY(entityJson.optDouble("scaleY", 1.0));
-            entity.setWorldCollision(entityJson.optBoolean("worldCollision", false));
+            entity.setVisible(entityJson.optBoolean("visible", entityJson.optBoolean("visibleCheck", true)));
 
-            if (entityJson.has("sprite")) {
-                entity.setSpritePath(entityJson.getString("sprite"));
-            }
-            
-            // Load attached audio component
-            if (entityJson.has("musicPath")) {
-                MusicPath musicPath = MusicPath.fromJSON(entityJson.getJSONObject("musicPath"));
-                entity.setMusicPath(musicPath);
-            }
-
-            // Load attached animation component
-            if (entityJson.has("animator")) {
-                entity.setAnimator(
-                        com.ignis.animation.Animator.fromJSON(entityJson.getJSONObject("animator")));
-            }
-
-            // Load attached scripts (supports both old string format and new object format)
-            if (entityJson.has("scripts")) {
-                JSONArray scriptsArray = entityJson.getJSONArray("scripts");
+            // CARREGAMENTO DE COMPONENTES E SUPORTE A MIGRACAO RETROATIVA
+            if (entityJson.has("components")) {
+                JSONArray compsArray = entityJson.getJSONArray("components");
                 java.util.List<String> scriptNames = new java.util.ArrayList<>();
-                
-                for (int j = 0; j < scriptsArray.length(); j++) {
-                    Object scriptEntry = scriptsArray.get(j);
-                    if (scriptEntry instanceof String) {
-                        // Old format: just string name
-                        scriptNames.add((String) scriptEntry);
-                    } else if (scriptEntry instanceof JSONObject) {
-                        // New format: object with name and variables
-                        JSONObject scriptData = (JSONObject) scriptEntry;
-                        String scriptName = scriptData.getString("name");
-                        scriptNames.add(scriptName);
-                        if (scriptData.has("variables")) {
-                            // Store for later resolution when scripts are instantiated
-                            String key = entity.getId() + ":" + scriptName;
-                            scene.pendingScriptVariables.put(key, scriptData.getJSONObject("variables"));
+                for (int j = 0; j < compsArray.length(); j++) {
+                    JSONObject compJson = compsArray.getJSONObject(j);
+                    String compType = compJson.getString("type");
+                    
+                    if (compType.equals("SpriteComponent")) {
+                        SpriteComponent spriteComp = new SpriteComponent();
+                        entity.addComponent(spriteComp);
+                        if (compJson.has("properties")) {
+                            JSONObject props = compJson.getJSONObject("properties");
+                            ScriptSerializationHelper.loadScriptVariables(spriteComp, props, scene::getEntityById);
+                        }
+                    } else {
+                        // É um script customizado
+                        scriptNames.add(compType);
+                        if (compJson.has("properties")) {
+                            String key = entity.getId() + ":" + compType;
+                            scene.pendingScriptVariables.put(key, compJson.getJSONObject("properties"));
                         }
                     }
                 }
                 entity.setScriptNames(scriptNames);
+            } else {
+                // Cenário Legado: Migração automática
+                boolean needsSprite = entityJson.has("sprite") || 
+                    type.equals("Square") || type.equals("Circle") || 
+                    type.equals("Triangle") || type.equals("Star") || 
+                    type.equals("Pentagon") || type.equals("MergedShape") ||
+                    type.equals("Player");
+                
+                if (needsSprite) {
+                    SpriteComponent spriteComp = new SpriteComponent();
+                    if (entityJson.has("sprite")) {
+                        spriteComp.setTexture(new Texture2D(entityJson.getString("sprite")));
+                    } else if (type.equals("Square") || type.equals("Circle") || 
+                               type.equals("Triangle") || type.equals("Star") || 
+                               type.equals("Pentagon")) {
+                        spriteComp.setShapeType(type);
+                    }
+                    
+                    if (entityJson.has("properties")) {
+                        JSONObject props = entityJson.getJSONObject("properties");
+                        if (props.has("color")) {
+                            spriteComp.setTint(new java.awt.Color(props.getInt("color")));
+                        }
+                    }
+                    entity.addComponent(spriteComp);
+                }
+                
+                if (entityJson.has("scripts")) {
+                    JSONArray scriptsArray = entityJson.getJSONArray("scripts");
+                    java.util.List<String> scriptNames = new java.util.ArrayList<>();
+                    for (int j = 0; j < scriptsArray.length(); j++) {
+                        Object scriptEntry = scriptsArray.get(j);
+                        if (scriptEntry instanceof String) {
+                            scriptNames.add((String) scriptEntry);
+                        } else if (scriptEntry instanceof JSONObject) {
+                            JSONObject scriptData = (JSONObject) scriptEntry;
+                            String scriptName = scriptData.getString("name");
+                            scriptNames.add(scriptName);
+                            if (scriptData.has("variables")) {
+                                String key = entity.getId() + ":" + scriptName;
+                                scene.pendingScriptVariables.put(key, scriptData.getJSONObject("variables"));
+                            }
+                        }
+                    }
+                    entity.setScriptNames(scriptNames);
+                }
             }
 
             if (entityJson.has("properties")) {
@@ -277,7 +269,7 @@ public class Scene {
 
             scene.addEntity(entity);
             
-            // If it's a camera, also register it with the game
+            // Se for Camera, registra no jogo
             if (entity instanceof Camera && game != null) {
                 Camera cam = (Camera) entity;
                 cam.setViewport(game.getViewport());

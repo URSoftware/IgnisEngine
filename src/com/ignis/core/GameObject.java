@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
 
-public abstract class GameObject {
+public class GameObject {
 
     protected String id;
     protected String name;
@@ -40,6 +40,9 @@ public abstract class GameObject {
     
     // Lista de scripts/componentes anexados a este objeto
     protected List<IgnisScript> scripts = new ArrayList<>();
+    
+    // Lista unificada de todos os componentes
+    protected List<Component> components = new ArrayList<>();
     
     // Lista de nomes de scripts (para serialização)
     protected List<String> scriptNames = new ArrayList<>();
@@ -121,14 +124,21 @@ public abstract class GameObject {
     public boolean isWorldCollision() { return worldCollision; }
     public void setWorldCollision(boolean worldCollision) { this.worldCollision = worldCollision; }
 
-    public abstract void tick();
+    public void tick() {
+    }
 
-    public abstract void render(Graphics g);
+    public void render(Graphics g) {
+        if (!visible) return;
+        renderSpriteComponent(g);
+    }
 
     // Metodos para serializacao/deserializacao
-    public abstract void loadProperties(JSONObject props);
+    public void loadProperties(JSONObject props) {
+    }
 
-    public abstract JSONObject saveProperties();
+    public JSONObject saveProperties() {
+        return new JSONObject();
+    }
 
     // Getters e Setters
     public String getId() {
@@ -204,11 +214,28 @@ public abstract class GameObject {
     }
 
     public String getSpritePath() {
+        SpriteComponent spriteComp = getComponent(SpriteComponent.class);
+        if (spriteComp != null && spriteComp.getTexture() != null) {
+            return spriteComp.getTexture().getPath();
+        }
         return spritePath;
     }
 
     public void setSpritePath(String spritePath) {
         this.spritePath = spritePath;
+        SpriteComponent spriteComp = getComponent(SpriteComponent.class);
+        if (spritePath != null) {
+            if (spriteComp == null) {
+                spriteComp = new SpriteComponent(new Texture2D(spritePath));
+                addComponent(spriteComp);
+            } else {
+                spriteComp.setTexture(new Texture2D(spritePath));
+            }
+        } else {
+            if (spriteComp != null) {
+                spriteComp.setTexture(null);
+            }
+        }
     }
     
     public boolean isVisible() {
@@ -309,40 +336,68 @@ public abstract class GameObject {
      * @param component O componente a ser adicionado.
      */
     public void addComponent(Component component) {
-        if (component instanceof IgnisScript) {
-            addScript((IgnisScript) component);
+        if (component == null) return;
+        if (!components.contains(component)) {
+            components.add(component);
+            component.gameObject = this;
+            component.awake();
+            if (component instanceof IgnisScript) {
+                IgnisScript script = (IgnisScript) component;
+                if (!scripts.contains(script)) {
+                    scripts.add(script);
+                }
+                if (game != null) {
+                    script.init(this, game);
+                    if (game.getGameState() == Game.GameState.PLAYING) {
+                        script.start();
+                    }
+                }
+                String name = script.getClass().getSimpleName();
+                if (!scriptNames.contains(name)) {
+                    scriptNames.add(name);
+                }
+            }
         }
     }
 
-    /**
-     * Busca e retorna o primeiro componente que corresponda a classe informada.
-     * Retorna null se nao encontrar.
-     */
+    public void removeComponent(Component component) {
+        if (component == null) return;
+        components.remove(component);
+        if (component instanceof IgnisScript) {
+            IgnisScript script = (IgnisScript) component;
+            scripts.remove(script);
+            scriptNames.remove(script.getClass().getSimpleName());
+        }
+        component.gameObject = null;
+    }
+
     public <T extends Component> T getComponent(Class<T> componentClass) {
-        for (IgnisScript script : scripts) {
-            if (componentClass.isInstance(script)) {
-                return componentClass.cast(script);
+        for (Component comp : components) {
+            if (componentClass.isInstance(comp)) {
+                return componentClass.cast(comp);
             }
         }
         return null;
     }
 
-    /**
-     * Propaga o ciclo de update para todos os componentes anexados habilitados.
-     */
+    public List<Component> getComponents() {
+        return components;
+    }
+
     public void update(float deltaTime) {
-        for (int i = 0; i < scripts.size(); i++) {
-            IgnisScript script = scripts.get(i);
-            if (script.isEnabled()) {
-                script.update(deltaTime);
+        for (int i = 0; i < components.size(); i++) {
+            Component comp = components.get(i);
+            if (comp instanceof IgnisScript) {
+                IgnisScript script = (IgnisScript) comp;
+                if (script.isEnabled()) {
+                    script.update(deltaTime);
+                }
+            } else {
+                comp.update(deltaTime);
             }
         }
     }
 
-    /**
-     * Tenta renderizar o SpriteComponent anexado.
-     * @return true se o SpriteComponent foi renderizado, false caso contrario.
-     */
     public boolean renderSpriteComponent(java.awt.Graphics g) {
         SpriteComponent spriteComp = getComponent(SpriteComponent.class);
         if (spriteComp != null) {
@@ -352,33 +407,12 @@ public abstract class GameObject {
         return false;
     }
 
-    /**
-     * Adiciona um script a este GameObject
-     * @param script O script a ser adicionado
-     */
     public void addScript(IgnisScript script) {
-        if (script != null && !scripts.contains(script)) {
-            scripts.add(script);
-            script.init(this, game);
-            script.callAwake(); // Inicializa imediatamente
-            
-            // Armazenar nome para serialização
-            String scriptName = script.getScriptName();
-            if (!scriptNames.contains(scriptName)) {
-                scriptNames.add(scriptName);
-            }
-        }
+        addComponent(script);
     }
 
-    /**
-     * Remove um script deste GameObject
-     * @param script O script a ser removido
-     */
     public void removeScript(IgnisScript script) {
-        if (script != null) {
-            scripts.remove(script);
-            scriptNames.remove(script.getScriptName());
-        }
+        removeComponent(script);
     }
     
     /**
@@ -396,6 +430,7 @@ public abstract class GameObject {
         }
         if (toRemove != null) {
             scripts.remove(toRemove);
+            components.remove(toRemove);
         }
         
         // Always remove from scriptNames list (even if instance doesn't exist)
