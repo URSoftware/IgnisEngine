@@ -1118,17 +1118,27 @@ public class Game extends Canvas implements Runnable {
 
     private java.util.List<GameObject> entities = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-    public void tick() {
+    // synchronized no mesmo monitor de render()/renderWorldTo(): a simulacao roda
+    // na thread do loop do jogo (Game.run) enquanto o editor JavaFX renderiza na
+    // thread do AnimationTimer. Sem exclusao mutua, o render podia ler um objeto
+    // com x ja atualizado e y ainda antigo (frame "rasgado"). Ver Fase A do plano.
+    public synchronized void tick() {
         // Update Input system
         Input.update();
-        
+
         // Update UI Canvas (even in editing mode for preview)
         if (uiCanvas != null) {
             uiCanvas.update();
         }
-        
+
         // Only update objects if in PLAYING state
         if (gameState == GameState.PLAYING) {
+            // Passo 1: fixa o transform anterior de TODAS as entidades (inclusive as
+            // paradas) antes de qualquer atualizacao, base da interpolacao de render.
+            for (int i = 0; i < entities.size(); i++) {
+                entities.get(i).capturePreviousTransform();
+            }
+            // Passo 2: avanca a simulacao.
             for (int i = 0; i < entities.size(); i++) {
                 GameObject entity = entities.get(i);
                 entity.tick();
@@ -1139,12 +1149,75 @@ public class Game extends Canvas implements Runnable {
                 // Executar scripts anexados ao objeto
                 entity.tickScripts();
             }
-            
+
             // Run collision detection using the advanced collision system
             if (collisionManager != null) {
                 collisionManager.update();
             }
+
+            // Marca o instante do tick para o calculo do alpha de interpolacao.
+            lastTickNanos = System.nanoTime();
         }
+    }
+
+    // ---- Interpolacao de render (Fase A do plano do motor grafico) ----
+    // Simulacao fixa em 60 Hz; o editor JavaFX renderiza na taxa do monitor
+    // (75/120/144 Hz). Sem interpolacao, o movimento continuo apresenta judder.
+    private volatile long lastTickNanos = 0L;
+    private static final double NS_PER_TICK = 1_000_000_000.0 / 60.0;
+    // Distancia^2 (em px) acima da qual NAO interpolamos — trata teleporte
+    // (setPosition com salto grande) como corte seco em vez de deslize na tela.
+    private static final double INTERP_SNAP_SQ = 256.0 * 256.0;
+
+    /**
+     * Fracao [0,1] do tick atual ja decorrida, usada para interpolar posicoes no
+     * render. Retorna 1.0 fora do modo PLAYING (desenha o transform atual, sem
+     * interpolacao) — logo o editor em edicao nao e afetado.
+     */
+    public double getRenderAlpha() {
+        if (gameState != GameState.PLAYING || lastTickNanos == 0L) return 1.0;
+        double alpha = (System.nanoTime() - lastTickNanos) / NS_PER_TICK;
+        if (alpha < 0.0) return 0.0;
+        if (alpha > 1.0) return 1.0;
+        return alpha;
+    }
+
+    /**
+     * Deslocamento X interpolado do objeto para o frame atual (prevX -&gt; x),
+     * com corte seco em teleportes. Igual a {@code entity.getX()} fora do Play.
+     */
+    private double interpX(GameObject e, double alpha) {
+        if (alpha >= 1.0) return e.getX();
+        double dx = e.getX() - e.getPrevX();
+        double dy = e.getY() - e.getPrevY();
+        if (dx * dx + dy * dy > INTERP_SNAP_SQ) return e.getX();
+        return e.getPrevX() + dx * alpha;
+    }
+
+    private double interpY(GameObject e, double alpha) {
+        if (alpha >= 1.0) return e.getY();
+        double dx = e.getX() - e.getPrevX();
+        double dy = e.getY() - e.getPrevY();
+        if (dx * dx + dy * dy > INTERP_SNAP_SQ) return e.getY();
+        return e.getPrevY() + dy * alpha;
+    }
+
+    // Culling em espaco de mundo: true se o AABB da entidade nao intersecta o
+    // retangulo visivel da camera. Conservador — usa a diagonal como meio-lado
+    // (cobre qualquer rotacao do objeto) e uma folga fixa, entao nunca corta algo
+    // parcialmente visivel. So chamado quando a transform de camera esta aplicada.
+    private boolean isCulled(Camera cam, GameObject e) {
+        if (cam == null) return false;
+        double[] b = cam.getVisibleWorldBounds(); // [minX, minY, maxX, maxY]
+        if (b == null || b.length < 4) return false;
+        double cx = e.getX() + e.getWidth() / 2.0;
+        double cy = e.getY() + e.getHeight() / 2.0;
+        double half = 0.5 * Math.sqrt((double) e.getWidth() * e.getWidth()
+                + (double) e.getHeight() * e.getHeight());
+        double margin = 32.0; // folga extra de seguranca
+        double objMinX = cx - half - margin, objMaxX = cx + half + margin;
+        double objMinY = cy - half - margin, objMaxY = cy + half + margin;
+        return objMaxX < b[0] || objMinX > b[2] || objMaxY < b[1] || objMinY > b[3];
     }
     
     /**
@@ -1235,22 +1308,28 @@ public class Game extends Canvas implements Runnable {
         }
 
         // 4. Render all entities (respecting Z-Index by list order)
+        Camera cullCamera = shouldApplyCameraTransform ? activeCamera : null;
+        double renderAlpha = getRenderAlpha();
         for (int i = 0; i < entities.size(); i++) {
             GameObject entity = entities.get(i);
-            
+
             // Skip invisible entities
             if (!entity.isVisible()) continue;
-            
+
             // Skip camera entities from regular rendering (cameras are special)
             if (entity instanceof Camera) continue;
+
+            // Culling: pula entidades totalmente fora do retangulo visivel.
+            if (isCulled(cullCamera, entity)) continue;
 
             // Save entity transform
             AffineTransform entityTransform = g2d.getTransform();
 
-            // NAO rotacionar aqui: cada GameObject concreto (Square, Circle, Player,
-            // MergedShape, ...) ja aplica a propria rotacao dentro de render().
-            // Rotacionar tambem no pipeline dobrava o angulo visual (objeto a 30
-            // graus desenhado a 60), desalinhando contorno de selecao e colliders.
+            // Interpolacao de posicao (prevX/prevY -> x/y) para suavizar o
+            // movimento entre ticks; identidade fora do Play. NAO rotacionar
+            // aqui: cada forma ja aplica a propria rotacao dentro de render().
+            g2d.translate(interpX(entity, renderAlpha) - entity.getX(),
+                          interpY(entity, renderAlpha) - entity.getY());
 
             // Render entity
             entity.render(g);
@@ -1369,14 +1448,20 @@ public class Game extends Canvas implements Runnable {
         }
 
         // Entidades (respeita Z por ordem da lista)
+        Camera cullCamera = shouldApplyCameraTransform ? activeCamera : null;
+        double renderAlpha = getRenderAlpha();
         for (int i = 0; i < entities.size(); i++) {
             GameObject entity = entities.get(i);
             if (!entity.isVisible()) continue;
             if (entity instanceof Camera) continue;
+            if (isCulled(cullCamera, entity)) continue;
 
             AffineTransform entityTransform = g2d.getTransform();
-            // NAO rotacionar aqui: as formas concretas ja rotacionam dentro de
-            // render() — rotacionar no pipeline dobrava o angulo (ver render()).
+            // Interpolacao de posicao (suaviza movimento em monitores > 60 Hz);
+            // identidade fora do Play. NAO rotacionar aqui: as formas concretas
+            // ja rotacionam dentro de render() (rotacionar dobrava o angulo).
+            g2d.translate(interpX(entity, renderAlpha) - entity.getX(),
+                          interpY(entity, renderAlpha) - entity.getY());
             entity.render(g2d);
             g2d.setTransform(entityTransform);
         }

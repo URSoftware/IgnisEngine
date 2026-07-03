@@ -5,6 +5,17 @@
 
 ---
 
+## [1.1.0] - 2026-07-02
+
+### Motor gráfico 2D — Fase A (fundações do pipeline de render)
+Primeira fase do plano do motor gráfico (`doc/` no vault: `ignisengine-plano-motor-grafico`).
+
+- **Thread-safety entre simulação e render (A.1):** `Game.tick()` agora é `synchronized` no mesmo monitor de `render()`/`renderWorldTo()`. A simulação roda na thread do loop do jogo enquanto o editor JavaFX renderiza na thread do `AnimationTimer`; sem exclusão mútua, o render podia ler um objeto com `x` já atualizado e `y` ainda antigo (frame "rasgado"). A lista de entidades já era `CopyOnWriteArrayList` (protegia a lista, não os campos dos objetos).
+- **Interpolação de render / anti-judder (A.2):** a simulação é fixa em 60 Hz, mas o editor renderiza na taxa do monitor (75/120/144 Hz). Cada `GameObject` agora guarda o transform do início do tick anterior (`capturePreviousTransform()`, chamado no começo de `tick()`), e os dois pipelines de render interpolam a posição (`prevX/prevY → x/y`) por um `alpha` = fração do tick decorrida (`Game.getRenderAlpha()`), via translate do `Graphics2D`. Teleportes (salto > 256 px/tick) são cortados a seco em vez de deslizar pela tela. Fora do modo Play, `alpha = 1.0` → identidade (editor em edição não é afetado). Campos `prev*` são `transient` (não serializados).
+- **Culling por câmera (A.3):** os dois loops de render agora pulam entidades cujo AABB (conservador, usando a diagonal + folga, para cobrir rotação) não intersecta o retângulo visível da câmera (`Camera.getVisibleWorldBounds()`). Só ativo quando a transform de câmera está aplicada; nunca corta algo parcialmente visível. Reduz o custo de render em cenas grandes (pré-requisito para tilemaps).
+
+> Observação: por hora `tick()` e o render compartilham o lock durante o desenho inteiro — correto, mas o plano prevê um *snapshot de render* por tick como otimização futura (Fase A do plano, item de performance). Verificação visual do anti-judder requer reabrir o editor num monitor > 60 Hz.
+
 ## [1.0.9] - 2026-07-02
 
 ### Corrigido

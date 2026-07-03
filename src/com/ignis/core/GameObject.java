@@ -13,6 +13,11 @@ public abstract class GameObject {
     protected double x, y;
     protected double rotation = 0.0;
     protected int width, height;
+
+    // Transform do inicio do tick anterior, usado pela interpolacao de render
+    // (Fase A do plano do motor grafico). Nao serializado. Atualizado por
+    // capturePreviousTransform() no comeco de cada tick de simulacao.
+    protected transient double prevX, prevY, prevRotation;
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
@@ -45,6 +50,9 @@ public abstract class GameObject {
         this.game = game;
         this.x = x;
         this.y = y;
+        this.prevX = x;
+        this.prevY = y;
+        this.prevRotation = 0.0;
         this.width = width;
         this.height = height;
         this.spritePath = null;
@@ -58,6 +66,22 @@ public abstract class GameObject {
         this.visible = true;
         this.nameColor = Color.WHITE;
     }
+
+    /**
+     * Captura o transform atual como o transform "anterior", chamado pelo
+     * {@link Game#tick()} no inicio de cada passo de simulacao. A interpolacao
+     * de render desenha entre este valor e o transform atual, suavizando o
+     * movimento em monitores com taxa &gt; 60 Hz. Ver Fase A do plano do motor.
+     */
+    public void capturePreviousTransform() {
+        this.prevX = this.x;
+        this.prevY = this.y;
+        this.prevRotation = this.rotation;
+    }
+
+    public double getPrevX() { return prevX; }
+    public double getPrevY() { return prevY; }
+    public double getPrevRotation() { return prevRotation; }
 
     public abstract void tick();
 
