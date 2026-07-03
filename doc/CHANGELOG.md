@@ -5,6 +5,18 @@
 
 ---
 
+## [1.7.0] - 2026-07-03
+
+### Colaboração em tempo real — Parte 2.2b + robustez
+Fecha as principais lacunas para a colaboração ficar "100% com boa compatibilidade".
+
+- **Sincronização de código (`script`):** quando alguém edita um script no `FxCodeEditor`, o conteúdo é transmitido (debounce de 500 ms) pelo canal `script`; os demais salvam o arquivo local e atualizam o editor aberto daquele script, com **guarda anti-eco** (não retransmite uma edição que veio de outro colaborador). É o "editar os códigos juntos" pedido. (v1 last-write-wins; OT/CRDT fica para depois.)
+- **Interpolação no convidado:** o convidado deixa de aplicar o snapshot "seco" a 12 Hz — agora **interpola** posições dos objetos e da câmera a cada frame em direção ao último snapshot (`CollabBridge.interpolateGuest`), deixando o espelhamento fluido em qualquer taxa de tela.
+- **Streaming de assets:** se o convidado referencia um sprite que **não tem localmente**, ele pede ao host (`assetReq`); o host lê o arquivo e envia em base64 (`assetData`, limite 2 MB); o convidado grava no projeto e recarrega. Elimina o caso de "objeto aparece sem imagem" quando os projetos não estão 100% iguais.
+- **Token de sessão (segurança):** o host pode definir uma **senha**; convidados a informam no `hello` e são recusados (`denied`) se não bater. Campos de senha adicionados ao painel de Colaboração (host e convidado). Sem senha, comportamento inalterado.
+
+> Restam como polimento/otimização: **cursores** por participante (presença visual) e **delta** de cena (enviar só o que mudou, em vez do snapshot completo). Concorrência de edição de código (dois na mesma linha) ainda é last-write-wins.
+
 ## [1.6.0] - 2026-07-03
 
 ### Colaboração em tempo real — Parte 2.2a (edição convidado → host)

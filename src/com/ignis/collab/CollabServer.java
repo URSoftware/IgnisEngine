@@ -32,10 +32,13 @@ final class CollabServer {
     private ServerSocket serverSocket;
     private volatile boolean running;
 
-    CollabServer(int port, String hostName, CollabSession session) {
+    private final String token; // null/vazio = sem senha
+
+    CollabServer(int port, String hostName, CollabSession session, String token) {
         this.port = port;
         this.hostName = hostName;
         this.session = session;
+        this.token = (token == null || token.isEmpty()) ? null : token;
     }
 
     void start() throws Exception {
@@ -126,6 +129,14 @@ final class CollabServer {
                     JSONObject msg = new JSONObject(line);
                     String type = msg.optString("type", "");
                     if ("hello".equals(type)) {
+                        // Verifica o token da sessao (se o host definiu um).
+                        if (token != null && !token.equals(msg.optString("token", ""))) {
+                            try {
+                                sendLine(new JSONObject().put("type", "denied")
+                                        .put("reason", "token invalido").toString());
+                            } catch (Exception ignore) { /* melhor esforco */ }
+                            break; // encerra a conexao deste convidado
+                        }
                         this.name = msg.optString("name", "convidado");
                         sendPresence();
                         session.firePresence();

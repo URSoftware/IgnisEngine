@@ -214,6 +214,11 @@ public class FxCodeEditor extends Stage {
     private final ScriptManager scriptManager;
     private final String scriptName;
 
+    // Colaboracao em tempo real (sync de codigo): debounce de transmissao e guarda
+    // anti-eco para nao retransmitir uma edicao que veio de outro colaborador.
+    private javafx.animation.PauseTransition collabDebounce;
+    private boolean applyingRemoteEdit = false;
+
     private CodeArea codeArea;
     private Label statusLabel;
     private Label cursorLabel;
@@ -353,7 +358,26 @@ public class FxCodeEditor extends Stage {
             modified = true;
             highlightTimer.playFromStart();
             Platform.runLater(this::checkAutocomplete);
+            // Transmite a edicao aos colaboradores (debounce), exceto quando o
+            // proprio texto veio de uma edicao remota (anti-eco).
+            if (!applyingRemoteEdit && collabDebounce != null) collabDebounce.playFromStart();
         });
+
+        // Colaboracao: debounce de 500ms para transmitir + aplicar edicoes remotas.
+        collabDebounce = new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
+        collabDebounce.setOnFinished(e ->
+                com.ignis.collab.CollabBridge.broadcastScript(scriptName, codeArea.getText()));
+        com.ignis.collab.CollabBridge.registerScriptEditor(scriptName, remoteText -> {
+            if (remoteText == null || remoteText.equals(codeArea.getText())) return;
+            applyingRemoteEdit = true;
+            int caret = codeArea.getCaretPosition();
+            codeArea.replaceText(remoteText);
+            try {
+                codeArea.moveTo(Math.min(caret, codeArea.getLength()));
+            } catch (Exception ignore) { /* posicao do cursor e best-effort */ }
+            applyingRemoteEdit = false;
+        });
+        setOnHidden(ev -> com.ignis.collab.CollabBridge.unregisterScriptEditor(scriptName));
 
         codeArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
             int line = codeArea.getCurrentParagraph() + 1;

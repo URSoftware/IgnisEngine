@@ -69,20 +69,21 @@ public final class CollabSession {
     // Host / Guest
     // ------------------------------------------------------------------
 
-    /** Inicia a sessao como host, escutando na porta informada. */
-    public synchronized void host(int port) throws Exception {
+    /** Inicia a sessao como host, escutando na porta informada. Token opcional (senha). */
+    public synchronized void host(int port, String token) throws Exception {
         stop();
-        server = new CollabServer(port, displayName, this);
+        server = new CollabServer(port, displayName, this, token);
         server.start();
         role = Role.HOST;
-        fireStatus("Hospedando sessao na porta " + port + " (" + CollabServer.hostHint(port) + ")", true);
+        fireStatus("Hospedando sessao na porta " + port + " (" + CollabServer.hostHint(port) + ")"
+                + (token != null && !token.isEmpty() ? " [com senha]" : ""), true);
         firePresence();
     }
 
-    /** Conecta como convidado a {@code host:port}. */
-    public synchronized void join(String host, int port) throws Exception {
+    /** Conecta como convidado a {@code host:port}. Token deve bater com o do host (se houver). */
+    public synchronized void join(String host, int port, String token) throws Exception {
         stop();
-        client = new CollabClient(host, port, displayName, this);
+        client = new CollabClient(host, port, displayName, this, token);
         client.connect();
         role = Role.GUEST;
         fireStatus("Conectado a " + host + ":" + port, true);

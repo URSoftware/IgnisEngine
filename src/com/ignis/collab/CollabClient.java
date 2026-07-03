@@ -32,11 +32,14 @@ final class CollabClient {
     private volatile boolean open;
     private volatile List<String> participants = new ArrayList<>();
 
-    CollabClient(String host, int port, String displayName, CollabSession session) {
+    private final String token;
+
+    CollabClient(String host, int port, String displayName, CollabSession session, String token) {
         this.host = host;
         this.port = port;
         this.displayName = displayName;
         this.session = session;
+        this.token = (token == null) ? "" : token;
     }
 
     void connect() throws Exception {
@@ -49,8 +52,8 @@ final class CollabClient {
         reader.setDaemon(true);
         reader.start();
 
-        // Apresenta-se ao host.
-        send(new JSONObject().put("type", "hello").put("name", displayName));
+        // Apresenta-se ao host (com o token da sessao, se houver).
+        send(new JSONObject().put("type", "hello").put("name", displayName).put("token", token));
     }
 
     private void readLoop() {
@@ -61,6 +64,10 @@ final class CollabClient {
             while (open && (line = in.readLine()) != null) {
                 if (line.isBlank()) continue;
                 JSONObject msg = new JSONObject(line);
+                if ("denied".equals(msg.optString("type", ""))) {
+                    session.fireStatus("Recusado pelo host: " + msg.optString("reason", "token invalido"), false);
+                    break; // encerra: token invalido
+                }
                 if ("presence".equals(msg.optString("type", ""))) {
                     JSONArray arr = msg.optJSONArray("participants");
                     if (arr != null) {

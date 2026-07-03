@@ -457,6 +457,8 @@ public class FxSettingsWindow extends Stage {
         Button copyShare = new Button("Copiar");
         copyShare.setOnAction(e -> copyToClipboard(shareField.getText()));
 
+        TextField hostToken = new TextField();
+        hostToken.setPromptText("(opcional) senha da sessao");
         Button hostBtn = new Button("Hospedar sessao");
         Button stopBtn = new Button("Encerrar");
 
@@ -465,6 +467,8 @@ public class FxSettingsWindow extends Stage {
         hostAddr.setPromptText("IP do host (ex.: 25.x.x.x da Radmin VPN)");
         Spinner<Integer> joinPort = new Spinner<>(1024, 65535, EditorPrefs.getCollabPort(), 1);
         joinPort.setEditable(true);
+        TextField joinToken = new TextField();
+        joinToken.setPromptText("(se o host definiu) senha da sessao");
         Button joinBtn = new Button("Entrar na sessao");
 
         Runnable refresh = () -> {
@@ -499,7 +503,7 @@ public class FxSettingsWindow extends Stage {
         hostBtn.setOnAction(e -> {
             try {
                 collab.setDisplayName(nameField.getText());
-                collab.host(portSpinner.getValue());
+                collab.host(portSpinner.getValue(), hostToken.getText().trim());
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Falha ao hospedar:\n" + ex.getMessage()).showAndWait();
             }
@@ -509,7 +513,7 @@ public class FxSettingsWindow extends Stage {
         joinBtn.setOnAction(e -> {
             try {
                 collab.setDisplayName(nameField.getText());
-                collab.join(hostAddr.getText().trim(), joinPort.getValue());
+                collab.join(hostAddr.getText().trim(), joinPort.getValue(), joinToken.getText().trim());
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Falha ao conectar:\n" + ex.getMessage()).showAndWait();
             }
@@ -523,13 +527,15 @@ public class FxSettingsWindow extends Stage {
                 new Separator(),
                 new Label("Hospedar (voce vira o host):"),
                 labeledRow("Porta", portSpinner),
+                labeledRow("Senha (opcional)", hostToken),
                 new HBox(8, hostBtn, stopBtn),
                 new HBox(8, shareField, copyShare),
-                hint("Funciona por IP direto ou por VPN (Radmin/Hamachi/Tailscale). Compartilhe o endereco acima."),
+                hint("Funciona por IP direto ou por VPN (Radmin/Hamachi/Tailscale). Compartilhe o endereco (e a senha, se definir)."),
                 new Separator(),
                 new Label("Entrar em uma sessao existente:"),
                 labeledRow("Endereco do host", hostAddr),
                 labeledRow("Porta", joinPort),
+                labeledRow("Senha", joinToken),
                 joinBtn,
                 new Separator(),
                 new Label("Participantes:"),
