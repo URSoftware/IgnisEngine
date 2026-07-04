@@ -354,12 +354,26 @@ public class GameObject {
                         script.start();
                     }
                 }
+                // scriptNames guarda apenas SCRIPTS DE USUARIO (recarregaveis pelo
+                // ScriptManager). Componentes nativos como SpriteComponent (que
+                // estende IgnisScript por legado) ficam fora — senao os reloads de
+                // Play/abertura tentam instancia-los como script de projeto e falham.
                 String name = script.getClass().getSimpleName();
-                if (!scriptNames.contains(name)) {
+                if (!isNativeComponent(component) && !scriptNames.contains(name)) {
                     scriptNames.add(name);
                 }
             }
         }
+    }
+
+    /**
+     * Componentes nativos do motor: serializados por tipo proprio na Scene e
+     * nunca recarregados como script de usuario pelo ScriptManager.
+     */
+    public static boolean isNativeComponent(Component component) {
+        return component instanceof SpriteComponent
+                || component instanceof ColliderComponent
+                || component instanceof HealthComponent;
     }
 
     public void removeComponent(Component component) {
@@ -498,6 +512,19 @@ public class GameObject {
             script.internalTick();
         }
     }
+
+    /**
+     * Atualiza os componentes NÃO-script (Collider/Health/futuros) — os scripts
+     * têm ciclo próprio via {@link #tickScripts()}. Chamado pelo loop em Play.
+     */
+    public void tickComponents(float deltaTime) {
+        for (int i = 0; i < components.size(); i++) {
+            Component comp = components.get(i);
+            if (!(comp instanceof IgnisScript)) {
+                comp.update(deltaTime);
+            }
+        }
+    }
     
     /**
      * Reseta todos os scripts (quando o jogo é parado)
@@ -509,12 +536,18 @@ public class GameObject {
     }
     
     /**
-     * Notifica scripts sobre colisão
+     * Notifica scripts sobre colisão e dispara o evento desacoplado
+     * {@link #onCollisionEnter} — ponte entre o CollisionManager legado e o
+     * sistema de eventos EC (HealthComponent e afins assinam este evento).
      */
     public void notifyCollision(GameObject other) {
         for (IgnisScript script : scripts) {
             script.onCollision(other);
         }
+        double cx = (getX() + getWidth() / 2.0 + (other != null ? other.getX() + other.getWidth() / 2.0 : 0)) / 2.0;
+        double cy = (getY() + getHeight() / 2.0 + (other != null ? other.getY() + other.getHeight() / 2.0 : 0)) / 2.0;
+        onCollisionEnter.invoke(new CollisionData(other,
+                String.format(java.util.Locale.ROOT, "(%.1f, %.1f)", cx, cy)));
     }
     
     // ==================== COLLISION SYSTEM ====================

@@ -1125,11 +1125,15 @@ public final class IgnisToolRegistry {
                 ScriptManager sm = liveGame.getScriptManager();
                 if (sm == null) { sm = scriptManager(); liveGame.setScriptManager(sm); }
                 if (!go.getScriptNames().contains(scriptName)) {
-                    go.getScriptNames().add(scriptName);
                     try {
                         com.ignis.core.IgnisScript inst = sm.createScriptInstance(scriptName, go, liveGame);
-                        if (inst != null) go.getScripts().add(inst);
+                        // addComponent mantem components/scripts/scriptNames coerentes
+                        // (fora de components o anexo nao e serializado pela Scene).
+                        if (inst != null) go.addComponent(inst);
                     } catch (Exception ignore) { /* compila no Play se necessario */ }
+                    if (!go.getScriptNames().contains(scriptName)) {
+                        go.getScriptNames().add(scriptName); // preserva o anexo sem instancia
+                    }
                 }
                 if (refreshHook != null) refreshHook.run();
                 return "Script '" + scriptName + "' anexado a " + go.getName();

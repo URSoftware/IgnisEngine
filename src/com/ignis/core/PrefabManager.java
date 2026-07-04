@@ -218,7 +218,9 @@ public class PrefabManager {
                     if (scriptManager != null) {
                         IgnisScript instance = scriptManager.createScriptInstance(scriptName, object, game);
                         if (instance != null) {
-                            object.getScripts().add(instance);
+                            // Via addComponent: instancia entra em components e e
+                            // serializada pela Scene (getScripts().add() perdia o anexo).
+                            object.addComponent(instance);
                             if (variables != null) {
                                 final Game activeGame = game;
                                 ScriptSerializationHelper.loadScriptVariables(instance, variables, name -> {

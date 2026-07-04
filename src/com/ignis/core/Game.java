@@ -389,13 +389,13 @@ public class Game extends Canvas implements Runnable {
                 runtimeObjects.add(instance);
             }
             
-            // Se estiver em modo de jogo, inicializar scripts
+            // Se estiver em modo de jogo, inicializar scripts. addComponent mantem
+            // components/scripts coerentes e ja chama start() quando PLAYING.
             if (gameState == GameState.PLAYING && scriptManager != null) {
-                for (String scriptName : instance.getScriptNames()) {
+                for (String scriptName : new java.util.ArrayList<>(instance.getScriptNames())) {
                     IgnisScript script = scriptManager.createScriptInstance(scriptName, instance, this);
                     if (script != null) {
-                        instance.getScripts().add(script);
-                        script.start();
+                        instance.addComponent(script);
                     }
                 }
             }
@@ -1148,6 +1148,10 @@ public class Game extends Canvas implements Runnable {
 
                 // Executar scripts anexados ao objeto
                 entity.tickScripts();
+
+                // Componentes NAO-script (Collider/Health/futuros) tambem avancam —
+                // antes deste hook o update(dt) deles nunca era chamado pelo loop.
+                entity.tickComponents(1.0f / 60.0f);
             }
 
             // Resolve limites/barreiras do World para objetos com worldCollision.

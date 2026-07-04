@@ -1,0 +1,27 @@
+# CI do IgnisEngine: compila e roda a suite de testes (round-trip .ignis,
+# consistencia EC, sistema de eventos) a cada push/PR na main.
+# Guarda de regressao do plano de consertos (Vault:
+# ignisengine-plano-consertos-e-evolucao, itens 2.x e 4.1).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compilar e testar
+        run: ./mvnw -B --no-transfer-progress verify

@@ -3331,27 +3331,42 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // Recarrega as instancias dos SCRIPTS DE USUARIO de todos os objetos (apos
+    // recompilar). Fonte unica de verdade e a lista de components do GameObject:
+    // remover/adicionar SEMPRE via removeComponent/addComponent — instancias fora
+    // de components nao sao serializadas pela Scene (foi a causa da perda de
+    // scripts/variaveis ao salvar e do estado corrompido apos Play/Stop).
     public void reloadAllScriptInstances() {
         com.ignis.core.ScriptManager sm = game.getScriptManager();
         if (sm == null) return;
-        
+
         Scene currentScene = (currentProject != null) ? currentProject.getCurrentScene() : null;
-        
+
         for (GameObject obj : game.getEntities()) {
             java.util.List<String> scriptNames = new java.util.ArrayList<>(obj.getScriptNames());
-            obj.getScripts().clear();
-            
+            // Remove as instancias antigas de scripts de usuario (components +
+            // scripts + nomes). Componentes nativos (SpriteComponent etc.) ficam.
+            for (com.ignis.core.IgnisScript old : new java.util.ArrayList<>(obj.getScripts())) {
+                if (!GameObject.isNativeComponent(old)) {
+                    obj.removeComponent(old);
+                }
+            }
             for (String scriptName : scriptNames) {
+                if ("SpriteComponent".equals(scriptName)) continue; // legado: nunca foi script de usuario
                 com.ignis.core.IgnisScript newInstance = sm.createScriptInstance(scriptName, obj, game);
                 if (newInstance != null) {
-                    obj.getScripts().add(newInstance);
+                    obj.addComponent(newInstance);
                     if (currentScene != null) {
                         currentScene.applyPendingScriptVariables(obj, newInstance);
                     }
+                } else if (!obj.getScriptNames().contains(scriptName)) {
+                    // Compilacao falhou: preserva o ANEXO (nome) para nao perder o
+                    // vinculo ao salvar — a instancia volta quando compilar de novo.
+                    obj.getScriptNames().add(scriptName);
                 }
             }
         }
-        
+
         Platform.runLater(() -> {
             if (selected != null) {
                 rebuildInspectorExtras(selected);
@@ -3379,11 +3394,15 @@ public class IgnisEditorApp extends Application {
 
             String name = choice.get();
             if (!go.getScriptNames().contains(name)) {
-                go.getScriptNames().add(name);
                 try {
                     com.ignis.core.IgnisScript inst = sm.createScriptInstance(name, go, game);
-                    if (inst != null) go.getScripts().add(inst);
+                    // addComponent mantem components/scripts/scriptNames coerentes —
+                    // e' o que garante a serializacao do anexo pela Scene.
+                    if (inst != null) go.addComponent(inst);
                 } catch (Exception ignore) { /* compila no Play se falhar agora */ }
+                if (!go.getScriptNames().contains(name)) {
+                    go.getScriptNames().add(name); // instancia falhou: preserva o anexo
+                }
                 markProjectDirty();
                 setStatus("Script anexado: " + name);
             }

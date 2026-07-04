@@ -127,11 +127,13 @@ public class Scene {
 
             // Serializar todos os componentes anexados
             JSONArray componentsArray = new JSONArray();
+            java.util.Set<String> serializedScripts = new java.util.HashSet<>();
             for (Component comp : entity.getComponents()) {
                 JSONObject compJson = new JSONObject();
                 String compType = comp.getClass().getSimpleName();
                 compJson.put("type", compType);
                 if (comp instanceof IgnisScript) {
+                    serializedScripts.add(compType);
                     JSONObject vars = ScriptSerializationHelper.saveScriptVariables((IgnisScript) comp);
                     compJson.put("properties", vars);
                 } else if (comp instanceof ColliderComponent) {
@@ -149,6 +151,19 @@ public class Scene {
                     properties.put("health", hc.getHealth());
                     compJson.put("properties", properties);
                 }
+                componentsArray.put(compJson);
+            }
+            // Anexos de script SEM instancia viva (compilacao falhou ou ainda nao
+            // rodou): persiste o vinculo pelo nome, com as variaveis pendentes se
+            // houver — sem isto o anexo sumia do .ignis ao salvar.
+            for (String scriptName : entity.getScriptNames()) {
+                if (serializedScripts.contains(scriptName) || "SpriteComponent".equals(scriptName)) {
+                    continue;
+                }
+                JSONObject compJson = new JSONObject();
+                compJson.put("type", scriptName);
+                JSONObject pending = pendingScriptVariables.get(entity.getId() + ":" + scriptName);
+                compJson.put("properties", pending != null ? pending : new JSONObject());
                 componentsArray.put(compJson);
             }
             entityJson.put("components", componentsArray);

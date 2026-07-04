@@ -2880,12 +2880,16 @@ public class Editor extends JFrame {
         } else {
             // Add script to object
             if (!obj.getScriptNames().contains(selected)) {
-                obj.getScriptNames().add(selected);
                 if (scriptManager != null) {
                     IgnisScript instance = scriptManager.createScriptInstance(selected, obj, game);
                     if (instance != null) {
-                        obj.getScripts().add(instance);
+                        // addComponent mantem components/scripts/scriptNames coerentes
+                        // (fora de components o anexo nao e serializado pela Scene).
+                        obj.addComponent(instance);
                     }
+                }
+                if (!obj.getScriptNames().contains(selected)) {
+                    obj.getScriptNames().add(selected); // preserva o anexo sem instancia
                 }
                 updateInspectorScripts(obj);
                 autoSaveProject();
@@ -5070,20 +5074,29 @@ public class Editor extends JFrame {
         
         for (GameObject obj : game.getEntities()) {
             List<String> scriptNames = new ArrayList<>(obj.getScriptNames());
-            
-            // Remove all current script instances
-            obj.getScripts().clear();
-            
+
+            // Remove as instancias antigas de scripts de usuario via removeComponent
+            // (fonte unica = components; clear() em scripts deixava instancias
+            // orfas em components e o save gravava valores congelados).
+            for (IgnisScript old : new ArrayList<>(obj.getScripts())) {
+                if (!GameObject.isNativeComponent(old)) {
+                    obj.removeComponent(old);
+                }
+            }
+
             // Recreate script instances with new classes
             for (String scriptName : scriptNames) {
+                if ("SpriteComponent".equals(scriptName)) continue; // legado
                 IgnisScript newInstance = scriptManager.createScriptInstance(scriptName, obj, game);
                 if (newInstance != null) {
-                    obj.getScripts().add(newInstance);
-                    
+                    obj.addComponent(newInstance);
+
                     // Apply any pending script variables from scene load
                     if (currentScene != null) {
                         currentScene.applyPendingScriptVariables(obj, newInstance);
                     }
+                } else if (!obj.getScriptNames().contains(scriptName)) {
+                    obj.getScriptNames().add(scriptName); // preserva o anexo sem instancia
                 }
             }
         }
