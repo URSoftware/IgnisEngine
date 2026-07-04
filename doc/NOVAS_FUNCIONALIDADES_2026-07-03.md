@@ -35,7 +35,7 @@ Transformar o `GameObject` em um container leve de componentes, provendo metodos
 Desacoplar a logica visual e de movimentacao do nucleo do motor em pecas modulares independentes.
 
 ### O que faz
-- **SpriteComponent (`SpriteComponent.java`):** Isola a renderizacao. Desenha a textura associada respeitando posicao, rotacao, escala e espelhamento do GameObject pai.
+- **SpriteComponent (`SpriteComponent.java`):** Isola a renderizacao. Desenha a textura associada respeitando posicao, rotacao, escala e espelhamento do GameObject pai. Possui um fallback automatico implementado em `awake()` e `draw()` para carregar a textura a partir de `gameObject.getSpritePath()` caso a variavel `texture` esteja nula, garantindo retrocompatibilidade com cenas existentes e operacoes do MCP.
 - **InputComponent (`InputComponent.java`):** Trata a entrada do teclado (W, A, S, D) e desloca o objeto pai suavemente baseado no delta time e velocidade parametrizada.
 - **Textura de Alta Performance (`Texture2D.java`):** Wrapper de textura que carrega e armazena BufferedImage usando o resolvedor de assets do motor.
 - **Integracao de Renderizacao:** Atualizado o metodo `render(Graphics g)` em `Square`, `Circle`, `Triangle`, `Star`, `Pentagon`, `Player` e `MergedShape` para desviar a renderizacao caso exista um `SpriteComponent` anexado, permitindo o desacoplamento de arte geometrica.

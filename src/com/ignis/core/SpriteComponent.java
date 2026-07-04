@@ -40,12 +40,23 @@ public class SpriteComponent extends IgnisScript {
     public SpriteComponent() {
     }
 
+    @Override
+    public void awake() {
+        if (texture == null && gameObject != null && gameObject.getSpritePath() != null && !gameObject.getSpritePath().trim().isEmpty()) {
+            texture = new Texture2D(gameObject.getSpritePath());
+        }
+    }
+
     /**
      * Desenha o sprite ou forma baseado na posição e transform do GameObject pai.
      * @param g Contexto gráfico de desenho.
      */
     public void draw(Graphics2D g) {
         if (gameObject == null) return;
+
+        if (texture == null && gameObject.getSpritePath() != null && !gameObject.getSpritePath().trim().isEmpty()) {
+            texture = new Texture2D(gameObject.getSpritePath());
+        }
 
         // Ativa antialiasing para qualidade
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
