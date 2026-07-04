@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="capivara-icon/capivara.png" alt="Mascote Capivara" width="150" />
+  <img src="Icons/IgnisEngineBanner.jpg" alt="IgnisEngine Banner" width="250px" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);" />
 </p>
 
 <h1 align="center">IgnisEngine</h1>
