@@ -5,12 +5,10 @@
 <h1 align="center">IgnisEngine</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
-  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Zod-3068B0?style=for-the-badge&logo=zod&logoColor=white" alt="Zod" />
-  <img src="https://img.shields.io/badge/Neon-00E5BF?style=for-the-badge&logo=neon&logoColor=black" alt="Neon" />
-  <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Java-17_LTS-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java" />
+  <img src="https://img.shields.io/badge/Maven-3.9.6-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white" alt="Maven" />
+  <img src="https://img.shields.io/badge/JavaFX-17-blue?style=for-the-badge&logo=javafx&logoColor=white" alt="JavaFX" />
+  <img src="https://img.shields.io/badge/MCP-Protocol-blueviolet?style=for-the-badge" alt="MCP" />
 </p>
 
 <p align="center">
@@ -178,10 +176,23 @@ O servidor MCP (Model Context Protocol) embutido expoe os seguintes endpoints HT
 
 ---
 
-<p align="center">
-  <a href="https://github.com/ThyagoToledo">
-    <img src="https://github.com/ThyagoToledo.png" width="120" style="border: 3px solid #8a5cf5; border-radius: 8px; box-shadow: 0 0 15px #8a5cf5;" alt="ThyagoToledo" />
-  </a>
-  <br />
-  <sub><b>Autor: ThyagoToledo</b></sub>
-</p>
+## Autores e Organização
+
+Este projeto é mantido pela organização **URSoftware**.
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://github.com/ThyagoToledo">
+        <img src="https://github.com/ThyagoToledo.png?size=100" width="100px;" alt="Thyago Toledo" style="border-radius: 50%;" /><br />
+        <sub><b>Thyago Toledo</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/FeronZerbana">
+        <img src="https://github.com/FeronZerbana.png?size=100" width="100px;" alt="FeronZerbana" style="border-radius: 50%;" /><br />
+        <sub><b>FeronZerbana</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
