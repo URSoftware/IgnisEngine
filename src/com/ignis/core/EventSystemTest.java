@@ -1,34 +1,34 @@
 package com.ignis.core;
 
 /**
- * Classe de teste para validar o desacoplamento do sistema de eventos de colisão.
+ * Test class to validate the decoupled collision event system execution.
  */
 public class EventSystemTest {
     public static void main(String[] args) {
-        System.out.println("=== Testando Sistema de Eventos de Colisao ===");
+        System.out.println("=== Testing Collision Event System ===");
 
-        // 1. Criar GameObject
+        // 1. Create GameObject
         GameObject obj = new GameObject();
         obj.setName("PlayerEntity");
 
-        // 2. Criar e acoplar componentes
+        // 2. Create and attach components
         ColliderComponent collider = new ColliderComponent();
         HealthComponent health = new HealthComponent();
 
         obj.addComponent(collider);
         obj.addComponent(health);
 
-        // Os componentes sao inicializados (awake) automaticamente durante o addComponent.
+        // Components are initialized (awake) automatically during addComponent.
 
-        // 3. Simular impacto fisico
+        // 3. Simulate physical impact
         GameObject enemy = new GameObject();
         enemy.setName("SpikeTrap");
 
         CollisionData collision = new CollisionData(enemy, "x:10.0, y:20.0");
 
-        System.out.println("Disparando colisao simulada...");
+        System.out.println("Triggering simulated collision...");
         collider.onPhysicsImpact(collision);
 
-        System.out.println("Vida final apos colisao: " + health.getHealth());
+        System.out.println("Final health after collision: " + health.getHealth());
     }
 }

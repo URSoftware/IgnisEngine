@@ -5,18 +5,18 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
- * Classe genérica de Evento desacoplado para comunicação entre sistemas e componentes.
- * Seguro contra modificações concorrentes durante o disparo.
+ * Generic decoupled event publisher-subscriber class for communication between engine components.
+ * Thread-safe and immune to concurrent modifications (such as unsubscribe calls during invoke dispatching).
  * 
- * @param <T> Tipo de dado do contexto do evento.
+ * @param <T> The event context type.
  */
 public class Event<T> {
     private final List<Consumer<T>> listeners = new CopyOnWriteArrayList<>();
 
     /**
-     * Inscreve um ouvinte no evento.
+     * Subscribes a listener callback to this event.
      * 
-     * @param listener Ouvinte a ser adicionado.
+     * @param listener The listener callback to register.
      */
     public void subscribe(Consumer<T> listener) {
         if (listener != null && !listeners.contains(listener)) {
@@ -25,9 +25,9 @@ public class Event<T> {
     }
 
     /**
-     * Desinscreve um ouvinte do evento.
+     * Unsubscribes a listener callback from this event.
      * 
-     * @param listener Ouvinte a ser removido.
+     * @param listener The listener callback to unregister.
      */
     public void unsubscribe(Consumer<T> listener) {
         if (listener != null) {
@@ -36,9 +36,9 @@ public class Event<T> {
     }
 
     /**
-     * Dispara o evento, notificando todos os ouvintes registrados.
+     * Invokes the event, notifying all registered listener callbacks with the given context.
      * 
-     * @param context Contexto ou dado da notificação.
+     * @param context The event context data payload.
      */
     public void invoke(T context) {
         for (Consumer<T> listener : listeners) {

@@ -1,7 +1,7 @@
 package com.ignis.core;
 
 /**
- * Componente responsável por gerenciar e expor propriedades geométricas e físicas de colisão.
+ * Component responsible for managing and exposing geometric and physical properties for physics collision detection.
  */
 public class ColliderComponent extends Component {
 
@@ -12,14 +12,14 @@ public class ColliderComponent extends Component {
     private String collisionLayer = "Default";
 
     /**
-     * Construtor padrão do colisor.
+     * Default constructor for the collider component.
      */
     public ColliderComponent() {
     }
 
     @Override
     public void awake() {
-        // Notifica o sistema de simulação de física ao ser acoplado se aplicável
+        // Registers this shape to the PhysicsSystem or similar simulation list.
     }
 
     @Override
@@ -27,10 +27,9 @@ public class ColliderComponent extends Component {
     }
 
     /**
-     * Simula o recebimento de um impacto vindo do motor de física,
-     * propagando-o para o GameObject.
+     * Simulates receiving an impact notification from the physics engine and triggers the GameObject collision event.
      * 
-     * @param data Informações sobre a colisão.
+     * @param data The collision impact details payload.
      */
     public void onPhysicsImpact(CollisionData data) {
         if (gameObject != null) {

@@ -1,17 +1,17 @@
 package com.ignis.core;
 
 /**
- * Encapsula as informações sobre o impacto de colisão física.
+ * Encapsulates information about a physical collision impact.
  */
 public class CollisionData {
     private final GameObject other;
     private final String collisionPoint;
 
     /**
-     * Cria uma nova instância de dados de colisão.
+     * Creates a new collision data instance.
      * 
-     * @param other O GameObject atingido.
-     * @param collisionPoint O ponto de colisão representado em texto ou vetor simplificado.
+     * @param other The other GameObject involved in the impact.
+     * @param collisionPoint The point of collision represented as text or a simplified vector.
      */
     public CollisionData(GameObject other, String collisionPoint) {
         this.other = other;
@@ -19,7 +19,7 @@ public class CollisionData {
     }
 
     /**
-     * Obtém o outro GameObject envolvido no impacto.
+     * Gets the other GameObject involved in the collision.
      * 
      * @return O GameObject colidido.
      */
@@ -28,9 +28,9 @@ public class CollisionData {
     }
 
     /**
-     * Obtém o vetor ou ponto textual do impacto.
+     * Gets the vector or coordinate description of the collision point.
      * 
-     * @return Ponto de colisão.
+     * @return The collision point coordinates.
      */
     public String getCollisionPoint() {
         return collisionPoint;
