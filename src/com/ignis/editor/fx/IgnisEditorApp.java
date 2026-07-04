@@ -9,6 +9,8 @@ import com.ignis.core.Scene;
 import com.ignis.core.Square;
 import com.ignis.core.SpriteComponent;
 import com.ignis.core.Texture2D;
+import com.ignis.core.ColliderComponent;
+import com.ignis.core.HealthComponent;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -2244,10 +2246,26 @@ public class IgnisEditorApp extends Application {
                 goItem.getChildren().add(new TreeItem<>("SpriteComponent"));
             }
             
+            // Sub-item de ColliderComponent se anexado
+            if (go.getComponent(ColliderComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("ColliderComponent"));
+            }
+
+            // Sub-item de HealthComponent se anexado
+            if (go.getComponent(HealthComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("HealthComponent"));
+            }
+            
             // Outros componentes / scripts
-            for (com.ignis.core.IgnisScript script : go.getScripts()) {
-                if (script instanceof SpriteComponent) continue;
-                goItem.getChildren().add(new TreeItem<>(script.getScriptName()));
+            for (com.ignis.core.Component comp : go.getComponents()) {
+                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent || comp instanceof HealthComponent) {
+                    continue;
+                }
+                if (comp instanceof com.ignis.core.IgnisScript) {
+                    goItem.getChildren().add(new TreeItem<>(((com.ignis.core.IgnisScript) comp).getScriptName()));
+                } else {
+                    goItem.getChildren().add(new TreeItem<>(comp.getClass().getSimpleName()));
+                }
             }
             
             goItem.setExpanded(true);
@@ -2498,6 +2516,16 @@ public class IgnisEditorApp extends Application {
                 if (spriteComp != null) {
                     inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
                 }
+            } else if (selectedComponentName.equals("ColliderComponent")) {
+                ColliderComponent colliderComp = go.getComponent(ColliderComponent.class);
+                if (colliderComp != null) {
+                    inspectorExtras.getChildren().add(buildColliderComponentSection(go, colliderComp));
+                }
+            } else if (selectedComponentName.equals("HealthComponent")) {
+                HealthComponent healthComp = go.getComponent(HealthComponent.class);
+                if (healthComp != null) {
+                    inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
+                }
             } else if (!selectedComponentName.equals("Transform")) {
                 // Pode ser um script customizado
                 com.ignis.core.IgnisScript targetScript = null;
@@ -2516,6 +2544,16 @@ public class IgnisEditorApp extends Application {
             SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
             if (spriteComp != null) {
                 inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+            }
+            
+            ColliderComponent colliderComp = go.getComponent(ColliderComponent.class);
+            if (colliderComp != null) {
+                inspectorExtras.getChildren().add(buildColliderComponentSection(go, colliderComp));
+            }
+
+            HealthComponent healthComp = go.getComponent(HealthComponent.class);
+            if (healthComp != null) {
+                inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
             }
             
             inspectorExtras.getChildren().add(buildColliderSection(go));
@@ -2699,8 +2737,18 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(SpriteComponent.class) == null) {
                 available.add("SpriteComponent");
             }
+
+            // 2. ColliderComponent se nao anexado
+            if (go.getComponent(ColliderComponent.class) == null) {
+                available.add("ColliderComponent");
+            }
+
+            // 3. HealthComponent se nao anexado
+            if (go.getComponent(HealthComponent.class) == null) {
+                available.add("HealthComponent");
+            }
             
-            // 2. Scripts disponiveis
+            // 4. Scripts disponiveis
             for (String scriptName : sm.listAvailableScripts()) {
                 if (!go.getScriptNames().contains(scriptName)) {
                     available.add(scriptName);
@@ -2720,6 +2768,14 @@ public class IgnisEditorApp extends Application {
                     SpriteComponent sprite = new SpriteComponent();
                     go.addComponent(sprite);
                     setStatus("SpriteComponent adicionado.");
+                } else if (selected.equals("ColliderComponent")) {
+                    ColliderComponent collider = new ColliderComponent();
+                    go.addComponent(collider);
+                    setStatus("ColliderComponent adicionado.");
+                } else if (selected.equals("HealthComponent")) {
+                    HealthComponent health = new HealthComponent();
+                    go.addComponent(health);
+                    setStatus("HealthComponent adicionado.");
                 } else {
                     go.getScriptNames().add(selected);
                     try {
@@ -2803,6 +2859,12 @@ public class IgnisEditorApp extends Application {
         if (go.getComponent(SpriteComponent.class) != null) {
             listItems.add("SpriteComponent");
         }
+        if (go.getComponent(ColliderComponent.class) != null) {
+            listItems.add("ColliderComponent");
+        }
+        if (go.getComponent(HealthComponent.class) != null) {
+            listItems.add("HealthComponent");
+        }
         listItems.addAll(go.getScriptNames());
         list.getItems().setAll(listItems);
         list.setPrefHeight(90);
@@ -2817,6 +2879,12 @@ public class IgnisEditorApp extends Application {
                 if (sel.equals("SpriteComponent")) {
                     SpriteComponent sprite = go.getComponent(SpriteComponent.class);
                     if (sprite != null) go.removeComponent(sprite);
+                } else if (sel.equals("ColliderComponent")) {
+                    ColliderComponent collider = go.getComponent(ColliderComponent.class);
+                    if (collider != null) go.removeComponent(collider);
+                } else if (sel.equals("HealthComponent")) {
+                    HealthComponent health = go.getComponent(HealthComponent.class);
+                    if (health != null) go.removeComponent(health);
                 } else {
                     go.removeScriptByName(sel);
                 }
@@ -2829,14 +2897,17 @@ public class IgnisEditorApp extends Application {
         Button open = new Button("Abrir");
         open.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null && !sel.equals("SpriteComponent")) openScriptByName(sel);
+            if (sel != null && !sel.equals("SpriteComponent") && !sel.equals("ColliderComponent") && !sel.equals("HealthComponent")) {
+                openScriptByName(sel);
+            }
         });
 
         // Habilita/Desabilita o botao Abrir dependendo do item selecionado
         list.getSelectionModel().selectedItemProperty().addListener((o, oldV, newV) -> {
-            open.setDisable(newV == null || newV.equals("SpriteComponent"));
+            open.setDisable(newV == null || newV.equals("SpriteComponent") || newV.equals("ColliderComponent") || newV.equals("HealthComponent"));
         });
-        open.setDisable(list.getSelectionModel().getSelectedItem() == null || "SpriteComponent".equals(list.getSelectionModel().getSelectedItem()));
+        String activeSel = list.getSelectionModel().getSelectedItem();
+        open.setDisable(activeSel == null || "SpriteComponent".equals(activeSel) || "ColliderComponent".equals(activeSel) || "HealthComponent".equals(activeSel));
 
         sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
 
@@ -2850,6 +2921,105 @@ public class IgnisEditorApp extends Application {
         }
 
         return sec;
+    }
+
+    private javafx.scene.Node buildColliderComponentSection(GameObject go, ColliderComponent comp) {
+        VBox box = new VBox(6);
+        box.getChildren().add(sectionTitle("Collider Component"));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(6);
+        grid.setVgap(6);
+        
+        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
+        labelCol.setMinWidth(90);
+        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
+
+        int r = 0;
+
+        // Shape type ComboBox
+        javafx.scene.control.ComboBox<String> shapeCombo = new javafx.scene.control.ComboBox<>();
+        shapeCombo.getItems().addAll("Box", "Sphere", "Capsule");
+        shapeCombo.setValue(comp.getShape());
+        shapeCombo.setOnAction(e -> {
+            comp.setShape(shapeCombo.getValue());
+            markProjectDirty();
+        });
+        grid.add(new Label("Forma"), 0, r);
+        grid.add(shapeCombo, 1, r++);
+
+        // Friction TextField
+        TextField frictionField = new TextField(String.valueOf(comp.getFriction()));
+        frictionField.textProperty().addListener((o, a, b) -> {
+            try {
+                comp.setFriction(Double.parseDouble(b));
+                markProjectDirty();
+            } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Fricção"), 0, r);
+        grid.add(frictionField, 1, r++);
+
+        // Bounciness TextField
+        TextField bounceField = new TextField(String.valueOf(comp.getBounciness()));
+        bounceField.textProperty().addListener((o, a, b) -> {
+            try {
+                comp.setBounciness(Double.parseDouble(b));
+                markProjectDirty();
+            } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Elasticidade"), 0, r);
+        grid.add(bounceField, 1, r++);
+
+        // IsTrigger CheckBox
+        CheckBox triggerCheck = new CheckBox("Is Trigger");
+        triggerCheck.setSelected(comp.isTrigger());
+        triggerCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setTrigger(b);
+            markProjectDirty();
+        });
+        grid.add(triggerCheck, 1, r++);
+
+        // Collision Layer TextField
+        TextField layerField = new TextField(comp.getCollisionLayer());
+        layerField.textProperty().addListener((o, a, b) -> {
+            comp.setCollisionLayer(b);
+            markProjectDirty();
+        });
+        grid.add(new Label("Layer"), 0, r);
+        grid.add(layerField, 1, r++);
+
+        box.getChildren().add(grid);
+        return box;
+    }
+
+    private javafx.scene.Node buildHealthComponentSection(GameObject go, HealthComponent comp) {
+        VBox box = new VBox(6);
+        box.getChildren().add(sectionTitle("Health Component"));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(6);
+        grid.setVgap(6);
+        
+        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
+        labelCol.setMinWidth(90);
+        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
+
+        TextField healthField = new TextField(String.valueOf(comp.getHealth()));
+        healthField.textProperty().addListener((o, a, b) -> {
+            try {
+                comp.setHealth(Integer.parseInt(b));
+                markProjectDirty();
+            } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Vida"), 0, 0);
+        grid.add(healthField, 1, 0);
+
+        box.getChildren().add(grid);
+        return box;
     }
 
     private javafx.scene.Node createScriptVariablesNode(com.ignis.core.IgnisScript script) {

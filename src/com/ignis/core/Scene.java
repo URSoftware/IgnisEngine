@@ -134,6 +134,20 @@ public class Scene {
                 if (comp instanceof IgnisScript) {
                     JSONObject vars = ScriptSerializationHelper.saveScriptVariables((IgnisScript) comp);
                     compJson.put("properties", vars);
+                } else if (comp instanceof ColliderComponent) {
+                    JSONObject properties = new JSONObject();
+                    ColliderComponent cc = (ColliderComponent) comp;
+                    properties.put("shape", cc.getShape());
+                    properties.put("friction", cc.getFriction());
+                    properties.put("bounciness", cc.getBounciness());
+                    properties.put("isTrigger", cc.isTrigger());
+                    properties.put("collisionLayer", cc.getCollisionLayer());
+                    compJson.put("properties", properties);
+                } else if (comp instanceof HealthComponent) {
+                    JSONObject properties = new JSONObject();
+                    HealthComponent hc = (HealthComponent) comp;
+                    properties.put("health", hc.getHealth());
+                    compJson.put("properties", properties);
                 }
                 componentsArray.put(compJson);
             }
@@ -205,6 +219,24 @@ public class Scene {
                             JSONObject props = compJson.getJSONObject("properties");
                             ScriptSerializationHelper.loadScriptVariables(spriteComp, props, scene::getEntityById);
                         }
+                    } else if (compType.equals("ColliderComponent")) {
+                        ColliderComponent colliderComp = new ColliderComponent();
+                        if (compJson.has("properties")) {
+                            JSONObject props = compJson.getJSONObject("properties");
+                            colliderComp.setShape(props.optString("shape", "Box"));
+                            colliderComp.setFriction(props.optDouble("friction", 0.5));
+                            colliderComp.setBounciness(props.optDouble("bounciness", 0.0));
+                            colliderComp.setTrigger(props.optBoolean("isTrigger", false));
+                            colliderComp.setCollisionLayer(props.optString("collisionLayer", "Default"));
+                        }
+                        entity.addComponent(colliderComp);
+                    } else if (compType.equals("HealthComponent")) {
+                        HealthComponent healthComp = new HealthComponent();
+                        if (compJson.has("properties")) {
+                            JSONObject props = compJson.getJSONObject("properties");
+                            healthComp.setHealth(props.optInt("health", 100));
+                        }
+                        entity.addComponent(healthComp);
                     } else {
                         // É um script customizado
                         scriptNames.add(compType);

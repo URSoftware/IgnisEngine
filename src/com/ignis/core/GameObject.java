@@ -8,6 +8,8 @@ import org.json.JSONObject;
 
 public class GameObject {
 
+    public final Event<CollisionData> onCollisionEnter = new Event<>();
+
     protected String id;
     protected String name;
     protected double x, y;
