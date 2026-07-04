@@ -11,6 +11,7 @@ import com.ignis.core.SpriteComponent;
 import com.ignis.core.Texture2D;
 import com.ignis.core.ColliderComponent;
 import com.ignis.core.HealthComponent;
+import com.ignis.core.AnimationComponent;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -2255,10 +2256,15 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(HealthComponent.class) != null) {
                 goItem.getChildren().add(new TreeItem<>("HealthComponent"));
             }
+
+            // Sub-item de AnimationComponent se anexado
+            if (go.getComponent(AnimationComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("AnimationComponent"));
+            }
             
             // Outros componentes / scripts
             for (com.ignis.core.Component comp : go.getComponents()) {
-                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent || comp instanceof HealthComponent) {
+                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent || comp instanceof HealthComponent || comp instanceof AnimationComponent) {
                     continue;
                 }
                 if (comp instanceof com.ignis.core.IgnisScript) {
@@ -2526,6 +2532,11 @@ public class IgnisEditorApp extends Application {
                 if (healthComp != null) {
                     inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
                 }
+            } else if (selectedComponentName.equals("AnimationComponent")) {
+                AnimationComponent animationComp = go.getComponent(AnimationComponent.class);
+                if (animationComp != null) {
+                    inspectorExtras.getChildren().add(createScriptVariablesNode(animationComp));
+                }
             } else if (!selectedComponentName.equals("Transform")) {
                 // Pode ser um script customizado
                 com.ignis.core.IgnisScript targetScript = null;
@@ -2554,6 +2565,11 @@ public class IgnisEditorApp extends Application {
             HealthComponent healthComp = go.getComponent(HealthComponent.class);
             if (healthComp != null) {
                 inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
+            }
+
+            AnimationComponent animationComp = go.getComponent(AnimationComponent.class);
+            if (animationComp != null) {
+                inspectorExtras.getChildren().add(createScriptVariablesNode(animationComp));
             }
             
             inspectorExtras.getChildren().add(buildColliderSection(go));
@@ -2747,8 +2763,13 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(HealthComponent.class) == null) {
                 available.add("HealthComponent");
             }
+
+            // 4. AnimationComponent se nao anexado
+            if (go.getComponent(AnimationComponent.class) == null) {
+                available.add("AnimationComponent");
+            }
             
-            // 4. Scripts disponiveis
+            // 5. Scripts disponiveis
             for (String scriptName : sm.listAvailableScripts()) {
                 if (!go.getScriptNames().contains(scriptName)) {
                     available.add(scriptName);
@@ -2776,6 +2797,10 @@ public class IgnisEditorApp extends Application {
                     HealthComponent health = new HealthComponent();
                     go.addComponent(health);
                     setStatus("HealthComponent adicionado.");
+                } else if (selected.equals("AnimationComponent")) {
+                    AnimationComponent animation = new AnimationComponent();
+                    go.addComponent(animation);
+                    setStatus("AnimationComponent adicionado.");
                 } else {
                     go.getScriptNames().add(selected);
                     try {

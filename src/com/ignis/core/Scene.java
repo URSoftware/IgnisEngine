@@ -219,6 +219,13 @@ public class Scene {
                             JSONObject props = compJson.getJSONObject("properties");
                             ScriptSerializationHelper.loadScriptVariables(spriteComp, props, scene::getEntityById);
                         }
+                    } else if (compType.equals("AnimationComponent")) {
+                        AnimationComponent animationComp = new AnimationComponent();
+                        entity.addComponent(animationComp);
+                        if (compJson.has("properties")) {
+                            JSONObject props = compJson.getJSONObject("properties");
+                            ScriptSerializationHelper.loadScriptVariables(animationComp, props, scene::getEntityById);
+                        }
                     } else if (compType.equals("ColliderComponent")) {
                         ColliderComponent colliderComp = new ColliderComponent();
                         if (compJson.has("properties")) {
