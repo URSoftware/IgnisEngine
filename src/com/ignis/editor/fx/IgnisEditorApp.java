@@ -132,6 +132,9 @@ public class IgnisEditorApp extends Application {
     // Campos do Inspector
     private TextField nameField, xField, yField, wField, hField, rotField;
     private CheckBox visibleCheck;
+    private GridPane inspectorTransformGrid;
+    private String selectedComponentName = null;
+    private Label inspectorTitleLabel;
     // Snapshot para desfazer edicoes digitadas no Inspector (valor capturado no foco).
     private GameObject inspectorEditObj;
     private Object inspectorEditOld;
@@ -1442,7 +1445,26 @@ public class IgnisEditorApp extends Application {
             javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
                 @Override protected void updateItem(String item, boolean empty) {
                     super.updateItem(item, empty);
-                    setText(empty ? null : item);
+                    if (empty || item == null) {
+                        setText(null);
+                        setGraphic(null);
+                        setStyle(null);
+                    } else {
+                        TreeItem<String> treeItem = getTreeItem();
+                        if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
+                            // É um componente
+                            setText("  ↳  " + item);
+                            setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
+                        } else {
+                            // É um GameObject ou o nó raiz "Cena"
+                            setText(item);
+                            if (treeItem == hierarchyRoot) {
+                                setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
+                            } else {
+                                setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
+                            }
+                        }
+                    }
                 }
             };
             cell.setOnMousePressed(e -> {
@@ -1483,6 +1505,9 @@ public class IgnisEditorApp extends Application {
                 TreeItem<String> goItem = focusedItem;
                 if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
                     goItem = focusedItem.getParent();
+                    selectedComponentName = focusedItem.getValue();
+                } else {
+                    selectedComponentName = null;
                 }
                 
                 int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
@@ -2238,8 +2263,8 @@ public class IgnisEditorApp extends Application {
         box.getStyleClass().add("ignis-panel");
         box.setPadding(new Insets(12));
 
-        Label title = new Label("Inspector");
-        title.getStyleClass().add("panel-title");
+        inspectorTitleLabel = new Label("Inspector");
+        inspectorTitleLabel.getStyleClass().add("panel-title");
 
         nameField = new TextField();
         xField = new TextField();
@@ -2250,6 +2275,7 @@ public class IgnisEditorApp extends Application {
         visibleCheck = new CheckBox("Visivel");
 
         GridPane grid = new GridPane();
+        inspectorTransformGrid = grid;
         grid.setHgap(6);
         grid.setVgap(6);
         grid.setMaxWidth(Double.MAX_VALUE);
@@ -2307,7 +2333,7 @@ public class IgnisEditorApp extends Application {
         });
 
         inspectorExtras = new VBox(8);
-        box.getChildren().addAll(title, grid, inspectorExtras);
+        box.getChildren().addAll(inspectorTitleLabel, grid, inspectorExtras);
         setInspectorEnabled(false);
 
         ScrollPane scroll = new ScrollPane(box);
@@ -2390,6 +2416,14 @@ public class IgnisEditorApp extends Application {
             wField.setText(""); hField.setText(""); rotField.setText("");
             visibleCheck.setSelected(false);
             clearSecondarySelection();
+            selectedComponentName = null;
+            if (inspectorTitleLabel != null) {
+                inspectorTitleLabel.setText("Inspector");
+            }
+            if (inspectorTransformGrid != null) {
+                inspectorTransformGrid.setVisible(true);
+                inspectorTransformGrid.setManaged(true);
+            }
         } else {
             setInspectorEnabled(true);
             nameField.setText(go.getName());
@@ -2399,6 +2433,35 @@ public class IgnisEditorApp extends Application {
             hField.setText(String.valueOf(go.getHeight()));
             rotField.setText(String.valueOf(go.getRotation()));
             visibleCheck.setSelected(go.isVisible());
+
+            // Gerencia visibilidade da grade de transform e titulo de acordo com a selecao do componente
+            if (selectedComponentName != null) {
+                if (selectedComponentName.equals("Transform")) {
+                    if (inspectorTitleLabel != null) {
+                        inspectorTitleLabel.setText("Inspector - Transform (" + go.getName() + ")");
+                    }
+                    if (inspectorTransformGrid != null) {
+                        inspectorTransformGrid.setVisible(true);
+                        inspectorTransformGrid.setManaged(true);
+                    }
+                } else {
+                    if (inspectorTitleLabel != null) {
+                        inspectorTitleLabel.setText("Inspector - " + selectedComponentName + " (" + go.getName() + ")");
+                    }
+                    if (inspectorTransformGrid != null) {
+                        inspectorTransformGrid.setVisible(false);
+                        inspectorTransformGrid.setManaged(false);
+                    }
+                }
+            } else {
+                if (inspectorTitleLabel != null) {
+                    inspectorTitleLabel.setText("Inspector (" + go.getName() + ")");
+                }
+                if (inspectorTransformGrid != null) {
+                    inspectorTransformGrid.setVisible(true);
+                    inspectorTransformGrid.setManaged(true);
+                }
+            }
         }
 
         if (game.getSelectedObject() != go) {
@@ -2429,16 +2492,38 @@ public class IgnisEditorApp extends Application {
         inspectorExtras.getChildren().clear();
         if (go == null) return;
         
-        SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
-        if (spriteComp != null) {
-            inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+        if (selectedComponentName != null) {
+            if (selectedComponentName.equals("SpriteComponent")) {
+                SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
+                if (spriteComp != null) {
+                    inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+                }
+            } else if (!selectedComponentName.equals("Transform")) {
+                // Pode ser um script customizado
+                com.ignis.core.IgnisScript targetScript = null;
+                for (com.ignis.core.IgnisScript s : go.getScripts()) {
+                    if (s.getScriptName().equals(selectedComponentName)) {
+                        targetScript = s;
+                        break;
+                    }
+                }
+                if (targetScript != null) {
+                    inspectorExtras.getChildren().add(createScriptVariablesNode(targetScript));
+                }
+            }
+        } else {
+            // Modo classico: Renderiza todos
+            SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
+            if (spriteComp != null) {
+                inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+            }
+            
+            inspectorExtras.getChildren().add(buildColliderSection(go));
+            if (go instanceof com.ignis.core.Camera) {
+                inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
+            }
+            inspectorExtras.getChildren().add(buildScriptsSection(go));
         }
-        
-        inspectorExtras.getChildren().add(buildColliderSection(go));
-        if (go instanceof com.ignis.core.Camera) {
-            inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
-        }
-        inspectorExtras.getChildren().add(buildScriptsSection(go));
     }
 
     private void inspectScriptFile(File file) {
