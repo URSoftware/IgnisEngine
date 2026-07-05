@@ -23,22 +23,25 @@ public final class ScriptSerializationHelper {
     }
 
     /**
-     * Gets all serializable fields of a script class.
+     * Gets all serializable fields of a script or component class.
      * Only fields marked with @Serialize are returned.
-     * Traverses class hierarchy up to but excluding IgnisScript.
+     * Traverses class hierarchy up to but excluding the engine base classes
+     * (IgnisScript/Component) — user scripts AND native components share the
+     * same @Serialize contract (generic component serialization, plan item 5).
      */
     public static List<Field> getSerializedFields(Class<?> clazz) {
         List<Field> fieldList = new ArrayList<>();
         Class<?> current = clazz;
 
-        while (current != null && current != IgnisScript.class && IgnisScript.class.isAssignableFrom(current)) {
+        while (current != null && current != IgnisScript.class && current != Component.class
+                && Component.class.isAssignableFrom(current)) {
             Field[] declaredFields = current.getDeclaredFields();
             for (Field field : declaredFields) {
                 // Ignore static fields
                 if (Modifier.isStatic(field.getModifiers())) {
                     continue;
                 }
-                
+
                 // Only serialize fields marked with @Serialize
                 if (field.isAnnotationPresent(Serialize.class)) {
                     field.setAccessible(true);
@@ -67,14 +70,23 @@ public final class ScriptSerializationHelper {
      * Serializes all annotated fields of a script to JSON.
      */
     public static JSONObject saveScriptVariables(IgnisScript script) {
+        return saveComponentProperties(script);
+    }
+
+    /**
+     * Serializes all @Serialize fields of ANY component (native or script) to
+     * JSON — same contract for the whole EC model (plan item 5: new components
+     * stop requiring hardcoded branches in Scene).
+     */
+    public static JSONObject saveComponentProperties(Component component) {
         JSONObject variables = new JSONObject();
         try {
-            List<Field> fields = getSerializedFields(script.getClass());
+            List<Field> fields = getSerializedFields(component.getClass());
             for (Field field : fields) {
                 Class<?> type = field.getType();
                 if (!isSupportedType(type)) continue;
 
-                Object value = field.get(script);
+                Object value = field.get(component);
                 if (value == null) continue;
 
                 if (type == int.class || type == Integer.class ||
@@ -96,7 +108,7 @@ public final class ScriptSerializationHelper {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error serializing script variables: " + e.getMessage());
+            IgnisLogger.error("Error serializing script variables: " + e.getMessage());
         }
         return variables;
     }
@@ -105,6 +117,14 @@ public final class ScriptSerializationHelper {
      * Loads script variables from JSON into the script class, using a resolver for game objects.
      */
     public static void loadScriptVariables(IgnisScript script, JSONObject variables, GameObjectResolver resolver) {
+        loadComponentProperties(script, variables, resolver);
+    }
+
+    /**
+     * Loads @Serialize fields of ANY component (native or script) from JSON —
+     * counterpart of {@link #saveComponentProperties(Component)}.
+     */
+    public static void loadComponentProperties(Component script, JSONObject variables, GameObjectResolver resolver) {
         try {
             Class<?> clazz = script.getClass();
             for (String fieldName : variables.keySet()) {
@@ -115,7 +135,7 @@ public final class ScriptSerializationHelper {
 
                     // Ensure the field is annotated with @Serialize
                     if (!field.isAnnotationPresent(Serialize.class)) {
-                        System.out.println("[Serialization Warning] Field '" + fieldName + "' in script '" 
+                        IgnisLogger.info("[Serialization Warning] Field '" + fieldName + "' in script '" 
                                 + clazz.getSimpleName() + "' was loaded from JSON but is not annotated with @Serialize. Ignoring.");
                         continue;
                     }
@@ -152,17 +172,18 @@ public final class ScriptSerializationHelper {
                         }
                     }
                 } catch (Exception ex) {
-                    System.err.println("Failed to load field " + fieldName + ": " + ex.getMessage());
+                    IgnisLogger.error("Failed to load field " + fieldName + ": " + ex.getMessage());
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error loading script variables: " + e.getMessage());
+            IgnisLogger.error("Error loading script variables: " + e.getMessage());
         }
     }
 
     private static Field findFieldInHierarchy(Class<?> clazz, String fieldName) {
         Class<?> current = clazz;
-        while (current != null && current != IgnisScript.class && IgnisScript.class.isAssignableFrom(current)) {
+        while (current != null && current != IgnisScript.class && current != Component.class
+                && Component.class.isAssignableFrom(current)) {
             try {
                 return current.getDeclaredField(fieldName);
             } catch (NoSuchFieldException e) {

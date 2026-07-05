@@ -118,8 +118,28 @@ public class GameRuntime {
             for (GameObject entity : scene.getEntities()) {
                 game.addEntity(entity);
             }
+            game.setWorld(scene.getWorld());
         }
         game.refreshColliders();
+
+        // Transicao de cenas por script (IgnisScript.loadScene): carrega uma copia
+        // fresca da cena de destino no runtime standalone.
+        game.setSceneLoader(sceneName -> {
+            Scene target = project.getSceneByName(sceneName);
+            if (target == null) return false;
+            game.clearEntities();
+            for (GameObject entity : target.getEntities()) {
+                entity.setGame(game);
+                game.addEntity(entity);
+                if (entity instanceof com.ignis.core.Camera) {
+                    game.addCamera((com.ignis.core.Camera) entity);
+                }
+            }
+            game.setWorld(target.getWorld());
+            project.setCurrentScene(target);
+            game.refreshColliders();
+            return true;
+        });
 
         // Wire script and prefab managers against the project folder
         File projectFolder = IgnisProjectIO.getProjectFolder(config.ignisFile);

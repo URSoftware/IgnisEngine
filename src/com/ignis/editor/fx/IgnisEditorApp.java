@@ -6,12 +6,14 @@ import com.ignis.core.GameObject;
 import com.ignis.core.IgnisProjectIO;
 import com.ignis.core.Project;
 import com.ignis.core.Scene;
+import com.ignis.core.World;
 import com.ignis.core.Square;
 import com.ignis.core.SpriteComponent;
 import com.ignis.core.Texture2D;
 import com.ignis.core.ColliderComponent;
 import com.ignis.core.HealthComponent;
 import com.ignis.core.AnimationComponent;
+import com.ignis.core.RigidbodyComponent;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -78,6 +80,13 @@ import java.io.File;
  * O editor Swing classico continua intacto.
  */
 public class IgnisEditorApp extends Application {
+
+    // Singleton instance for accessing from FxConsolePanel
+    private static IgnisEditorApp instance;
+
+    public static IgnisEditorApp getInstance() {
+        return instance;
+    }
 
     private final Game game = new Game();
     private GameObject selected;
@@ -147,6 +156,10 @@ public class IgnisEditorApp extends Application {
 
     private Label cameraPosLabel;
     private Label cameraZoomLabel;
+    // Seletor de cena ativa na toolbar (organizador de cenários). 'updatingSceneSelector'
+    // evita que a repopulação programática dispare o handler de troca de cena.
+    private ComboBox<String> sceneSelector;
+    private boolean updatingSceneSelector = false;
     private GameObject clipboardObject;
     // Multi-selecao: lista de objetos selecionados secundariamente (alem do primario 'selected').
     // O primario recebe gizmo/drag; os secundarios recebem contorno tracejado (editorHighlights).
@@ -154,11 +167,13 @@ public class IgnisEditorApp extends Application {
     private ToggleButton btnMove;
     private ToggleButton btnRotate;
     private ToggleButton btnScale;
+    private ToggleButton btnWorldPaint;
 
     @Override
-    public void start(Stage stage) {
-        this.primaryStage = stage;
-        seedSampleScene();
+        public void start(Stage stage) {
+            this.primaryStage = stage;
+            instance = this; // Initialize singleton
+            seedSampleScene();
         // O editor JavaFX renderiza via AnimationTimer (renderWorldTo). O pipeline
         // AWT (repaint/BufferStrategy) e desnecessario e gera trabalho inutil.
         game.setSuppressAwtRepaint(true);
@@ -185,15 +200,27 @@ public class IgnisEditorApp extends Application {
         btnMove = new ToggleButton("Mover (W)");
         btnRotate = new ToggleButton("Rotacionar (E)");
         btnScale = new ToggleButton("Redimensionar (R)");
+        btnWorldPaint = new ToggleButton("Pintar Mundo");
+        btnWorldPaint.setTooltip(new Tooltip("Pinta barreiras na grade do mundo. Ctrl+arraste apaga."));
         ToggleGroup toolGroup = new ToggleGroup();
         btnMove.setToggleGroup(toolGroup);
         btnRotate.setToggleGroup(toolGroup);
         btnScale.setToggleGroup(toolGroup);
+        btnWorldPaint.setToggleGroup(toolGroup);
         btnMove.setSelected(true);
-        
+
         btnMove.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE));
         btnRotate.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.ROTATE));
         btnScale.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.SCALE));
+        btnWorldPaint.setOnAction(e -> {
+            // Requer um World na cena; se nao houver, cria um (limites default) para pintar.
+            if (currentProject != null && currentProject.getCurrentScene() != null
+                    && currentProject.getCurrentScene().getWorld() == null) {
+                createWorldForScene(currentProject.getCurrentScene());
+            }
+            game.setCurrentTool(com.ignis.core.Game.ToolType.WORLD_PAINT);
+            setStatus("Pincel de mundo: clique/arraste para bloquear; Ctrl para apagar.");
+        });
 
         Button btnZoomIn = new Button("Zoom In");
         btnZoomIn.setOnAction(e -> zoomCamera(1.25));
@@ -209,11 +236,21 @@ public class IgnisEditorApp extends Application {
         cameraZoomLabel = new Label("Zoom: 100%");
         cameraZoomLabel.getStyleClass().add("toolbar-label");
 
+        // Organizador de cenários: seletor de cena ativa + gerenciador.
+        sceneSelector = new ComboBox<>();
+        sceneSelector.setTooltip(new Tooltip("Cena ativa"));
+        sceneSelector.setPrefWidth(160);
+        sceneSelector.setOnAction(e -> onSceneSelectorChanged());
+        Button btnScenes = new Button("Cenários…");
+        btnScenes.setTooltip(new Tooltip("Criar, organizar e definir a cena inicial; criar mundos"));
+        btnScenes.setOnAction(e -> openSceneManager());
+
         ToolBar toolBar = new ToolBar(
             btnOpen, btnBuild, new Separator(),
             playButton, stopButton, new Separator(),
-            btnMove, btnRotate, btnScale, new Separator(),
+            btnMove, btnRotate, btnScale, btnWorldPaint, new Separator(),
             btnZoomIn, btnZoomOut, btnResetCam, btnFocusSelected, new Separator(),
+            new Label("Cena:"), sceneSelector, btnScenes, new Separator(),
             cameraPosLabel, cameraZoomLabel
         );
         root.setTop(new VBox(buildMenuBar(stage), toolBar));
@@ -234,6 +271,10 @@ public class IgnisEditorApp extends Application {
 
         setupProjectAutoSave();
 
+        // Transicao de cenas por script: fora do Play troca a cena do editor; em Play
+        // carrega uma copia fresca no game (sem tocar na cena salva).
+        game.setSceneLoader(this::onScriptSceneChange);
+
         // ---- Viewport central ----
         Pane viewportPane = new Pane();
         Canvas canvas = new Canvas();
@@ -244,11 +285,13 @@ public class IgnisEditorApp extends Application {
         wireFxInputToEngine(canvas);
 
         // ---- Hierarchy + Asset Browser (esquerda) ----
-        hierarchy = buildHierarchy();
+        // buildHierarchy() atribui o campo 'hierarchy' (TreeView) e devolve o painel
+        // (VBox com o campo de filtro + a arvore).
+        javafx.scene.Node hierarchyPanel = buildHierarchy();
         javafx.scene.Node assetBrowser = buildAssetBrowser();
         leftSplit = new SplitPane();
         leftSplit.setOrientation(Orientation.VERTICAL);
-        leftSplit.getItems().addAll(hierarchy, assetBrowser);
+        leftSplit.getItems().addAll(hierarchyPanel, assetBrowser);
         leftSplit.setDividerPositions(0.6);
 
         // ---- Inspector (direita) ----
@@ -484,39 +527,49 @@ public class IgnisEditorApp extends Application {
         focusSelectedItem.setAccelerator(new KeyCodeCombination(KeyCode.F));
         focusSelectedItem.setOnAction(e -> focusCameraOnSelected());
         
-        CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
-        showGridItem.setSelected(game.isShowGrid());
-        showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
-        showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
-        
-        Menu gridSizeMenu = new Menu("Grid Size");
-        ToggleGroup gridSizeGroup = new ToggleGroup();
-        int[] gridSizes = {16, 32, 64, 128};
-        for (int size : gridSizes) {
-            RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
-            sizeItem.setToggleGroup(gridSizeGroup);
-            sizeItem.setSelected(game.getGridSize() == size);
-            sizeItem.setOnAction(e -> game.setGridSize(size));
-            gridSizeMenu.getItems().add(sizeItem);
-        }
-        
         CheckMenuItem showCollidersItem = new CheckMenuItem("Show Colliders");
-        showCollidersItem.setSelected(game.isShowColliders());
-        showCollidersItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
-        showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
+                showCollidersItem.setSelected(game.isShowColliders());
+                showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
 
-        consoleMenuItem = new CheckMenuItem("Mostrar Console");
-        consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
-        consoleMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.J, KeyCombination.CONTROL_DOWN));
-        consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
+                CheckMenuItem showCameraBoundsItem = new CheckMenuItem("Mostrar Câmera (campo de visão)");
+                showCameraBoundsItem.setSelected(game.isShowCameraBounds());
+                showCameraBoundsItem.setOnAction(e -> game.setShowCameraBounds(showCameraBoundsItem.isSelected()));
 
-        view.getItems().addAll(
-            zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
-            resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
-            showGridItem, gridSizeMenu, new SeparatorMenuItem(),
-            showCollidersItem, new SeparatorMenuItem(),
-            consoleMenuItem
-        );
+                CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
+                showGridItem.setSelected(game.isShowGrid());
+                showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
+                showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
+
+                CheckMenuItem snapToGridItem = new CheckMenuItem("Snap to Grid");
+                snapToGridItem.setSelected(game.isSnapToGrid());
+                snapToGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
+                snapToGridItem.setOnAction(e -> game.setSnapToGrid(snapToGridItem.isSelected()));
+
+                Menu gridSizeMenu = new Menu("Grid Size");
+                ToggleGroup gridSizeGroup = new ToggleGroup();
+                int[] gridSizes = {16, 32, 64, 128};
+                for (int size : gridSizes) {
+                    RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
+                    sizeItem.setToggleGroup(gridSizeGroup);
+                    sizeItem.setSelected(game.getGridSize() == size);
+                    sizeItem.setOnAction(e -> game.setGridSize(size));
+                    gridSizeMenu.getItems().add(sizeItem);
+                }
+
+                // Item de alternancia do Console (dock inferior). Instanciado aqui —
+                // antes so era declarado como campo e entrava null no menu, causando
+                // NullPointerException ao renderizar a MenuBar no start.
+                consoleMenuItem = new CheckMenuItem("Mostrar Console");
+                consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
+                consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
+
+                view.getItems().addAll(
+                    zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
+                    resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
+                    showGridItem, snapToGridItem, gridSizeMenu, new SeparatorMenuItem(),
+                    showCollidersItem, showCameraBoundsItem, new SeparatorMenuItem(),
+                    consoleMenuItem
+                );
 
         Menu help = new Menu("Ajuda");
         MenuItem about = new MenuItem("Sobre");
@@ -584,11 +637,15 @@ public class IgnisEditorApp extends Application {
     // Menu "Cena": criar/duplicar/renomear/deletar/reordenar entidades.
     private Menu buildSceneMenu() {
         Menu scene = new Menu("Cena");
+        MenuItem gerenciarCenarios = new MenuItem("Gerenciar Cenários…");
+        gerenciarCenarios.setOnAction(e -> openSceneManager());
+        MenuItem novaCena = new MenuItem("Nova Cena…");
+        novaCena.setOnAction(e -> createNewScene());
         MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
         criarObjeto.setOnAction(e -> createEntity("GameObject"));
         MenuItem criarCamera = new MenuItem("Criar Câmera");
         criarCamera.setOnAction(e -> createEntity("Camera"));
-        
+
         MenuItem dup = new MenuItem("Duplicar selecionado");
         dup.setOnAction(e -> duplicateSelected());
         MenuItem ren = new MenuItem("Renomear selecionado…");
@@ -607,7 +664,8 @@ public class IgnisEditorApp extends Application {
         savePrefab.setOnAction(e -> saveSelectedAsPrefab());
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
-        scene.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem(), dup, ren, del,
+        scene.getItems().addAll(gerenciarCenarios, novaCena, new SeparatorMenuItem(),
+                criarObjeto, criarCamera, new SeparatorMenuItem(), dup, ren, del,
                 new SeparatorMenuItem(), up, down, top, bottom,
                 new SeparatorMenuItem(), savePrefab, instPrefab);
         return scene;
@@ -738,6 +796,7 @@ public class IgnisEditorApp extends Application {
                 reloadAllScriptInstances();
             }
             refreshHierarchy();
+            refreshSceneSelector();
             refreshAssetBrowser();
             undoManager.clear();
             boolean sessionCopy = isCollabSessionProject();
@@ -802,6 +861,7 @@ public class IgnisEditorApp extends Application {
             } catch (Exception ignore) { /* scripts opcionais */ }
             maybeAutoStartMcp();
             refreshHierarchy();
+            refreshSceneSelector();
             refreshAssetBrowser();
             undoManager.clear();
             EditorPrefs.addRecent(this.currentIgnisFile);
@@ -909,6 +969,368 @@ public class IgnisEditorApp extends Application {
         scene.setWorld(game.getWorld());
     }
 
+    // ==================== ORGANIZADOR DE CENÁRIOS ====================
+
+    // (Re)popula o seletor de cena da toolbar a partir do projeto, marcando a cena
+    // inicial com ⭐. Programatico: nao dispara a troca de cena (updatingSceneSelector).
+    private void refreshSceneSelector() {
+        if (sceneSelector == null) return;
+        updatingSceneSelector = true;
+        try {
+            sceneSelector.getItems().clear();
+            if (currentProject == null) {
+                sceneSelector.setDisable(true);
+                return;
+            }
+            sceneSelector.setDisable(false);
+            String start = currentProject.getMainScene();
+            String currentLabel = null;
+            for (Scene s : currentProject.getScenes()) {
+                String label = sceneLabel(s, start);
+                sceneSelector.getItems().add(label);
+                if (s == currentProject.getCurrentScene()) currentLabel = label;
+            }
+            if (currentLabel != null) sceneSelector.setValue(currentLabel);
+        } finally {
+            updatingSceneSelector = false;
+        }
+    }
+
+    // Rotulo de cena: nome + prefixo ⭐ quando e a cena inicial (mainScene).
+    private String sceneLabel(Scene s, String startSceneName) {
+        boolean isStart = s.getSceneName().equals(startSceneName);
+        return (isStart ? "⭐ " : "") + s.getSceneName();
+    }
+
+    private String sceneNameFromLabel(String label) {
+        if (label == null) return null;
+        return label.startsWith("⭐ ") ? label.substring(2) : label;
+    }
+
+    private void onSceneSelectorChanged() {
+        if (updatingSceneSelector || currentProject == null || sceneSelector == null) return;
+        String label = sceneSelector.getValue();
+        if (label == null) return;
+        Scene target = currentProject.getSceneByName(sceneNameFromLabel(label));
+        if (target != null && target != currentProject.getCurrentScene()) {
+            switchEditorToScene(target);
+        }
+    }
+
+    // Carrega uma cena no game vivo (limpa entidades/cameras e recarrega scripts).
+    private void loadSceneIntoGame(Scene target) {
+        setSelected(null);
+        clearSecondarySelection();
+        game.getEntities().clear();
+        clearGameCameras();
+        if (target != null) {
+            for (GameObject e : target.getEntities()) {
+                e.setGame(game);
+                addEntityTracked(e);
+            }
+            game.setWorld(target.getWorld());
+        }
+        try {
+            if (game.getScriptManager() != null) reloadAllScriptInstances();
+        } catch (Exception ignore) { /* scripts opcionais */ }
+        refreshHierarchy();
+    }
+
+    // Troca a cena ativa do editor: persiste a cena atual no projeto e carrega a nova.
+    private void switchEditorToScene(Scene target) {
+        if (currentProject == null || target == null) return;
+        if (target == currentProject.getCurrentScene()) return;
+        if (playing) {
+            setStatus("Pare o Play (Stop) antes de trocar de cena.");
+            refreshSceneSelector(); // reverte o seletor para a cena atual
+            return;
+        }
+        syncEntitiesToScene();                    // game -> cena atual
+        currentProject.setCurrentScene(target);
+        loadSceneIntoGame(target);                // cena nova -> game
+        refreshSceneSelector();
+        markProjectDirty();
+        setStatus("Cena ativa: " + target.getSceneName());
+    }
+
+    // SceneLoader para scripts (IgnisScript.loadScene). Fora do Play delega para a
+    // troca normal do editor; durante o Play carrega uma cópia fresca da cena de
+    // destino no game vivo (para não corromper a cena salva com o estado de runtime).
+    private boolean onScriptSceneChange(String sceneName) {
+        if (currentProject == null || sceneName == null) return false;
+        Scene target = currentProject.getSceneByName(sceneName);
+        if (target == null) return false;
+        if (playing) {
+            Scene copy = Scene.fromJSON(target.toJSON(), game);
+            setSelected(null);
+            clearSecondarySelection();
+            game.getEntities().clear();
+            clearGameCameras();
+            for (GameObject e : copy.getEntities()) {
+                e.setGame(game);
+                addEntityTracked(e);
+            }
+            game.setWorld(copy.getWorld());
+            game.refreshColliders();
+            // Reinicia os scripts da nova cena (start()), como numa transição real.
+            try {
+                if (game.getScriptManager() != null) reloadAllScriptInstances();
+            } catch (Exception ignore) { /* scripts opcionais */ }
+            Platform.runLater(this::refreshHierarchy);
+        } else {
+            Platform.runLater(() -> switchEditorToScene(target));
+        }
+        return true;
+    }
+
+    // Cria uma nova cena vazia e a torna ativa.
+    private void createNewScene() {
+        if (!requireProject()) return;
+        String name = promptSceneName("Nova cena", "Cena" + (currentProject.getScenes().size() + 1), null);
+        if (name == null) return;
+        Scene s = new Scene(name);
+        currentProject.addScene(s);
+        switchEditorToScene(s);
+        setStatus("Cena criada: " + name);
+    }
+
+    private void renameScene(Scene s) {
+        if (s == null || currentProject == null) return;
+        String name = promptSceneName("Renomear cena", s.getSceneName(), s);
+        if (name == null) return;
+        boolean wasStart = s.getSceneName().equals(currentProject.getMainScene());
+        s.setSceneName(name);
+        if (wasStart) currentProject.setMainScene(name);
+        refreshSceneSelector();
+        markProjectDirty();
+    }
+
+    private void duplicateScene(Scene s) {
+        if (s == null || currentProject == null) return;
+        if (s == currentProject.getCurrentScene()) syncEntitiesToScene();
+        Scene copy = Scene.fromJSON(s.toJSON(), game);
+        copy.setSceneName(uniqueSceneName(s.getSceneName() + " (cópia)"));
+        currentProject.addScene(copy);
+        refreshSceneSelector();
+        markProjectDirty();
+        setStatus("Cena duplicada: " + copy.getSceneName());
+    }
+
+    private void deleteScene(Scene s) {
+        if (s == null || currentProject == null) return;
+        if (currentProject.getScenes().size() <= 1) {
+            setStatus("Não é possível remover a única cena do projeto.");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Remover a cena \"" + s.getSceneName() + "\"? Esta ação não pode ser desfeita.",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText(null);
+        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
+
+        boolean isCurrent = (s == currentProject.getCurrentScene());
+        boolean isStart = s.getSceneName().equals(currentProject.getMainScene());
+        currentProject.removeScene(s); // troca currentScene se necessario
+        if (isStart && currentProject.getCurrentScene() != null) {
+            currentProject.setMainScene(currentProject.getCurrentScene().getSceneName());
+        }
+        if (isCurrent) {
+            loadSceneIntoGame(currentProject.getCurrentScene());
+        }
+        refreshSceneSelector();
+        markProjectDirty();
+        setStatus("Cena removida: " + s.getSceneName());
+    }
+
+    private void setStartScene(Scene s) {
+        if (s == null || currentProject == null) return;
+        currentProject.setMainScene(s.getSceneName());
+        refreshSceneSelector();
+        markProjectDirty();
+        setStatus("Cena inicial definida: " + s.getSceneName());
+    }
+
+    // Cria/garante um World para a cena com limites default (1920x1080 centrado na origem).
+    private void createWorldForScene(Scene s) {
+        if (s == null) return;
+        World w = s.getWorld();
+        if (w == null) {
+            w = new World(s.getSceneName() + " World");
+            s.setWorld(w);
+        }
+        if (!w.hasBounds()) {
+            w.setBounds(-960, -540, 960, 540);
+        }
+        if (s == currentProject.getCurrentScene()) game.setWorld(w);
+        markProjectDirty();
+        setStatus("Mundo criado para a cena: " + s.getSceneName());
+    }
+
+    // Dialogo de nome de cena com validacao de unicidade. 'editing' e a cena sendo
+    // renomeada (para permitir manter o proprio nome); null ao criar.
+    private String promptSceneName(String title, String suggested, Scene editing) {
+        while (true) {
+            TextInputDialog dlg = new TextInputDialog(suggested);
+            dlg.setTitle(title);
+            dlg.setHeaderText(null);
+            dlg.setContentText("Nome da cena:");
+            java.util.Optional<String> opt = dlg.showAndWait();
+            if (opt.isEmpty()) return null;
+            String name = opt.get().trim();
+            if (name.isEmpty()) return null;
+            Scene existing = currentProject.getSceneByName(name);
+            if (existing != null && existing != editing) {
+                new Alert(Alert.AlertType.WARNING, "Já existe uma cena com esse nome.").showAndWait();
+                suggested = name;
+                continue;
+            }
+            return name;
+        }
+    }
+
+    // Gera um nome unico a partir de uma base (base, base 2, base 3, ...).
+    private String uniqueSceneName(String base) {
+        if (currentProject.getSceneByName(base) == null) return base;
+        int i = 2;
+        while (currentProject.getSceneByName(base + " " + i) != null) i++;
+        return base + " " + i;
+    }
+
+    // Abre o gerenciador de cenários (organizar cenas + cena inicial + mundos).
+    private void openSceneManager() {
+        if (!requireProject()) return;
+        Stage dialog = new Stage();
+        dialog.initOwner(primaryStage);
+        dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        dialog.setTitle("Gerenciar Cenários");
+
+        ListView<String> list = new ListView<>();
+        Runnable reload = () -> {
+            String prev = list.getSelectionModel().getSelectedItem();
+            list.getItems().clear();
+            for (Scene s : currentProject.getScenes()) {
+                list.getItems().add(sceneLabel(s, currentProject.getMainScene()));
+            }
+            if (prev != null && list.getItems().contains(prev)) {
+                list.getSelectionModel().select(prev);
+            } else if (!list.getItems().isEmpty()) {
+                list.getSelectionModel().select(0);
+            }
+        };
+        reload.run();
+        list.setPrefHeight(220);
+
+        java.util.function.Supplier<Scene> selected = () -> {
+            String label = list.getSelectionModel().getSelectedItem();
+            return label == null ? null : currentProject.getSceneByName(sceneNameFromLabel(label));
+        };
+
+        Button btnNova = new Button("Nova…");
+        btnNova.setOnAction(e -> { createNewScene(); reload.run(); });
+        Button btnAtivar = new Button("Ativar");
+        btnAtivar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { switchEditorToScene(s); reload.run(); } });
+        Button btnRenomear = new Button("Renomear…");
+        btnRenomear.setOnAction(e -> { Scene s = selected.get(); if (s != null) { renameScene(s); reload.run(); } });
+        Button btnDuplicar = new Button("Duplicar");
+        btnDuplicar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { duplicateScene(s); reload.run(); } });
+        Button btnInicial = new Button("Definir como inicial ⭐");
+        btnInicial.setOnAction(e -> { Scene s = selected.get(); if (s != null) { setStartScene(s); reload.run(); } });
+        Button btnDeletar = new Button("Deletar");
+        btnDeletar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { deleteScene(s); reload.run(); } });
+
+        VBox sceneButtons = new VBox(6, btnNova, btnAtivar, btnRenomear, btnDuplicar, btnInicial, btnDeletar);
+        sceneButtons.setMinWidth(180);
+
+        // --- Seção de Mundo da cena selecionada ---
+        Label worldTitle = new Label("Mundo da cena");
+        worldTitle.getStyleClass().add("panel-title");
+        Label worldStatus = new Label();
+        worldStatus.setWrapText(true);
+        TextField minXf = new TextField();
+        TextField minYf = new TextField();
+        TextField maxXf = new TextField();
+        TextField maxYf = new TextField();
+        for (TextField tf : new TextField[]{minXf, minYf, maxXf, maxYf}) tf.setPrefColumnCount(6);
+        GridPane worldGrid = new GridPane();
+        worldGrid.setHgap(6); worldGrid.setVgap(4);
+        worldGrid.addRow(0, new Label("Min X"), minXf, new Label("Min Y"), minYf);
+        worldGrid.addRow(1, new Label("Max X"), maxXf, new Label("Max Y"), maxYf);
+
+        Button btnCriarMundo = new Button("Criar Mundo");
+        Button btnAplicarMundo = new Button("Aplicar limites");
+        Button btnRemoverMundo = new Button("Remover Mundo");
+
+        Runnable refreshWorld = () -> {
+            Scene s = selected.get();
+            World w = (s != null) ? s.getWorld() : null;
+            boolean hasWorld = (w != null);
+            boolean hasBounds = hasWorld && w.hasBounds();
+            worldStatus.setText(s == null ? "Selecione uma cena."
+                    : hasWorld ? ("Mundo: " + w.getName() + (hasBounds ? "" : " (sem limites)"))
+                    : "Esta cena não tem mundo.");
+            btnCriarMundo.setDisable(s == null || hasWorld);
+            btnAplicarMundo.setDisable(!hasBounds);
+            btnRemoverMundo.setDisable(!hasWorld);
+            minXf.setDisable(!hasBounds); minYf.setDisable(!hasBounds);
+            maxXf.setDisable(!hasBounds); maxYf.setDisable(!hasBounds);
+            if (hasBounds) {
+                minXf.setText(fmt(w.getMinX())); minYf.setText(fmt(w.getMinY()));
+                maxXf.setText(fmt(w.getMaxX())); maxYf.setText(fmt(w.getMaxY()));
+            } else {
+                minXf.clear(); minYf.clear(); maxXf.clear(); maxYf.clear();
+            }
+        };
+        list.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> refreshWorld.run());
+
+        btnCriarMundo.setOnAction(e -> { Scene s = selected.get(); if (s != null) { createWorldForScene(s); refreshWorld.run(); } });
+        btnAplicarMundo.setOnAction(e -> {
+            Scene s = selected.get();
+            World w = (s != null) ? s.getWorld() : null;
+            if (w == null) return;
+            try {
+                final World world = w;
+                final double[] antes = { world.getMinX(), world.getMinY(), world.getMaxX(), world.getMaxY() };
+                final double[] depois = { Double.parseDouble(minXf.getText()), Double.parseDouble(minYf.getText()),
+                        Double.parseDouble(maxXf.getText()), Double.parseDouble(maxYf.getText()) };
+                world.setBounds(depois[0], depois[1], depois[2], depois[3]);
+                if (s == currentProject.getCurrentScene()) game.setWorld(world);
+                undoManager.push("Limites do mundo",
+                        () -> { world.setBounds(antes[0], antes[1], antes[2], antes[3]); game.repaint(); },
+                        () -> { world.setBounds(depois[0], depois[1], depois[2], depois[3]); game.repaint(); });
+                markProjectDirty();
+                setStatus("Limites do mundo atualizados.");
+            } catch (NumberFormatException ex) {
+                new Alert(Alert.AlertType.WARNING, "Valores de limite inválidos.").showAndWait();
+            }
+        });
+        btnRemoverMundo.setOnAction(e -> {
+            Scene s = selected.get();
+            if (s == null) return;
+            s.setWorld(null);
+            if (s == currentProject.getCurrentScene()) game.setWorld(null);
+            markProjectDirty();
+            refreshWorld.run();
+            setStatus("Mundo removido da cena.");
+        });
+        refreshWorld.run();
+
+        VBox worldBox = new VBox(6, worldTitle, worldStatus, worldGrid,
+                new HBox(6, btnCriarMundo, btnAplicarMundo, btnRemoverMundo));
+        worldBox.setMinWidth(320);
+
+        Button btnFechar = new Button("Fechar");
+        btnFechar.setOnAction(e -> dialog.close());
+
+        HBox body = new HBox(12, list, sceneButtons, new Separator(javafx.geometry.Orientation.VERTICAL), worldBox);
+        VBox rootBox = new VBox(10, body, btnFechar);
+        rootBox.setPadding(new Insets(12));
+        javafx.scene.Scene dlgScene = new javafx.scene.Scene(rootBox);
+        FxTheme.apply(dlgScene);
+        dialog.setScene(dlgScene);
+        dialog.showAndWait();
+        refreshSceneSelector();
+    }
+
     // Fecha o projeto atual e volta para a tela de selecao (espelha o ramo sem-projeto
     // de updateProjectRoot() do Swing: libera ScriptManager e limpa o estado).
     private void closeProject(Stage stage) {
@@ -924,6 +1346,7 @@ public class IgnisEditorApp extends Application {
         clearGameCameras();
         setSelected(null);
         refreshHierarchy();
+        refreshSceneSelector();
         refreshAssetBrowser();
         undoManager.clear();
         stage.setTitle("IgnisEngine — Editor (JavaFX)");
@@ -1276,8 +1699,14 @@ public class IgnisEditorApp extends Application {
             canvas.requestFocus();
             java.awt.event.MouseEvent awtEvent = buildAwtMouseEvent(e, java.awt.event.MouseEvent.MOUSE_PRESSED);
             com.ignis.core.Input.getInstance().mousePressed(awtEvent);
+            // Pincel de barreiras: Ctrl define modo apagar. Neste modo o Ctrl NAO deve
+            // acionar a multi-selecao — o clique/arraste vai para o engine (pintura).
+            boolean worldPaint = game.getCurrentTool() == com.ignis.core.Game.ToolType.WORLD_PAINT;
+            if (worldPaint) {
+                game.setWorldPaintErase(e.isControlDown());
+            }
             // Multi-selecao via Ctrl+Click esquerdo no viewport (so em edicao, nao em Play).
-            if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isControlDown() && !playing) {
+            if (!worldPaint && e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isControlDown() && !playing) {
                 GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
                 if (clicked != null) {
                     if (clicked == selected) {
@@ -1351,9 +1780,15 @@ public class IgnisEditorApp extends Application {
         canvas.setOnKeyPressed(e -> {
             if (!playing) return;
             int vk = toAwtKeyCode(e.getCode());
+            java.awt.event.KeyEvent awt = buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_PRESSED, vk);
+            // A UI da cena tem prioridade no Play (foco/navegacao por teclado — item 12).
+            com.ignis.core.ui.UICanvas ui = game.getUICanvas();
+            if (ui != null && ui.isVisible() && ui.processKeyPressed(awt)) {
+                e.consume();
+                return;
+            }
             if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
-                com.ignis.core.Input.getInstance().keyPressed(
-                        buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_PRESSED, vk));
+                com.ignis.core.Input.getInstance().keyPressed(awt);
                 e.consume();
             }
         });
@@ -1363,6 +1798,16 @@ public class IgnisEditorApp extends Application {
             if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
                 com.ignis.core.Input.getInstance().keyReleased(
                         buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_RELEASED, vk));
+                e.consume();
+            }
+        });
+        canvas.setOnKeyTyped(e -> {
+            if (!playing) return;
+            String ch = e.getCharacter();
+            if (ch == null || ch.isEmpty()) return;
+            com.ignis.core.ui.UICanvas ui = game.getUICanvas();
+            if (ui != null && ui.isVisible()
+                    && ui.processKeyTyped(buildAwtKeyTypedEvent(ch.charAt(0)))) {
                 e.consume();
             }
         });
@@ -1389,6 +1834,13 @@ public class IgnisEditorApp extends Application {
     private java.awt.event.KeyEvent buildAwtKeyEvent(int id, int vk) {
         return new java.awt.event.KeyEvent(awtEventSource, id, System.currentTimeMillis(), 0,
                 vk, java.awt.event.KeyEvent.CHAR_UNDEFINED);
+    }
+
+    // Evento AWT KEY_TYPED (portador de caractere) para roteamento de digitacao a
+    // campos de texto da UI da cena (item 12).
+    private java.awt.event.KeyEvent buildAwtKeyTypedEvent(char ch) {
+        return new java.awt.event.KeyEvent(awtEventSource, java.awt.event.KeyEvent.KEY_TYPED,
+                System.currentTimeMillis(), 0, java.awt.event.KeyEvent.VK_UNDEFINED, ch);
     }
 
     private java.awt.event.MouseEvent buildAwtMouseEvent(javafx.scene.input.MouseEvent e, int id) {
@@ -1435,134 +1887,183 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Hierarchy ----------------
 
-    private TreeView<String> buildHierarchy() {
-        refreshHierarchy();
-        hierarchyRoot.setExpanded(true);
-        TreeView<String> tree = new TreeView<>(hierarchyRoot);
-        // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
-        tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
-        // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
-        // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
-        tree.setCellFactory(tv -> {
-            javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
-                @Override protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty);
-                    if (empty || item == null) {
-                        setText(null);
-                        setGraphic(null);
-                        setStyle(null);
-                    } else {
-                        TreeItem<String> treeItem = getTreeItem();
-                        if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
-                            // É um componente
-                            setText("  ↳  " + item);
-                            setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
+        private javafx.scene.Node buildHierarchy() {
+            refreshHierarchy();
+            hierarchyRoot.setExpanded(true);
+            TreeView<String> tree = new TreeView<>(hierarchyRoot);
+            this.hierarchy = tree;
+            // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
+            tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+            // Search/filter field for hierarchy
+            TextField hierarchyFilter = new TextField();
+            hierarchyFilter.setPromptText("Filtrar Hierarchy...");
+            hierarchyFilter.textProperty().addListener((obs, oldVal, newVal) -> applyHierarchyFilter(newVal));
+
+            // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
+            // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
+            // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
+            tree.setCellFactory(tv -> {
+                javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
+                    @Override protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText(null);
+                            setGraphic(null);
+                            setStyle(null);
                         } else {
-                            // É um GameObject ou o nó raiz "Cena"
-                            setText(item);
-                            if (treeItem == hierarchyRoot) {
-                                setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
+                            TreeItem<String> treeItem = getTreeItem();
+                            if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
+                                // É um componente
+                                setText("  ↳  " + item);
+                                setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
                             } else {
-                                setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
+                                // É um GameObject ou o nó raiz "Cena"
+                                setText(item);
+                                if (treeItem == hierarchyRoot) {
+                                    setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
+                                } else {
+                                    setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
+                                }
                             }
                         }
                     }
-                }
-            };
-            cell.setOnMousePressed(e -> {
-                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    tv.getSelectionModel().select(cell.getTreeItem());
-                }
-            });
-            cell.setOnDragDetected(e -> {
-                if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
-                    javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
-                    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                    content.putString(cell.getItem());
-                    db.setContent(content);
-                    e.consume();
-                }
-            });
-            return cell;
-        });
-        // Listener de selecao: sincroniza o primario + secundarios a partir da
-        // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
-        // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
-        tree.getSelectionModel().getSelectedItems().addListener(
-                (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
-            if (suppressSelectionEvents) return;
-            suppressSelectionEvents = true;
-            try {
-                var selItems = tree.getSelectionModel().getSelectedItems();
-                java.util.List<GameObject> ents = game.getEntities();
-                if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
-                    setSelected(null);
-                    clearSecondarySelection();
-                    return;
-                }
-                // O item com foco (ultimo clicado) vira o primario.
-                TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
-                if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
-                
-                TreeItem<String> goItem = focusedItem;
-                if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
-                    goItem = focusedItem.getParent();
-                    selectedComponentName = focusedItem.getValue();
-                } else {
-                    selectedComponentName = null;
-                }
-                
-                int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
-                GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
-                setSelected(primary);
-                
-                // Montar a lista de secundarios (os demais).
-                secondarySelection.clear();
-                for (TreeItem<String> ti : selItems) {
-                    if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
-                    TreeItem<String> pItem = ti;
-                    if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
-                        pItem = ti.getParent();
+                };
+                cell.setOnMousePressed(e -> {
+                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                        tv.getSelectionModel().select(cell.getTreeItem());
                     }
-                    int idx = hierarchyRoot.getChildren().indexOf(pItem);
-                    if (idx >= 0 && idx < ents.size()) {
-                        GameObject go = ents.get(idx);
-                        if (go != primary && !secondarySelection.contains(go)) {
-                            secondarySelection.add(go);
+                });
+                cell.setOnDragDetected(e -> {
+                    if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
+                        javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
+                        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+                        content.putString(cell.getItem());
+                        db.setContent(content);
+                        e.consume();
+                    }
+                });
+                return cell;
+            });
+            // Listener de selecao: sincroniza o primario + secundarios a partir da
+            // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
+            // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
+            tree.getSelectionModel().getSelectedItems().addListener(
+                    (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
+                if (suppressSelectionEvents) return;
+                suppressSelectionEvents = true;
+                try {
+                    var selItems = tree.getSelectionModel().getSelectedItems();
+                    java.util.List<GameObject> ents = game.getEntities();
+                    if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
+                        setSelected(null);
+                        clearSecondarySelection();
+                        return;
+                    }
+                    // O item com foco (ultimo clicado) vira o primario.
+                    TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
+                    if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
+                
+                    TreeItem<String> goItem = focusedItem;
+                    if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
+                        goItem = focusedItem.getParent();
+                        selectedComponentName = focusedItem.getValue();
+                    } else {
+                        selectedComponentName = null;
+                    }
+                
+                    int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
+                    GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
+                    setSelected(primary);
+                
+                    // Montar a lista de secundarios (os demais).
+                    secondarySelection.clear();
+                    for (TreeItem<String> ti : selItems) {
+                        if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
+                        TreeItem<String> pItem = ti;
+                        if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
+                            pItem = ti.getParent();
+                        }
+                        int idx = hierarchyRoot.getChildren().indexOf(pItem);
+                        if (idx >= 0 && idx < ents.size()) {
+                            GameObject go = ents.get(idx);
+                            if (go != primary && !secondarySelection.contains(go)) {
+                                secondarySelection.add(go);
+                            }
                         }
                     }
+                    syncHighlights();
+                } finally {
+                    suppressSelectionEvents = false;
                 }
-                syncHighlights();
-            } finally {
-                suppressSelectionEvents = false;
-            }
-        });
-        tree.setOnMouseClicked(ev -> {
-            if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
-                ContextMenu menu;
-                if (sel != null && sel != hierarchyRoot) {
-                    menu = buildHierarchyContextMenu();
-                } else {
-                    menu = new ContextMenu();
-                    MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
-                    criarObjeto.setOnAction(e -> createEntity("GameObject"));
-                    MenuItem criarCamera = new MenuItem("Criar Câmera");
-                    criarCamera.setOnAction(e -> createEntity("Camera"));
-                    menu.getItems().addAll(criarObjeto, criarCamera);
+            });
+            tree.setOnMouseClicked(ev -> {
+                if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
+                    ContextMenu menu;
+                    if (sel != null && sel != hierarchyRoot) {
+                        menu = buildHierarchyContextMenu();
+                    } else {
+                        menu = new ContextMenu();
+                        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+                        criarObjeto.setOnAction(e -> createEntity("GameObject"));
+                        MenuItem criarCamera = new MenuItem("Criar Câmera");
+                        criarCamera.setOnAction(e -> createEntity("Camera"));
+                        menu.getItems().addAll(criarObjeto, criarCamera);
+                    }
+                    menu.show(tree, ev.getScreenX(), ev.getScreenY());
                 }
-                menu.show(tree, ev.getScreenX(), ev.getScreenY());
+            });
+            // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
+            tree.setOnKeyPressed(ev -> {
+                if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
+                else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
+                else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
+            });
+        
+            // Painel: campo de filtro acima da arvore (antes o VBox era montado mas
+            // o metodo retornava so a 'tree', deixando o filtro da Hierarchy orfao).
+            VBox hierarchyBox = new VBox(4, hierarchyFilter, tree);
+            VBox.setVgrow(tree, Priority.ALWAYS);
+            return hierarchyBox;
+        }
+
+        // Apply filter to hierarchy tree
+        private void applyHierarchyFilter(String filterText) {
+            if (filterText == null || filterText.trim().isEmpty()) {
+                // Show all items
+                for (TreeItem<String> item : hierarchyRoot.getChildren()) {
+                    item.setExpanded(true);
+                    setItemVisible(item, true);
+                }
+            } else {
+                String lowerFilter = filterText.toLowerCase();
+                for (TreeItem<String> item : hierarchyRoot.getChildren()) {
+                    boolean matches = item.getValue().toLowerCase().contains(lowerFilter);
+                    // Check children too
+                    for (TreeItem<String> child : item.getChildren()) {
+                        if (child.getValue().toLowerCase().contains(lowerFilter)) {
+                            matches = true;
+                            break;
+                        }
+                    }
+                    item.setExpanded(matches);
+                    setItemVisible(item, matches);
+                }
             }
-        });
-        // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
-        tree.setOnKeyPressed(ev -> {
-            if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
-            else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
-            else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
-        });
-        return tree;
-    }
+        }
+    
+        // Helper to set visibility of tree items (by collapsing/expanding or filtering)
+        private void setItemVisible(TreeItem<String> item, boolean visible) {
+            // For TreeView filtering, we use a filtered list approach or just expand/collapse
+            // Since TreeView doesn't have built-in filtering, we expand matching items
+            // and collapse non-matching ones
+            if (visible) {
+                item.setExpanded(true);
+            } else {
+                item.setExpanded(false);
+            }
+        }
 
     // ---------------- Mecanicas de edicao da cena ----------------
 
@@ -2039,6 +2540,55 @@ public class IgnisEditorApp extends Application {
                         () -> applyMultipleTransforms(afterStates));
             }
         });
+
+        // Undo/redo do redimensionamento de collider pelo gizmo (item 8b): captura as
+        // propriedades do ColliderComponent antes/depois do arraste.
+        game.setColliderEditListener(new com.ignis.core.Game.ColliderEditListener() {
+            private org.json.JSONObject before;
+            private ColliderComponent editing;
+            @Override public void onColliderEditStart(GameObject owner, ColliderComponent cc) {
+                editing = cc;
+                before = (cc != null) ? cc.saveProperties() : null;
+            }
+            @Override public void onColliderEditEnd(GameObject owner, ColliderComponent cc) {
+                markProjectDirty();
+                if (cc == null || before == null || cc != editing) { before = null; editing = null; return; }
+                org.json.JSONObject after = cc.saveProperties();
+                if (after.toString().equals(before.toString())) { before = null; editing = null; return; }
+                final org.json.JSONObject b = before;
+                final org.json.JSONObject a = after;
+                final ColliderComponent target = cc;
+                undoManager.push("Redimensionar collider",
+                        () -> { target.loadProperties(b, name -> null); rebuildInspectorExtras(selected); },
+                        () -> { target.loadProperties(a, name -> null); rebuildInspectorExtras(selected); });
+                before = null; editing = null;
+            }
+        });
+
+        // Undo/redo da pintura de barreiras (WORLD_PAINT): snapshot do conjunto de
+        // celulas bloqueadas antes/depois de cada traco.
+        game.setWorldPaintListener(new com.ignis.core.Game.WorldPaintListener() {
+            private java.util.Set<Long> before;
+            private World w;
+            @Override public void onPaintStrokeStart() {
+                w = game.getWorld();
+                before = (w != null) ? w.snapshotBlockedCells() : null;
+            }
+            @Override public void onPaintStrokeEnd() {
+                markProjectDirty();
+                if (w == null || before == null) { before = null; w = null; return; }
+                java.util.Set<Long> after = w.snapshotBlockedCells();
+                if (after.equals(before)) { before = null; w = null; return; }
+                final World world = w;
+                final java.util.Set<Long> b = before;
+                final java.util.Set<Long> a = after;
+                undoManager.push("Pintar barreiras",
+                        () -> { world.restoreBlockedCells(b); game.repaint(); },
+                        () -> { world.restoreBlockedCells(a); game.repaint(); });
+                before = null; w = null;
+            }
+        });
+
         projectAutoSaveTimer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
                 javafx.util.Duration.seconds(EditorPrefs.getAutoSaveIntervalSeconds()), e -> {
             if (EditorPrefs.isAutoSave() && currentProject != null && currentIgnisFile != null
@@ -2103,63 +2653,109 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
 
-    private javafx.scene.Node buildAssetBrowser() {
-        VBox box = new VBox(4);
-        box.getStyleClass().add("ignis-panel");
-        Label title = new Label("Assets");
-        title.getStyleClass().add("panel-title");
+        private javafx.scene.Node buildAssetBrowser() {
+            VBox box = new VBox(4);
+            box.getStyleClass().add("ignis-panel");
+            Label title = new Label("Assets");
+            title.getStyleClass().add("panel-title");
 
-        assetTree = new TreeView<>();
-        assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                File file = newVal.getValue();
-                if (file != null && file.isFile() && file.getName().endsWith(".java")) {
-                    inspectScriptFile(file);
-                }
-            }
-        });
-        assetTree.setShowRoot(true);
-        assetTree.setCellFactory(tv -> {
-            TreeCell<File> cell = new TreeCell<>() {
-                @Override protected void updateItem(File item, boolean empty) {
-                    super.updateItem(item, empty);
-                    setText(empty || item == null ? null : item.getName());
-                }
-            };
-            // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
-            // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
-            // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
-            cell.setOnMousePressed(e -> {
-                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    tv.getSelectionModel().select(cell.getTreeItem());
-                }
-            });
-            return cell;
-        });
-        assetTree.setOnMouseClicked(ev -> {
-            TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
-            File file = (sel != null) ? sel.getValue() : null;
-            if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                if (file != null && file.isFile()) {
-                    if (file.getName().endsWith(".prefab.json")) {
-                        instantiatePrefabByName(prefabNameOf(file));
-                    } else if (file.getName().endsWith(".java")) {
-                        openScriptInIgnisEditor(file);
-                    } else {
-                        openAssetFile(file);
+            // Search/filter field for asset browser
+            TextField assetFilter = new TextField();
+            assetFilter.setPromptText("Filtrar Assets...");
+            assetFilter.textProperty().addListener((obs, oldVal, newVal) -> applyAssetFilter(newVal));
+
+            assetTree = new TreeView<>();
+            assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal != null) {
+                    File file = newVal.getValue();
+                    if (file != null && file.isFile() && file.getName().endsWith(".java")) {
+                        inspectScriptFile(file);
                     }
                 }
-            } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                ContextMenu menu = buildAssetsContextMenu(file);
-                menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
-            }
-        });
-        VBox.setVgrow(assetTree, Priority.ALWAYS);
+            });
+            assetTree.setShowRoot(true);
+            assetTree.setCellFactory(tv -> {
+                TreeCell<File> cell = new TreeCell<>() {
+                    @Override protected void updateItem(File item, boolean empty) {
+                        super.updateItem(item, empty);
+                        setText(empty || item == null ? null : item.getName());
+                    }
+                };
+                // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
+                // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
+                // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
+                cell.setOnMousePressed(e -> {
+                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                        tv.getSelectionModel().select(cell.getTreeItem());
+                    }
+                });
+                return cell;
+            });
+            assetTree.setOnMouseClicked(ev -> {
+                TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
+                File file = (sel != null) ? sel.getValue() : null;
+                if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                    if (file != null && file.isFile()) {
+                        if (file.getName().endsWith(".prefab.json")) {
+                            instantiatePrefabByName(prefabNameOf(file));
+                        } else if (file.getName().endsWith(".java")) {
+                            openScriptInIgnisEditor(file);
+                        } else {
+                            openAssetFile(file);
+                        }
+                    }
+                } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    ContextMenu menu = buildAssetsContextMenu(file);
+                    menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
+                }
+            });
+            VBox.setVgrow(assetTree, Priority.ALWAYS);
 
-        box.getChildren().addAll(title, assetTree);
-        refreshAssetBrowser();
-        return box;
-    }
+            box.getChildren().addAll(title, assetFilter, assetTree);
+            refreshAssetBrowser();
+            return box;
+        }
+
+        // Apply filter to asset browser tree
+        private void applyAssetFilter(String filterText) {
+            if (filterText == null || filterText.trim().isEmpty()) {
+                // Show all items
+                if (assetTree.getRoot() != null) {
+                    setAssetItemVisible(assetTree.getRoot(), true);
+                }
+            } else {
+                String lowerFilter = filterText.toLowerCase();
+                if (assetTree.getRoot() != null) {
+                    filterAssetTree(assetTree.getRoot(), lowerFilter);
+                }
+            }
+        }
+
+        // Recursive filter for asset tree
+        private boolean filterAssetTree(TreeItem<File> item, String lowerFilter) {
+            if (item == null) return false;
+        
+            boolean matches = item.getValue() != null && 
+                item.getValue().getName().toLowerCase().contains(lowerFilter);
+        
+            // Check children
+            for (TreeItem<File> child : item.getChildren()) {
+                if (filterAssetTree(child, lowerFilter)) {
+                    matches = true;
+                }
+            }
+        
+            setAssetItemVisible(item, matches);
+            return matches;
+        }
+
+        private void setAssetItemVisible(TreeItem<File> item, boolean visible) {
+            if (visible) {
+                item.setExpanded(true);
+            } else {
+                item.setExpanded(false);
+            }
+        }
 
     // Reconstroi a arvore a partir da pasta do projeto (ou vazia se nenhum projeto).
     private void refreshAssetBrowser() {
@@ -2215,23 +2811,50 @@ public class IgnisEditorApp extends Application {
     }
 
     private void openScriptInIgnisEditor(File file) {
-        if (!requireProject()) return;
-        try {
-            com.ignis.core.ScriptManager sm = game.getScriptManager();
-            if (sm == null) {
-                sm = new com.ignis.core.ScriptManager(projectFolder);
-                game.setScriptManager(sm);
+            if (!requireProject()) return;
+            try {
+                com.ignis.core.ScriptManager sm = game.getScriptManager();
+                if (sm == null) {
+                    sm = new com.ignis.core.ScriptManager(projectFolder);
+                    game.setScriptManager(sm);
+                }
+                String scriptName = file.getName();
+                if (scriptName.endsWith(".java")) {
+                    scriptName = scriptName.substring(0, scriptName.length() - 5);
+                }
+                FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
+                codeEditor.show();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
             }
-            String scriptName = file.getName();
-            if (scriptName.endsWith(".java")) {
-                scriptName = scriptName.substring(0, scriptName.length() - 5);
-            }
-            FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
-            codeEditor.show();
-        } catch (Exception ex) {
-            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
         }
-    }
+
+        /** Abre o editor de script e posiciona o cursor na linha especificada. */
+        public void openScriptAtLine(String scriptName, int lineNumber) {
+            if (!requireProject()) return;
+            try {
+                com.ignis.core.ScriptManager sm = game.getScriptManager();
+                if (sm == null) {
+                    sm = new com.ignis.core.ScriptManager(projectFolder);
+                    game.setScriptManager(sm);
+                }
+                FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
+                codeEditor.show();
+                // Após mostrar, posicionar na linha (com pequeno delay para garantir que a UI esteja pronta)
+                javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(100));
+                pause.setOnFinished(e -> {
+                    try {
+                        // moveTo posiciona o cursor; getCurrentParagraph é 0-based
+                        codeEditor.moveToLine(lineNumber);
+                    } catch (Exception ex) {
+                        com.ignis.core.IgnisLogger.warn("Nao foi possivel posicionar na linha " + lineNumber + ": " + ex.getMessage());
+                    }
+                });
+                pause.play();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
+            }
+        }
 
     private void refreshHierarchy() {
         hierarchyRoot.setValue("Cena  (z menor = atras)");
@@ -2261,10 +2884,17 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(AnimationComponent.class) != null) {
                 goItem.getChildren().add(new TreeItem<>("AnimationComponent"));
             }
-            
+
+            // Sub-item de RigidbodyComponent se anexado
+            if (go.getComponent(RigidbodyComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("RigidbodyComponent"));
+            }
+
             // Outros componentes / scripts
             for (com.ignis.core.Component comp : go.getComponents()) {
-                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent || comp instanceof HealthComponent || comp instanceof AnimationComponent) {
+                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent
+                        || comp instanceof HealthComponent || comp instanceof AnimationComponent
+                        || comp instanceof RigidbodyComponent) {
                     continue;
                 }
                 if (comp instanceof com.ignis.core.IgnisScript) {
@@ -2511,6 +3141,7 @@ public class IgnisEditorApp extends Application {
     // Reconstruidas a cada selecao para refletir o tipo do objeto. Os handlers sao
     // ligados APOS definir o valor inicial, para que o setup nao dispare escritas.
 
+    @SuppressWarnings("deprecation") // checa colliderType legado para oferecer migracao (item 8c)
     private void rebuildInspectorExtras(GameObject go) {
         if (inspectorExtras == null) return;
         inspectorExtras.getChildren().clear();
@@ -2560,6 +3191,10 @@ public class IgnisEditorApp extends Application {
             ColliderComponent colliderComp = go.getComponent(ColliderComponent.class);
             if (colliderComp != null) {
                 inspectorExtras.getChildren().add(buildColliderComponentSection(go, colliderComp));
+            } else if (go.getColliderType() != com.ignis.core.IgnisSampleCollisions.ColliderType.NONE) {
+                // Objeto ainda no par legado colliderType/collisionMode (aposentado no
+                // item 8c): oferece migracao para o ColliderComponent, fonte unica.
+                inspectorExtras.getChildren().add(buildLegacyColliderMigrationSection(go));
             }
 
             HealthComponent healthComp = go.getComponent(HealthComponent.class);
@@ -2571,11 +3206,15 @@ public class IgnisEditorApp extends Application {
             if (animationComp != null) {
                 inspectorExtras.getChildren().add(createScriptVariablesNode(animationComp));
             }
-            
-            inspectorExtras.getChildren().add(buildColliderSection(go));
+
+            RigidbodyComponent rigidbodyComp = go.getComponent(RigidbodyComponent.class);
+            if (rigidbodyComp != null) {
+                inspectorExtras.getChildren().add(buildRigidbodyComponentSection(go, rigidbodyComp));
+            }
             if (go instanceof com.ignis.core.Camera) {
                 inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
             }
+            inspectorExtras.getChildren().add(buildTagsLayersSection(go));
             inspectorExtras.getChildren().add(buildScriptsSection(go));
         }
     }
@@ -2738,6 +3377,14 @@ public class IgnisEditorApp extends Application {
         return sec;
     }
 
+    // Rotina comum apos adicionar/remover um componente (inclusive por undo/redo):
+    // atualiza a Hierarchy, reconstroi o Inspector e marca o projeto como modificado.
+    private void afterComponentChange(GameObject go) {
+        refreshHierarchy();
+        rebuildInspectorExtras(go);
+        markProjectDirty();
+    }
+
     private void openAddComponentDialog(GameObject go) {
         if (!requireProject()) return;
         try {
@@ -2768,8 +3415,18 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(AnimationComponent.class) == null) {
                 available.add("AnimationComponent");
             }
-            
-            // 5. Scripts disponiveis
+
+            // 5. CanvasComponent (UI sobre o jogo) se nao anexado
+            if (go.getComponent(com.ignis.core.CanvasComponent.class) == null) {
+                available.add("CanvasComponent");
+            }
+
+            // 6. RigidbodyComponent (fisica) se nao anexado
+            if (go.getComponent(RigidbodyComponent.class) == null) {
+                available.add("RigidbodyComponent");
+            }
+
+            // 7. Scripts disponiveis
             for (String scriptName : sm.listAvailableScripts()) {
                 if (!go.getScriptNames().contains(scriptName)) {
                     available.add(scriptName);
@@ -2785,31 +3442,47 @@ public class IgnisEditorApp extends Application {
             String selected = dialog.showAndGetResult();
             
             if (selected != null) {
-                if (selected.equals("SpriteComponent")) {
-                    SpriteComponent sprite = new SpriteComponent();
-                    go.addComponent(sprite);
-                    setStatus("SpriteComponent adicionado.");
-                } else if (selected.equals("ColliderComponent")) {
-                    ColliderComponent collider = new ColliderComponent();
-                    go.addComponent(collider);
-                    setStatus("ColliderComponent adicionado.");
-                } else if (selected.equals("HealthComponent")) {
-                    HealthComponent health = new HealthComponent();
-                    go.addComponent(health);
-                    setStatus("HealthComponent adicionado.");
-                } else if (selected.equals("AnimationComponent")) {
-                    AnimationComponent animation = new AnimationComponent();
-                    go.addComponent(animation);
-                    setStatus("AnimationComponent adicionado.");
+                // Componentes nativos: instancia limpa (permite undo/redo por referencia).
+                com.ignis.core.Component nativeComp = null;
+                if (selected.equals("SpriteComponent")) nativeComp = new SpriteComponent();
+                else if (selected.equals("ColliderComponent")) nativeComp = new ColliderComponent();
+                else if (selected.equals("HealthComponent")) nativeComp = new HealthComponent();
+                else if (selected.equals("AnimationComponent")) nativeComp = new AnimationComponent();
+                else if (selected.equals("CanvasComponent")) nativeComp = new com.ignis.core.CanvasComponent();
+                else if (selected.equals("RigidbodyComponent")) nativeComp = new RigidbodyComponent();
+
+                if (nativeComp != null) {
+                    final com.ignis.core.Component comp = nativeComp;
+                    final String label = selected;
+                    go.addComponent(comp);
+                    undoManager.push("Adicionar " + label,
+                            () -> { go.removeComponent(comp); afterComponentChange(go); },
+                            () -> { go.addComponent(comp); afterComponentChange(go); });
+                    setStatus(label + " adicionado.");
                 } else {
-                    go.getScriptNames().add(selected);
+                    // Script de usuario (instancia opcional + anexo por nome).
+                    final String scriptName = selected;
+                    com.ignis.core.IgnisScript tmp = null;
                     try {
-                        com.ignis.core.IgnisScript inst = sm.createScriptInstance(selected, go, game);
-                        if (inst != null) {
-                            go.addComponent(inst);
-                        }
-                    } catch (Exception ignore) {}
-                    setStatus("Script anexado: " + selected);
+                        tmp = sm.createScriptInstance(scriptName, go, game);
+                        if (tmp != null) go.addComponent(tmp);
+                    } catch (Exception ignore) { /* compilacao pode falhar; anexa por nome */ }
+                    if (!go.getScriptNames().contains(scriptName)) {
+                        go.getScriptNames().add(scriptName); // preserva o anexo sem instancia
+                    }
+                    final com.ignis.core.IgnisScript inst = tmp;
+                    undoManager.push("Anexar " + scriptName,
+                            () -> {
+                                if (inst != null) go.removeComponent(inst);
+                                go.removeScriptByName(scriptName);
+                                afterComponentChange(go);
+                            },
+                            () -> {
+                                if (inst != null) go.addComponent(inst);
+                                if (!go.getScriptNames().contains(scriptName)) go.getScriptNames().add(scriptName);
+                                afterComponentChange(go);
+                            });
+                    setStatus("Script anexado: " + scriptName);
                 }
                 markProjectDirty();
                 refreshHierarchy();
@@ -2820,41 +3493,94 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private javafx.scene.Node buildColliderSection(GameObject go) {
+    // Seccao de migracao do collider legado (GameObject.colliderType/collisionMode,
+    // aposentado no item 8c). So aparece para objetos que ainda usam o par legado e
+    // nao tem ColliderComponent. Converte para um ColliderComponent equivalente.
+    @SuppressWarnings("deprecation") // le a API legada de collider para migra-la
+    private javafx.scene.Node buildLegacyColliderMigrationSection(GameObject go) {
         VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Collider"));
+        sec.getChildren().add(sectionTitle("Collider (legado)"));
 
-        ComboBox<com.ignis.core.IgnisSampleCollisions.ColliderType> typeBox = new ComboBox<>();
-        typeBox.getItems().addAll(com.ignis.core.IgnisSampleCollisions.ColliderType.values());
-        typeBox.setValue(go.getColliderType());
+        Label info = new Label("Este objeto usa o sistema de collider antigo ("
+                + go.getColliderType() + " / " + go.getCollisionMode()
+                + "). Migre para o ColliderComponent para editar a hitbox no viewport.");
+        info.setWrapText(true);
+        info.setStyle("-fx-text-fill: #c8a45a; -fx-font-style: italic;");
 
-        ComboBox<com.ignis.core.IgnisSampleCollisions.CollisionMode> modeBox = new ComboBox<>();
-        modeBox.getItems().addAll(com.ignis.core.IgnisSampleCollisions.CollisionMode.values());
-        modeBox.setValue(go.getCollisionMode());
-
-        CheckBox enabled = new CheckBox("Habilitado");
-        enabled.setSelected(go.hasCollider());
-
-        boolean none = go.getColliderType() == com.ignis.core.IgnisSampleCollisions.ColliderType.NONE;
-        modeBox.setDisable(none);
-        enabled.setDisable(none);
-
-        typeBox.setOnAction(e -> {
-            go.setColliderType(typeBox.getValue());
-            boolean isNone = typeBox.getValue() == com.ignis.core.IgnisSampleCollisions.ColliderType.NONE;
-            modeBox.setDisable(isNone);
-            enabled.setDisable(isNone);
-            if (!isNone) {
-                go.setCollisionMode(modeBox.getValue());
-                go.setColliderEnabled(enabled.isSelected());
-            }
+        Button migrate = new Button("Migrar para ColliderComponent");
+        migrate.setOnAction(e -> {
+            ColliderComponent cc = convertLegacyCollider(go);
+            go.addComponent(cc);
+            selectedComponentName = null;
             markProjectDirty();
+            refreshHierarchy();
+            rebuildInspectorExtras(go);
+            setStatus("Collider migrado para ColliderComponent.");
         });
-        modeBox.setOnAction(e -> { go.setCollisionMode(modeBox.getValue()); markProjectDirty(); });
-        enabled.selectedProperty().addListener((o, a, b) -> { go.setColliderEnabled(b); markProjectDirty(); });
 
-        sec.getChildren().addAll(labeledInspectorRow("Tipo", typeBox),
-                labeledInspectorRow("Modo", modeBox), enabled);
+        sec.getChildren().addAll(info, migrate);
+        return sec;
+    }
+
+    // Cria um ColliderComponent equivalente ao collider legado do objeto, preservando
+    // forma, modo (trigger) e tamanho/offset quando disponiveis.
+    @SuppressWarnings("deprecation") // le/aposenta a API legada de collider ao migrar
+    private ColliderComponent convertLegacyCollider(GameObject go) {
+        ColliderComponent cc = new ColliderComponent();
+        com.ignis.core.IgnisSampleCollisions.ColliderType type = go.getColliderType();
+        cc.setShape(type == com.ignis.core.IgnisSampleCollisions.ColliderType.CIRCLE ? "Sphere" : "Box");
+        cc.setTrigger(go.getCollisionMode() == com.ignis.core.IgnisSampleCollisions.CollisionMode.TRIGGER);
+
+        com.ignis.core.IgnisSampleCollisions.Collider legacy = go.getCollider();
+        if (legacy instanceof com.ignis.core.IgnisSampleCollisions.AABBCollider) {
+            com.ignis.core.IgnisSampleCollisions.AABBCollider aabb =
+                    (com.ignis.core.IgnisSampleCollisions.AABBCollider) legacy;
+            cc.setWidth(aabb.getWidth());
+            cc.setHeight(aabb.getHeight());
+            cc.setOffsetX(legacy.getOffsetX());
+            cc.setOffsetY(legacy.getOffsetY());
+        } else if (legacy instanceof com.ignis.core.IgnisSampleCollisions.CircleCollider) {
+            com.ignis.core.IgnisSampleCollisions.CircleCollider circle =
+                    (com.ignis.core.IgnisSampleCollisions.CircleCollider) legacy;
+            cc.setRadius(circle.getRadius());
+            cc.setOffsetX(legacy.getOffsetX());
+            cc.setOffsetY(legacy.getOffsetY());
+        }
+        // Aposenta o collider legado para nao haver hitbox dupla.
+        go.setColliderType(com.ignis.core.IgnisSampleCollisions.ColliderType.NONE);
+        return cc;
+    }
+
+    // Seção Tags & Camadas: tag livre (busca/gameplay) + camada nomeada (agrupamento).
+    private javafx.scene.Node buildTagsLayersSection(GameObject go) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Tags & Camadas"));
+
+        TextField tagField = new TextField(go.getTag());
+        tagField.setPromptText("(sem tag)");
+        tagField.textProperty().addListener((o, a, b) -> { go.setTag(b); markProjectDirty(); });
+
+        ComboBox<String> layerBox = new ComboBox<>();
+        layerBox.setEditable(true);
+        java.util.LinkedHashSet<String> layers = new java.util.LinkedHashSet<>(java.util.Arrays.asList(
+                "Default", "Background", "Foreground", "Player", "Enemy", "UI"));
+        // Inclui camadas ja usadas na cena para reaproveitar.
+        for (GameObject e : game.getEntities()) {
+            if (e.getLayer() != null && !e.getLayer().isEmpty()) layers.add(e.getLayer());
+        }
+        layerBox.getItems().addAll(layers);
+        layerBox.setValue(go.getLayer());
+        layerBox.setMaxWidth(Double.MAX_VALUE);
+        Runnable applyLayer = () -> {
+            String v = layerBox.getValue();
+            go.setLayer(v);
+            markProjectDirty();
+        };
+        layerBox.setOnAction(e -> applyLayer.run());
+        layerBox.getEditor().focusedProperty().addListener((o, a, focused) -> { if (!focused) applyLayer.run(); });
+
+        sec.getChildren().addAll(labeledInspectorRow("Tag", tagField),
+                labeledInspectorRow("Camada", layerBox));
         return sec;
     }
 
@@ -2900,23 +3626,42 @@ public class IgnisEditorApp extends Application {
         Button remove = new Button("Remover");
         remove.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null) {
-                if (sel.equals("SpriteComponent")) {
-                    SpriteComponent sprite = go.getComponent(SpriteComponent.class);
-                    if (sprite != null) go.removeComponent(sprite);
-                } else if (sel.equals("ColliderComponent")) {
-                    ColliderComponent collider = go.getComponent(ColliderComponent.class);
-                    if (collider != null) go.removeComponent(collider);
-                } else if (sel.equals("HealthComponent")) {
-                    HealthComponent health = go.getComponent(HealthComponent.class);
-                    if (health != null) go.removeComponent(health);
-                } else {
-                    go.removeScriptByName(sel);
+            if (sel == null) return;
+            // Componente nativo: remove por referencia, com undo/redo.
+            com.ignis.core.Component comp = null;
+            if (sel.equals("SpriteComponent")) comp = go.getComponent(SpriteComponent.class);
+            else if (sel.equals("ColliderComponent")) comp = go.getComponent(ColliderComponent.class);
+            else if (sel.equals("HealthComponent")) comp = go.getComponent(HealthComponent.class);
+
+            if (comp != null) {
+                final com.ignis.core.Component removed = comp;
+                final String label = sel;
+                go.removeComponent(removed);
+                undoManager.push("Remover " + label,
+                        () -> { go.addComponent(removed); afterComponentChange(go); },
+                        () -> { go.removeComponent(removed); afterComponentChange(go); });
+            } else {
+                // Script anexado (por nome): captura a instancia viva, se houver.
+                final String scriptName = sel;
+                com.ignis.core.IgnisScript found = null;
+                for (com.ignis.core.IgnisScript s : go.getScripts()) {
+                    if (s.getScriptName().equals(scriptName)) { found = s; break; }
                 }
-                rebuildInspectorExtras(go);
-                refreshHierarchy();
-                markProjectDirty();
+                final com.ignis.core.IgnisScript inst = found;
+                go.removeScriptByName(scriptName);
+                undoManager.push("Remover " + scriptName,
+                        () -> {
+                            if (inst != null) go.addComponent(inst);
+                            if (!go.getScriptNames().contains(scriptName)) go.getScriptNames().add(scriptName);
+                            afterComponentChange(go);
+                        },
+                        () -> {
+                            if (inst != null) go.removeComponent(inst);
+                            go.removeScriptByName(scriptName);
+                            afterComponentChange(go);
+                        });
             }
+            afterComponentChange(go);
         });
         
         Button open = new Button("Abrir");
@@ -2955,7 +3700,7 @@ public class IgnisEditorApp extends Application {
         GridPane grid = new GridPane();
         grid.setHgap(6);
         grid.setVgap(6);
-        
+
         javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
         labelCol.setMinWidth(90);
         javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
@@ -2964,19 +3709,76 @@ public class IgnisEditorApp extends Application {
 
         int r = 0;
 
+        // Campos de geometria (mostrados conforme a forma). Referencias finais para
+        // o handler da forma poder alternar a visibilidade sem reconstruir a secao.
+        final TextField widthField = new TextField(fmt(comp.effectiveWidth()));
+        final TextField heightField = new TextField(fmt(comp.effectiveHeight()));
+        final TextField radiusField = new TextField(fmt(comp.effectiveRadius()));
+        final Label widthLbl = new Label("Largura");
+        final Label heightLbl = new Label("Altura");
+        final Label radiusLbl = new Label("Raio");
+
         // Shape type ComboBox
         javafx.scene.control.ComboBox<String> shapeCombo = new javafx.scene.control.ComboBox<>();
         shapeCombo.getItems().addAll("Box", "Sphere", "Capsule");
         shapeCombo.setValue(comp.getShape());
         shapeCombo.setOnAction(e -> {
             comp.setShape(shapeCombo.getValue());
+            applyColliderShapeVisibility(comp.getShape(), widthLbl, widthField,
+                    heightLbl, heightField, radiusLbl, radiusField);
             markProjectDirty();
         });
         grid.add(new Label("Forma"), 0, r);
         grid.add(shapeCombo, 1, r++);
 
+        // Habilitado
+        CheckBox enabledCheck = new CheckBox("Habilitado");
+        enabledCheck.setSelected(comp.isEnabled());
+        enabledCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setEnabled(b);
+            markProjectDirty();
+        });
+        grid.add(enabledCheck, 1, r++);
+
+        // Largura (Box/Capsule)
+        widthField.textProperty().addListener((o, a, b) -> {
+            try { comp.setWidth(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(widthLbl, 0, r);
+        grid.add(widthField, 1, r++);
+
+        // Altura (Box/Capsule)
+        heightField.textProperty().addListener((o, a, b) -> {
+            try { comp.setHeight(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(heightLbl, 0, r);
+        grid.add(heightField, 1, r++);
+
+        // Raio (Sphere)
+        radiusField.textProperty().addListener((o, a, b) -> {
+            try { comp.setRadius(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(radiusLbl, 0, r);
+        grid.add(radiusField, 1, r++);
+
+        // Offset X
+        TextField offsetXField = new TextField(fmt(comp.getOffsetX()));
+        offsetXField.textProperty().addListener((o, a, b) -> {
+            try { comp.setOffsetX(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Offset X"), 0, r);
+        grid.add(offsetXField, 1, r++);
+
+        // Offset Y
+        TextField offsetYField = new TextField(fmt(comp.getOffsetY()));
+        offsetYField.textProperty().addListener((o, a, b) -> {
+            try { comp.setOffsetY(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Offset Y"), 0, r);
+        grid.add(offsetYField, 1, r++);
+
         // Friction TextField
-        TextField frictionField = new TextField(String.valueOf(comp.getFriction()));
+        TextField frictionField = new TextField(fmt(comp.getFriction()));
         frictionField.textProperty().addListener((o, a, b) -> {
             try {
                 comp.setFriction(Double.parseDouble(b));
@@ -2987,7 +3789,7 @@ public class IgnisEditorApp extends Application {
         grid.add(frictionField, 1, r++);
 
         // Bounciness TextField
-        TextField bounceField = new TextField(String.valueOf(comp.getBounciness()));
+        TextField bounceField = new TextField(fmt(comp.getBounciness()));
         bounceField.textProperty().addListener((o, a, b) -> {
             try {
                 comp.setBounciness(Double.parseDouble(b));
@@ -3014,6 +3816,118 @@ public class IgnisEditorApp extends Application {
         });
         grid.add(new Label("Layer"), 0, r);
         grid.add(layerField, 1, r++);
+
+        applyColliderShapeVisibility(comp.getShape(), widthLbl, widthField,
+                heightLbl, heightField, radiusLbl, radiusField);
+
+        box.getChildren().add(grid);
+        return box;
+    }
+
+    // Mostra Largura/Altura para Box/Capsule e Raio para Sphere (esconde os demais).
+    private void applyColliderShapeVisibility(String shape, Label widthLbl, TextField widthField,
+            Label heightLbl, TextField heightField, Label radiusLbl, TextField radiusField) {
+        boolean sphere = "Sphere".equalsIgnoreCase(shape);
+        setNodeVisible(widthLbl, !sphere);
+        setNodeVisible(widthField, !sphere);
+        setNodeVisible(heightLbl, !sphere);
+        setNodeVisible(heightField, !sphere);
+        setNodeVisible(radiusLbl, sphere);
+        setNodeVisible(radiusField, sphere);
+    }
+
+    private void setNodeVisible(javafx.scene.Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
+    }
+
+    // Formata um double sem casas desnecessarias (12.0 -> "12", 12.5 -> "12.5").
+    private static String fmt(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) {
+            return String.valueOf((long) v);
+        }
+        return String.valueOf(v);
+    }
+
+    private javafx.scene.Node buildRigidbodyComponentSection(GameObject go, RigidbodyComponent comp) {
+        VBox box = new VBox(6);
+        box.getChildren().add(sectionTitle("Rigidbody Component"));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(6);
+        grid.setVgap(6);
+
+        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
+        labelCol.setMinWidth(100);
+        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
+
+        int row = 0;
+
+        // Velocidade X
+        TextField velXField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityX()));
+        velXField.textProperty().addListener((o, a, b) -> {
+            try { comp.setVelocityX(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Velocidade X"), 0, row);
+        grid.add(velXField, 1, row); row++;
+
+        // Velocidade Y
+        TextField velYField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityY()));
+        velYField.textProperty().addListener((o, a, b) -> {
+            try { comp.setVelocityY(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Velocidade Y"), 0, row);
+        grid.add(velYField, 1, row); row++;
+
+        // Gravidade (useGravity)
+        CheckBox gravityCheck = new CheckBox("Usar gravidade global");
+        gravityCheck.setSelected(comp.isUseGravity());
+        gravityCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setUseGravity(b); markProjectDirty();
+        });
+        grid.add(gravityCheck, 0, row, 2, 1); row++;
+
+        // Gravidade global (estática)
+        TextField gravityField = new TextField(String.format(java.util.Locale.ROOT, "%.1f", RigidbodyComponent.getGlobalGravity()));
+        gravityField.textProperty().addListener((o, a, b) -> {
+            try { RigidbodyComponent.setGlobalGravity(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Gravidade Global"), 0, row);
+        grid.add(gravityField, 1, row); row++;
+
+        // Gravity scale
+        TextField gravScaleField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getGravityScale()));
+        gravScaleField.textProperty().addListener((o, a, b) -> {
+            try { comp.setGravityScale(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Escala Gravidade"), 0, row);
+        grid.add(gravScaleField, 1, row); row++;
+
+        // Massa
+        TextField massField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getMass()));
+        massField.textProperty().addListener((o, a, b) -> {
+            try { comp.setMass(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Massa"), 0, row);
+        grid.add(massField, 1, row); row++;
+
+        // Arrasto linear
+        TextField dragField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getLinearDrag()));
+        dragField.textProperty().addListener((o, a, b) -> {
+            try { comp.setLinearDrag(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Arrasto Linear"), 0, row);
+        grid.add(dragField, 1, row); row++;
+
+        // Congelado
+        CheckBox frozenCheck = new CheckBox("Congelado (ignora forcas)");
+        frozenCheck.setSelected(comp.isFrozen());
+        frozenCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setFrozen(b); markProjectDirty();
+        });
+        grid.add(frozenCheck, 0, row, 2, 1); row++;
 
         box.getChildren().add(grid);
         return box;
@@ -3356,27 +4270,42 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // Recarrega as instancias dos SCRIPTS DE USUARIO de todos os objetos (apos
+    // recompilar). Fonte unica de verdade e a lista de components do GameObject:
+    // remover/adicionar SEMPRE via removeComponent/addComponent — instancias fora
+    // de components nao sao serializadas pela Scene (foi a causa da perda de
+    // scripts/variaveis ao salvar e do estado corrompido apos Play/Stop).
     public void reloadAllScriptInstances() {
         com.ignis.core.ScriptManager sm = game.getScriptManager();
         if (sm == null) return;
-        
+
         Scene currentScene = (currentProject != null) ? currentProject.getCurrentScene() : null;
-        
+
         for (GameObject obj : game.getEntities()) {
             java.util.List<String> scriptNames = new java.util.ArrayList<>(obj.getScriptNames());
-            obj.getScripts().clear();
-            
+            // Remove as instancias antigas de scripts de usuario (components +
+            // scripts + nomes). Componentes nativos (SpriteComponent etc.) ficam.
+            for (com.ignis.core.IgnisScript old : new java.util.ArrayList<>(obj.getScripts())) {
+                if (!GameObject.isNativeComponent(old)) {
+                    obj.removeComponent(old);
+                }
+            }
             for (String scriptName : scriptNames) {
+                if ("SpriteComponent".equals(scriptName)) continue; // legado: nunca foi script de usuario
                 com.ignis.core.IgnisScript newInstance = sm.createScriptInstance(scriptName, obj, game);
                 if (newInstance != null) {
-                    obj.getScripts().add(newInstance);
+                    obj.addComponent(newInstance);
                     if (currentScene != null) {
                         currentScene.applyPendingScriptVariables(obj, newInstance);
                     }
+                } else if (!obj.getScriptNames().contains(scriptName)) {
+                    // Compilacao falhou: preserva o ANEXO (nome) para nao perder o
+                    // vinculo ao salvar — a instancia volta quando compilar de novo.
+                    obj.getScriptNames().add(scriptName);
                 }
             }
         }
-        
+
         Platform.runLater(() -> {
             if (selected != null) {
                 rebuildInspectorExtras(selected);
@@ -3404,11 +4333,15 @@ public class IgnisEditorApp extends Application {
 
             String name = choice.get();
             if (!go.getScriptNames().contains(name)) {
-                go.getScriptNames().add(name);
                 try {
                     com.ignis.core.IgnisScript inst = sm.createScriptInstance(name, go, game);
-                    if (inst != null) go.getScripts().add(inst);
+                    // addComponent mantem components/scripts/scriptNames coerentes —
+                    // e' o que garante a serializacao do anexo pela Scene.
+                    if (inst != null) go.addComponent(inst);
                 } catch (Exception ignore) { /* compila no Play se falhar agora */ }
+                if (!go.getScriptNames().contains(name)) {
+                    go.getScriptNames().add(name); // instancia falhou: preserva o anexo
+                }
                 markProjectDirty();
                 setStatus("Script anexado: " + name);
             }

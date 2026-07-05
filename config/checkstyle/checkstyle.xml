@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Quality gate mínimo do IgnisEngine (plano de melhorias, item 1).
+  Proíbe padrões de baixa qualidade que já existiam no código:
+    - System.out/System.err.print* (usar IgnisLogger)
+    - printStackTrace() (usar IgnisLogger.error(msg, throwable))
+    - blocos catch vazios (salvo variável nomeada ignore/ignored/expected)
+  O escopo dos arquivos verificados é definido no maven-checkstyle-plugin (pom.xml);
+  hoje cobre o pacote com.ignis.core (núcleo), a ser ampliado conforme a migração de
+  logging avança para os demais pacotes.
+-->
+<module name="Checker">
+    <property name="severity" value="error"/>
+    <property name="charset" value="UTF-8"/>
+
+    <module name="TreeWalker">
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="System\.(out|err)\.print"/>
+            <property name="message" value="Use IgnisLogger (info/warn/error) em vez de System.out/System.err."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\.printStackTrace\s*\("/>
+            <property name="message" value="Use IgnisLogger.error(mensagem, throwable) em vez de printStackTrace()."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="ignore|ignored|expected"/>
+        </module>
+    </module>
+</module>

@@ -5,6 +5,7 @@ package com.ignis.core;
  */
 public class HealthComponent extends Component {
 
+    @Serialize
     private int health = 100;
 
     /**
@@ -28,7 +29,7 @@ public class HealthComponent extends Component {
      */
     private void handleCollision(CollisionData data) {
         this.health -= 10;
-        System.out.println("[HealthComponent] " + gameObject.getName() + " collided with " 
+        IgnisLogger.info("[HealthComponent] " + gameObject.getName() + " collided with " 
                 + (data.getOther() != null ? data.getOther().getName() : "unknown")
                 + " at point " + data.getCollisionPoint() 
                 + ". Remaining health: " + health);

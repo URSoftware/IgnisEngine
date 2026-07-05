@@ -1,0 +1,42 @@
+# CI do IgnisEngine: compila, roda a suite de testes (round-trip .ignis/projeto,
+# consistencia EC, eventos, fisica, colliders, mundo/barreiras) e o quality gate
+# (Checkstyle no nucleo com.ignis.core + relatorio de cobertura JaCoCo) a cada
+# push/PR na main. Guarda de regressao do plano de melhorias (Vault:
+# ignisengine-plano-melhorias-qualidade) e do plano de consertos.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # release 17 no compilador; roda em 17 (baseline suportado) e 21 (usado no dia a dia).
+        java-version: ['17', '21']
+    name: build-and-test (JDK ${{ matrix.java-version }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK ${{ matrix.java-version }} (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+          cache: maven
+
+      - name: Compilar, testar e checar qualidade (verify)
+        run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Publicar relatorio de cobertura (JaCoCo)
+        if: always() && matrix.java-version == '21'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+          if-no-files-found: ignore

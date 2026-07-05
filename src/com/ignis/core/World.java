@@ -91,6 +91,17 @@ public class World {
     public boolean isCellBlocked(int col, int row) { return blockedCells.contains(key(col, row)); }
     public void clearBarriers() { blockedCells.clear(); }
 
+    /** Copia imutavel do conjunto de celulas bloqueadas (para snapshots de undo). */
+    public Set<Long> snapshotBlockedCells() {
+        return new HashSet<>(blockedCells);
+    }
+
+    /** Substitui o conjunto de celulas bloqueadas (restauracao de undo/redo). */
+    public void restoreBlockedCells(Set<Long> cells) {
+        blockedCells.clear();
+        if (cells != null) blockedCells.addAll(cells);
+    }
+
     /** Bloqueia todas as celulas que tocam o retangulo de mundo dado. */
     public int blockRect(double x, double y, double w, double h) {
         return applyRect(x, y, w, h, true);

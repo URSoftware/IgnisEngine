@@ -133,7 +133,7 @@ public class PrefabManager {
         File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
         
         if (!prefabFile.exists()) {
-            System.err.println("Prefab not found: " + prefabName);
+            IgnisLogger.error("Prefab not found: " + prefabName);
             return null;
         }
         
@@ -144,8 +144,7 @@ public class PrefabManager {
             return deserializeGameObject(prefabJson, x, y);
             
         } catch (Exception e) {
-            System.err.println("Failed to instantiate prefab: " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("Failed to instantiate prefab: " + e.getMessage(), e);
             return null;
         }
     }
@@ -218,7 +217,9 @@ public class PrefabManager {
                     if (scriptManager != null) {
                         IgnisScript instance = scriptManager.createScriptInstance(scriptName, object, game);
                         if (instance != null) {
-                            object.getScripts().add(instance);
+                            // Via addComponent: instancia entra em components e e
+                            // serializada pela Scene (getScripts().add() perdia o anexo).
+                            object.addComponent(instance);
                             if (variables != null) {
                                 final Game activeGame = game;
                                 ScriptSerializationHelper.loadScriptVariables(instance, variables, name -> {

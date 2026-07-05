@@ -392,6 +392,23 @@ public class Camera extends GameObject {
         return new double[]{minX, minY, maxX, maxY};
     }
 
+    /**
+     * Retangulo do mundo que esta camera captura para uma resolucao de projeto
+     * (design) dada, independente de haver um {@link Viewport} vivo — usado pelo
+     * visualizador de camera do editor. A posicao da camera e o centro da view; a
+     * area capturada encolhe com o zoom (zoom &gt; 1 aproxima).
+     *
+     * @param designWidth  largura de referencia do jogo (px)
+     * @param designHeight altura de referencia do jogo (px)
+     * @return {@code [minX, minY, width, height]} em coordenadas de mundo
+     */
+    public double[] getFrustumWorldRect(double designWidth, double designHeight) {
+        double z = (zoom > 0) ? zoom : 1.0;
+        double w = designWidth / z;
+        double h = designHeight / z;
+        return new double[] { getX() - w / 2.0, getY() - h / 2.0, w, h };
+    }
+
     // ==================== GAME OBJECT OVERRIDES ====================
 
     @Override

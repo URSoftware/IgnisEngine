@@ -43,6 +43,11 @@ build/
 out/
 target/
 dist/
+build-tmp/
+
+# Argfiles/manifests gerados por builds manuais (javac @argfile, lista de fontes)
+args.txt
+srcs.txt
 
 # OS
 .DS_Store

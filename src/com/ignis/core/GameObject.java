@@ -36,6 +36,11 @@ public class GameObject {
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
+
+    // Organizacao logica (nao afeta render): tag livre para busca/gameplay e camada
+    // nomeada para agrupamento/filtragem. Serializados na Scene.
+    protected String tag = "";
+    protected String layer = "Default";
     
     // Color for the object name in hierarchy (default white)
     protected Color nameColor = Color.WHITE;
@@ -251,9 +256,34 @@ public class GameObject {
     public Color getNameColor() {
         return nameColor;
     }
-    
+
     public void setNameColor(Color nameColor) {
         this.nameColor = nameColor != null ? nameColor : Color.WHITE;
+    }
+
+    // ==================== TAGS & CAMADAS ====================
+
+    /** Tag livre do objeto (busca/gameplay). Nunca null. */
+    public String getTag() {
+        return tag != null ? tag : "";
+    }
+
+    public void setTag(String tag) {
+        this.tag = tag != null ? tag : "";
+    }
+
+    /** True se a tag do objeto e igual (ignora caixa) a {@code tag}. */
+    public boolean hasTag(String tag) {
+        return this.tag != null && this.tag.equalsIgnoreCase(tag);
+    }
+
+    /** Camada nomeada do objeto (agrupamento/filtragem). Nunca null/vazia. */
+    public String getLayer() {
+        return (layer != null && !layer.isEmpty()) ? layer : "Default";
+    }
+
+    public void setLayer(String layer) {
+        this.layer = (layer != null && !layer.isEmpty()) ? layer : "Default";
     }
     
     // ==================== SISTEMA DE ÁUDIO ====================
@@ -354,17 +384,51 @@ public class GameObject {
                         script.start();
                     }
                 }
+                // scriptNames guarda apenas SCRIPTS DE USUARIO (recarregaveis pelo
+                // ScriptManager). Componentes nativos como SpriteComponent (que
+                // estende IgnisScript por legado) ficam fora — senao os reloads de
+                // Play/abertura tentam instancia-los como script de projeto e falham.
                 String name = script.getClass().getSimpleName();
-                if (!scriptNames.contains(name)) {
+                if (!isNativeComponent(component) && !scriptNames.contains(name)) {
                     scriptNames.add(name);
                 }
             }
         }
     }
 
+    /**
+     * Componentes nativos do motor: serializados por tipo proprio na Scene e
+     * nunca recarregados como script de usuario pelo ScriptManager. Scripts de
+     * usuario sao compilados da pasta do projeto (fora de com.ignis.*), entao a
+     * checagem por pacote distingue nativos de scripts de usuario.
+     *
+     * <p>Excecao: classes de teste (que vivem em {@code com.ignis.*} por herdarem
+     * o pacote da classe sob teste) nao sao nativos — scripts de teste devem ser
+     * tratados como scripts de usuario para fins de coerencia das listas.</p>
+     */
+    public static boolean isNativeComponent(Component component) {
+        Package pkg = component.getClass().getPackage();
+        if (pkg == null || !pkg.getName().startsWith("com.ignis.")) {
+            return false;
+        }
+        // Classes de teste (inner classes de testes JUnit) vivem no mesmo pacote
+        // das classes de producao por design do JUnit, mas nao sao nativas.
+        String className = component.getClass().getName();
+        if (className.contains("$")) {
+            // Inner class anonima ou nomeada de teste — nao e nativa.
+            return false;
+        }
+        return true;
+    }
+
     public void removeComponent(Component component) {
         if (component == null) return;
-        components.remove(component);
+        boolean removed = components.remove(component);
+        if (removed) {
+            // Hook de limpeza (ex.: ColliderComponent se desregistra do CollisionManager)
+            // antes de perder a referencia ao dono.
+            component.onDetach();
+        }
         if (component instanceof IgnisScript) {
             IgnisScript script = (IgnisScript) component;
             scripts.remove(script);
@@ -498,6 +562,27 @@ public class GameObject {
             script.internalTick();
         }
     }
+
+    /**
+     * Atualiza os componentes NÃO-script (Collider/Health/Rigidbody/futuros) — os scripts
+     * têm ciclo próprio via {@link #tickScripts()}. Chamado pelo loop em Play.
+     */
+    public void tickComponents(float deltaTime) {
+        for (int i = 0; i < components.size(); i++) {
+            Component comp = components.get(i);
+            if (!(comp instanceof IgnisScript)) {
+                comp.update(deltaTime);
+            }
+        }
+        // Após a integração da física, zera as acelerações acumuladas de qualquer
+        // RigidbodyComponent deste objeto. Scripts devem reaplicar forças a cada tick
+        // (padrão de engines 2D modernas); sem isto a aceleração se acumularia frame a
+        // frame e objetos acelerariam infinitamente.
+        RigidbodyComponent rb = getComponent(RigidbodyComponent.class);
+        if (rb != null) {
+            rb.resetForces();
+        }
+    }
     
     /**
      * Reseta todos os scripts (quando o jogo é parado)
@@ -509,12 +594,18 @@ public class GameObject {
     }
     
     /**
-     * Notifica scripts sobre colisão
+     * Notifica scripts sobre colisão e dispara o evento desacoplado
+     * {@link #onCollisionEnter} — ponte entre o CollisionManager legado e o
+     * sistema de eventos EC (HealthComponent e afins assinam este evento).
      */
     public void notifyCollision(GameObject other) {
         for (IgnisScript script : scripts) {
             script.onCollision(other);
         }
+        double cx = (getX() + getWidth() / 2.0 + (other != null ? other.getX() + other.getWidth() / 2.0 : 0)) / 2.0;
+        double cy = (getY() + getHeight() / 2.0 + (other != null ? other.getY() + other.getHeight() / 2.0 : 0)) / 2.0;
+        onCollisionEnter.invoke(new CollisionData(other,
+                String.format(java.util.Locale.ROOT, "(%.1f, %.1f)", cx, cy)));
     }
     
     // ==================== COLLISION SYSTEM ====================
@@ -527,15 +618,24 @@ public class GameObject {
     }
     
     /**
-     * Gets the collider type
+     * Gets the collider type.
+     *
+     * @deprecated Item 8c: a hitbox agora é fonte única no {@link ColliderComponent}.
+     *     Prefira {@code getComponent(ColliderComponent.class)}. Mantido para os
+     *     scripts legados ({@link IgnisScript#setColliderType}) e o editor Swing.
      */
+    @Deprecated
     public IgnisSampleCollisions.ColliderType getColliderType() {
         return colliderType;
     }
-    
+
     /**
-     * Sets the collider type and creates the appropriate collider
+     * Sets the collider type and creates the appropriate collider.
+     *
+     * @deprecated Item 8c: use um {@link ColliderComponent} como fonte única da
+     *     hitbox. Mantido para compatibilidade com scripts legados e o editor Swing.
      */
+    @Deprecated
     public void setColliderType(IgnisSampleCollisions.ColliderType type) {
         this.colliderType = type;
         
@@ -573,15 +673,21 @@ public class GameObject {
     }
     
     /**
-     * Gets the collision mode (TRIGGER or COLLISION)
+     * Gets the collision mode (TRIGGER or COLLISION).
+     *
+     * @deprecated Item 8c: substituído por {@link ColliderComponent#isTrigger()}.
      */
+    @Deprecated
     public IgnisSampleCollisions.CollisionMode getCollisionMode() {
         return collisionMode;
     }
-    
+
     /**
-     * Sets the collision mode
+     * Sets the collision mode.
+     *
+     * @deprecated Item 8c: substituído por {@link ColliderComponent#setTrigger(boolean)}.
      */
+    @Deprecated
     public void setCollisionMode(IgnisSampleCollisions.CollisionMode mode) {
         this.collisionMode = mode;
         if (collider != null) {

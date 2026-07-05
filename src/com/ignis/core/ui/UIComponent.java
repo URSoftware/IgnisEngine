@@ -520,6 +520,8 @@ public abstract class UIComponent {
     public boolean isHovered() { return hovered; }
     public boolean isPressed() { return pressed; }
     public boolean isFocused() { return focused; }
+    /** Define o estado de foco de teclado deste componente (gerido pela UICanvas). */
+    public void setFocused(boolean focused) { this.focused = focused; }
     
     public UIComponent getParent() { return parent; }
     public List<UIComponent> getChildren() { return new ArrayList<>(children); }
@@ -534,9 +536,19 @@ public abstract class UIComponent {
     
     // ==================== CALLBACKS ====================
     
-    public void setOnClick(Runnable callback) { 
+    public void setOnClick(Runnable callback) {
         this.onClick = callback;
         this.interactive = true;
+    }
+
+    /**
+     * Dispara a acao de clique deste componente (usado pela ativacao por teclado —
+     * Enter/Espaco no componente focado). No-op se desabilitado ou sem callback.
+     */
+    public void activate() {
+        if (enabled && onClick != null) {
+            onClick.run();
+        }
     }
     
     public void setOnHoverEnter(Runnable callback) { 

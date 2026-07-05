@@ -88,27 +88,62 @@ public final class FxConsolePanel extends VBox {
         counter.getStyleClass().add("toolbar-label");
 
         HBox bar = new HBox(6, title, new Region(), showInfo, showWarn, showErr,
-                autoScroll, spacer, counter, clear);
-        bar.setAlignment(Pos.CENTER_LEFT);
+                        autoScroll, spacer, counter, clear);
+                bar.setAlignment(Pos.CENTER_LEFT);
 
-        list.setFocusTraversable(false);
-        list.setCellFactory(lv -> new ConsoleCell());
-        VBox.setVgrow(list, Priority.ALWAYS);
+                list.setFocusTraversable(false);
+                list.setCellFactory(lv -> new ConsoleCell());
 
-        getChildren().addAll(bar, list);
-        updateCounter();
+                // Duplo clique em linha de erro abre o script na linha correspondente
+                list.setOnMouseClicked(e -> {
+                    if (e.getClickCount() == 2) {
+                        Entry selectedEntry = list.getSelectionModel().getSelectedItem();
+                        if (selectedEntry != null && selectedEntry.level == Level.ERROR) {
+                            openScriptAtErrorLine(selectedEntry.text);
+                        }
+                    }
+                });
 
-        // Registrar ouvinte do logger privado e centralizado do IgnisEngine
-        com.ignis.core.IgnisLogger.addListener((level, message) -> {
-            Level fxLevel;
-            switch (level) {
-                case ERROR: fxLevel = Level.ERROR; break;
-                case WARN:  fxLevel = Level.WARN; break;
-                default:    fxLevel = Level.INFO; break;
+                VBox.setVgrow(list, Priority.ALWAYS);
+
+                getChildren().addAll(bar, list);
+                updateCounter();
+
+                // Registrar ouvinte do logger privado e centralizado do IgnisEngine
+                com.ignis.core.IgnisLogger.addListener((level, message) -> {
+                    Level fxLevel;
+                    switch (level) {
+                        case ERROR: fxLevel = Level.ERROR; break;
+                        case WARN:  fxLevel = Level.WARN; break;
+                        default:    fxLevel = Level.INFO; break;
+                    }
+                    log(fxLevel, message);
+                });
             }
-            log(fxLevel, message);
-        });
-    }
+
+            // Tenta extrair nome do script e número da linha de uma mensagem de erro
+            // Ex.: "PlayerMovement.java -> Line 42: cannot find symbol"
+            private void openScriptAtErrorLine(String errorLine) {
+                try {
+                    // Padrão: "ScriptName.java -> Line N: mensagem"
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("([A-Za-z0-9_]+)\\.java\\s*->\\s*Line\\s*(\\d+)");
+                    java.util.regex.Matcher matcher = pattern.matcher(errorLine);
+                    if (matcher.find()) {
+                        String scriptName = matcher.group(1);
+                        int lineNumber = Integer.parseInt(matcher.group(2));
+
+                        // Obter a instância do editor atual. FxConsolePanel é criado
+                        // pelo IgnisEditorApp; usamos o singleton acessível estaticamente.
+                        com.ignis.editor.fx.IgnisEditorApp editorApp = com.ignis.editor.fx.IgnisEditorApp.getInstance();
+                        if (editorApp != null) {
+                            editorApp.openScriptAtLine(scriptName, lineNumber);
+                        }
+                    }
+                } catch (Exception ex) {
+                    // Silenciosamente ignorar falhas de parsing/navegação
+                    com.ignis.core.IgnisLogger.warn("Nao foi possivel abrir script na linha do erro: " + ex.getMessage());
+                }
+            }
 
     // ---------------- API publica ----------------
 

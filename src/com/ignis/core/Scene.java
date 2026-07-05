@@ -124,31 +124,34 @@ public class Scene {
             entityJson.put("rotation", entity.getRotation());
             entityJson.put("zIndex", entity.getZIndex());
             entityJson.put("visible", entity.isVisible());
+            entityJson.put("tag", entity.getTag());
+            entityJson.put("layer", entity.getLayer());
 
             // Serializar todos os componentes anexados
             JSONArray componentsArray = new JSONArray();
+            java.util.Set<String> serializedScripts = new java.util.HashSet<>();
             for (Component comp : entity.getComponents()) {
                 JSONObject compJson = new JSONObject();
                 String compType = comp.getClass().getSimpleName();
                 compJson.put("type", compType);
-                if (comp instanceof IgnisScript) {
-                    JSONObject vars = ScriptSerializationHelper.saveScriptVariables((IgnisScript) comp);
-                    compJson.put("properties", vars);
-                } else if (comp instanceof ColliderComponent) {
-                    JSONObject properties = new JSONObject();
-                    ColliderComponent cc = (ColliderComponent) comp;
-                    properties.put("shape", cc.getShape());
-                    properties.put("friction", cc.getFriction());
-                    properties.put("bounciness", cc.getBounciness());
-                    properties.put("isTrigger", cc.isTrigger());
-                    properties.put("collisionLayer", cc.getCollisionLayer());
-                    compJson.put("properties", properties);
-                } else if (comp instanceof HealthComponent) {
-                    JSONObject properties = new JSONObject();
-                    HealthComponent hc = (HealthComponent) comp;
-                    properties.put("health", hc.getHealth());
-                    compJson.put("properties", properties);
+                // Serializacao GENERICA (plano item 5): todo componente persiste
+                // via saveProperties() — @Serialize por padrao; componentes com
+                // estado complexo (CanvasComponent) sobrescrevem o metodo.
+                if (comp instanceof IgnisScript) serializedScripts.add(compType);
+                compJson.put("properties", comp.saveProperties());
+                componentsArray.put(compJson);
+            }
+            // Anexos de script SEM instancia viva (compilacao falhou ou ainda nao
+            // rodou): persiste o vinculo pelo nome, com as variaveis pendentes se
+            // houver — sem isto o anexo sumia do .ignis ao salvar.
+            for (String scriptName : entity.getScriptNames()) {
+                if (serializedScripts.contains(scriptName) || "SpriteComponent".equals(scriptName)) {
+                    continue;
                 }
+                JSONObject compJson = new JSONObject();
+                compJson.put("type", scriptName);
+                JSONObject pending = pendingScriptVariables.get(entity.getId() + ":" + scriptName);
+                compJson.put("properties", pending != null ? pending : new JSONObject());
                 componentsArray.put(compJson);
             }
             entityJson.put("components", componentsArray);
@@ -170,6 +173,27 @@ public class Scene {
      */
     private JSONObject saveScriptVariables(IgnisScript script) {
         return ScriptSerializationHelper.saveScriptVariables(script);
+    }
+
+    /**
+     * Instancia um componente NATIVO do motor pelo nome do tipo (reflexao em
+     * com.ignis.core). Retorna null para tipos desconhecidos — tratados como
+     * scripts de usuario. Novos componentes nativos passam a ser serializados
+     * sem alterar a Scene (plano item 5).
+     */
+    private static Component instantiateNativeComponent(String typeName) {
+        if (typeName == null || typeName.isEmpty() || !typeName.matches("[A-Za-z0-9_]+")) {
+            return null;
+        }
+        try {
+            Class<?> clazz = Class.forName("com.ignis.core." + typeName);
+            if (!Component.class.isAssignableFrom(clazz)) return null;
+            // Scripts de usuario nao vivem em com.ignis.core; IgnisScript nativos
+            // (SpriteComponent) tambem entram por aqui.
+            return (Component) clazz.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -203,6 +227,8 @@ public class Scene {
             entity.setRotation(entityJson.optDouble("rotation", 0.0));
             entity.setZIndex(entityJson.optInt("zIndex", 0));
             entity.setVisible(entityJson.optBoolean("visible", entityJson.optBoolean("visibleCheck", true)));
+            entity.setTag(entityJson.optString("tag", ""));
+            entity.setLayer(entityJson.optString("layer", "Default"));
 
             // CARREGAMENTO DE COMPONENTES E SUPORTE A MIGRACAO RETROATIVA
             if (entityJson.has("components")) {
@@ -212,38 +238,17 @@ public class Scene {
                     JSONObject compJson = compsArray.getJSONObject(j);
                     String compType = compJson.getString("type");
                     
-                    if (compType.equals("SpriteComponent")) {
-                        SpriteComponent spriteComp = new SpriteComponent();
-                        entity.addComponent(spriteComp);
+                    // Carga GENERICA (plano item 5): componentes nativos do motor
+                    // (com.ignis.core.*) sao instanciados por reflexao e restaurados
+                    // via loadProperties(); qualquer outro tipo e um script de
+                    // usuario (instanciado depois, pelo ScriptManager).
+                    Component nativeComp = instantiateNativeComponent(compType);
+                    if (nativeComp != null) {
+                        entity.addComponent(nativeComp);
                         if (compJson.has("properties")) {
-                            JSONObject props = compJson.getJSONObject("properties");
-                            ScriptSerializationHelper.loadScriptVariables(spriteComp, props, scene::getEntityById);
+                            nativeComp.loadProperties(compJson.getJSONObject("properties"),
+                                    scene::getEntityById);
                         }
-                    } else if (compType.equals("AnimationComponent")) {
-                        AnimationComponent animationComp = new AnimationComponent();
-                        entity.addComponent(animationComp);
-                        if (compJson.has("properties")) {
-                            JSONObject props = compJson.getJSONObject("properties");
-                            ScriptSerializationHelper.loadScriptVariables(animationComp, props, scene::getEntityById);
-                        }
-                    } else if (compType.equals("ColliderComponent")) {
-                        ColliderComponent colliderComp = new ColliderComponent();
-                        if (compJson.has("properties")) {
-                            JSONObject props = compJson.getJSONObject("properties");
-                            colliderComp.setShape(props.optString("shape", "Box"));
-                            colliderComp.setFriction(props.optDouble("friction", 0.5));
-                            colliderComp.setBounciness(props.optDouble("bounciness", 0.0));
-                            colliderComp.setTrigger(props.optBoolean("isTrigger", false));
-                            colliderComp.setCollisionLayer(props.optString("collisionLayer", "Default"));
-                        }
-                        entity.addComponent(colliderComp);
-                    } else if (compType.equals("HealthComponent")) {
-                        HealthComponent healthComp = new HealthComponent();
-                        if (compJson.has("properties")) {
-                            JSONObject props = compJson.getJSONObject("properties");
-                            healthComp.setHealth(props.optInt("health", 100));
-                        }
-                        entity.addComponent(healthComp);
                     } else {
                         // É um script customizado
                         scriptNames.add(compType);
