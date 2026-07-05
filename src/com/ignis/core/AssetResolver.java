@@ -88,7 +88,7 @@ public final class AssetResolver {
             return null;
         }
         if (!file.exists()) {
-            System.err.println("Sprite file not found: " + path);
+            IgnisLogger.error("Sprite file not found: " + path);
             IMAGE_CACHE.remove(file.getAbsolutePath());
             return null;
         }
@@ -103,13 +103,13 @@ public final class AssetResolver {
         try {
             BufferedImage image = ImageIO.read(file);
             if (image == null) {
-                System.err.println("Unsupported image format: " + path);
+                IgnisLogger.error("Unsupported image format: " + path);
                 return null;
             }
             IMAGE_CACHE.put(key, new CachedImage(modified, image));
             return image;
         } catch (Exception e) {
-            System.err.println("Failed to load sprite: " + e.getMessage());
+            IgnisLogger.error("Failed to load sprite: " + e.getMessage());
             return null;
         }
     }

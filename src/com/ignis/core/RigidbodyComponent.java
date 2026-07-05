@@ -84,10 +84,16 @@ public class RigidbodyComponent extends Component {
     }
 
     /**
-     * Reage a colisao zerando a componente de velocidade na direcao do impacto.
-     * Chamado pelo evento {@link GameObject#onCollisionEnter} (ponte CollisionManager
-     * legado -> evento EC). Para resposta fisica mais elaborada (bounce, friccao),
-     * sub-classes podem sobrescrever este metodo.
+     * Reage a colisao aplicando restituicao (bounce) e atrito (friction) do
+     * {@link ColliderComponent} deste objeto. Chamado pelo evento
+     * {@link GameObject#onCollisionEnter} (ponte CollisionManager legado -> evento EC).
+     *
+     * <p>Decompoe a velocidade em componente normal (na direcao do impacto) e
+     * tangencial (ao longo da superficie). A normal e refletida por {@code bounciness}
+     * (0 = corpo solido, para ao bater; 1 = reflexao elastica total) e a tangencial e
+     * atenuada por {@code friction} (0 = sem atrito, desliza livre; 1 = trava). Sem
+     * {@link ColliderComponent} anexado, mantem o comportamento de corpo solido
+     * (bounciness 0, friction 0).</p>
      */
     private void onCollision(CollisionData data) {
         if (data == null || data.getOther() == null || gameObject == null) return;
@@ -100,12 +106,32 @@ public class RigidbodyComponent extends Component {
         if (len < 0.0001) return;
         nx /= len;
         ny /= len;
-        // Remove componente de velocidade na direcao da normal (para corpo solido).
+
+        // So reage se o corpo estiver se movendo CONTRA a superficie (dot < 0).
         double dot = velocityX * nx + velocityY * ny;
-        if (dot < 0.0) {
-            velocityX -= dot * nx;
-            velocityY -= dot * ny;
+        if (dot >= 0.0) return;
+
+        double bounciness = 0.0;
+        double friction = 0.0;
+        ColliderComponent cc = gameObject.getComponent(ColliderComponent.class);
+        if (cc != null) {
+            bounciness = clamp01(cc.getBounciness());
+            friction = clamp01(cc.getFriction());
         }
+
+        // Decompoe: tangencial = v - (v.n) n ; normal = (v.n) n.
+        double tvx = velocityX - dot * nx;
+        double tvy = velocityY - dot * ny;
+        // Tangencial atenuada pelo atrito; normal refletida pela restituicao.
+        velocityX = tvx * (1.0 - friction) - bounciness * dot * nx;
+        velocityY = tvy * (1.0 - friction) - bounciness * dot * ny;
+    }
+
+    /** Restringe um valor ao intervalo [0, 1]. */
+    private static double clamp01(double v) {
+        if (v < 0.0) return 0.0;
+        if (v > 1.0) return 1.0;
+        return v;
     }
 
     /**

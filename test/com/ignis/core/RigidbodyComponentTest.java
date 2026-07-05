@@ -208,4 +208,49 @@ class RigidbodyComponentTest {
         rb.setMass(0.0);
         assertTrue(rb.getMass() >= 0.01, "massa deve ter piso minimo");
     }
+
+    @Test
+    void bouncinessRefleteVelocidadeNaNormal() {
+        GameObject a = new GameObject();
+        a.setX(0.0); a.setY(0.0); a.setWidth(32); a.setHeight(32);
+        RigidbodyComponent rbA = new RigidbodyComponent();
+        rbA.setUseGravity(false);
+        a.addComponent(rbA);
+        // Collider elastico (bounciness 1, sem atrito).
+        ColliderComponent cc = new ColliderComponent();
+        cc.setBounciness(1.0);
+        cc.setFriction(0.0);
+        a.addComponent(cc);
+        rbA.setVelocityX(100.0);
+
+        GameObject b = new GameObject();
+        b.setX(40.0); b.setY(0.0); b.setWidth(32); b.setHeight(32);
+        a.notifyCollision(b); // normal aponta de B para A (-X)
+
+        assertEquals(-100.0, rbA.getVelocityX(), EPS, "bounciness 1 deve refletir a velocidade na normal");
+        assertEquals(0.0, rbA.getVelocityY(), EPS);
+    }
+
+    @Test
+    void frictionAtenuaVelocidadeTangencial() {
+        GameObject a = new GameObject();
+        a.setX(0.0); a.setY(0.0); a.setWidth(32); a.setHeight(32);
+        RigidbodyComponent rbA = new RigidbodyComponent();
+        rbA.setUseGravity(false);
+        a.addComponent(rbA);
+        ColliderComponent cc = new ColliderComponent();
+        cc.setBounciness(0.0);
+        cc.setFriction(0.5);
+        a.addComponent(cc);
+        // Componente normal (+X, contra B) + tangencial (+Y, ao longo da parede).
+        rbA.setVelocityX(100.0);
+        rbA.setVelocityY(50.0);
+
+        GameObject b = new GameObject();
+        b.setX(40.0); b.setY(0.0); b.setWidth(32); b.setHeight(32);
+        a.notifyCollision(b); // normal -X; tangencial = eixo Y
+
+        assertEquals(0.0, rbA.getVelocityX(), EPS, "normal removida (bounciness 0)");
+        assertEquals(25.0, rbA.getVelocityY(), EPS, "tangencial reduzida pela metade (friction 0.5)");
+    }
 }

@@ -133,7 +133,7 @@ public class PrefabManager {
         File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
         
         if (!prefabFile.exists()) {
-            System.err.println("Prefab not found: " + prefabName);
+            IgnisLogger.error("Prefab not found: " + prefabName);
             return null;
         }
         
@@ -144,8 +144,7 @@ public class PrefabManager {
             return deserializeGameObject(prefabJson, x, y);
             
         } catch (Exception e) {
-            System.err.println("Failed to instantiate prefab: " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("Failed to instantiate prefab: " + e.getMessage(), e);
             return null;
         }
     }

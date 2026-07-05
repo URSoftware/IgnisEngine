@@ -51,7 +51,7 @@ public class ScriptManager {
             // Get Java compiler
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
             if (compiler == null) {
-                System.err.println("Java compiler not available. Run with JDK, not JRE.");
+                IgnisLogger.error("Java compiler not available. Run with JDK, not JRE.");
                 return false;
             }
 
@@ -126,7 +126,7 @@ public class ScriptManager {
         // failing once per script, fall back to the pre-compiled classes that
         // ship in scripts/compiled/ — loaded lazily by loadScriptClass().
         if (ToolProvider.getSystemJavaCompiler() == null) {
-            System.out.println("[ScriptManager] No JDK compiler available; "
+            IgnisLogger.info("[ScriptManager] No JDK compiler available; "
                     + "using pre-compiled scripts from compiled/.");
             return 0;
         }
@@ -156,7 +156,7 @@ public class ScriptManager {
             scriptClasses.clear();
             
         } catch (Exception e) {
-            System.err.println("Error reloading ClassLoader: " + e.getMessage());
+            IgnisLogger.error("Error reloading ClassLoader: " + e.getMessage());
         }
     }
 
@@ -184,12 +184,12 @@ public class ScriptManager {
                 scriptClasses.put(className, scriptClass);
                 return scriptClass;
             } else {
-                System.err.println("Class " + className + " does not extend IgnisScript");
+                IgnisLogger.error("Class " + className + " does not extend IgnisScript");
                 return null;
             }
             
         } catch (ClassNotFoundException e) {
-            System.err.println("Script not found: " + className);
+            IgnisLogger.error("Script not found: " + className);
             return null;
         }
     }
@@ -214,8 +214,7 @@ public class ScriptManager {
             return script;
             
         } catch (Exception e) {
-            System.err.println("Error creating script instance: " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("Error creating script instance: " + e.getMessage(), e);
             return null;
         }
     }
@@ -273,7 +272,7 @@ public class ScriptManager {
         File scriptFile = new File(scriptsFolder, scriptName + ".java");
         
         if (scriptFile.exists()) {
-            System.err.println("Script already exists: " + scriptName);
+            IgnisLogger.error("Script already exists: " + scriptName);
             return false;
         }
         
@@ -281,10 +280,10 @@ public class ScriptManager {
         
         try {
             Files.write(scriptFile.toPath(), template.getBytes("UTF-8"));
-            System.out.println("Script created: " + scriptFile.getAbsolutePath());
+            IgnisLogger.info("Script created: " + scriptFile.getAbsolutePath());
             return true;
         } catch (IOException e) {
-            System.err.println("Error creating script: " + e.getMessage());
+            IgnisLogger.error("Error creating script: " + e.getMessage());
             return false;
         }
     }
@@ -352,7 +351,7 @@ public class ScriptManager {
         try {
             return new String(Files.readAllBytes(scriptFile.toPath()), "UTF-8");
         } catch (IOException e) {
-            System.err.println("Error reading script: " + e.getMessage());
+            IgnisLogger.error("Error reading script: " + e.getMessage());
             return null;
         }
     }
@@ -367,7 +366,7 @@ public class ScriptManager {
             Files.write(scriptFile.toPath(), content.getBytes("UTF-8"));
             return true;
         } catch (IOException e) {
-            System.err.println("Error saving script: " + e.getMessage());
+            IgnisLogger.error("Error saving script: " + e.getMessage());
             return false;
         }
     }

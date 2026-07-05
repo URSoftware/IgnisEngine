@@ -225,7 +225,7 @@ public class MusicPath {
      */
     public void play() {
         if (!hasFile()) {
-            System.out.println("[MusicPath] Nenhum arquivo de áudio configurado.");
+            IgnisLogger.info("[MusicPath] Nenhum arquivo de áudio configurado.");
             return;
         }
         

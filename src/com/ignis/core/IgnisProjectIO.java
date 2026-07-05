@@ -104,13 +104,11 @@ public class IgnisProjectIO {
                     zos.closeEntry();
                 }
 
-                // 3. Create assets directory (empty for now)
-                ZipEntry assetsDir = new ZipEntry(ASSETS_DIR);
-                zos.putNextEntry(assetsDir);
-                zos.closeEntry();
-
-                // TODO: Copy assets into the ZIP
-                // copyAssetsToZip(zos, project);
+                // 3. Copiar a pasta de assets do projeto para dentro do ZIP.
+                // Assets vivem em projectFolder/assets/ (sprites, sounds, music, etc.);
+                // sem isto o .ignis/jogo exportado saía sem os recursos.
+                File assetsFolder = new File(projectFolder, "assets");
+                copyAssetsToZip(zos, assetsFolder, ASSETS_DIR);
             }
 
             // Update file reference in project (use actual file in projects folder)
@@ -118,6 +116,40 @@ public class IgnisProjectIO {
 
             com.ignis.core.IgnisLogger.info("Projeto salvo em: " + actualIgnisFile.getName());
         }
+
+    /**
+     * Copia recursivamente o conteudo de {@code dir} para dentro do ZIP sob o prefixo
+     * {@code zipPrefix} (ex.: {@code assets/}). Sempre grava a entrada de diretorio do
+     * prefixo, mesmo que a pasta nao exista ou esteja vazia, para preservar a estrutura.
+     */
+    static void copyAssetsToZip(ZipOutputStream zos, File dir, String zipPrefix) throws IOException {
+        // Entrada do diretorio (mantem a estrutura no ZIP).
+        zos.putNextEntry(new ZipEntry(zipPrefix));
+        zos.closeEntry();
+        if (dir == null || !dir.isDirectory()) {
+            return;
+        }
+        File[] children = dir.listFiles();
+        if (children == null) {
+            return;
+        }
+        byte[] buffer = new byte[8192];
+        for (File child : children) {
+            String childPath = zipPrefix + child.getName();
+            if (child.isDirectory()) {
+                copyAssetsToZip(zos, child, childPath + "/");
+            } else {
+                zos.putNextEntry(new ZipEntry(childPath));
+                try (FileInputStream fis = new FileInputStream(child)) {
+                    int read;
+                    while ((read = fis.read(buffer)) != -1) {
+                        zos.write(buffer, 0, read);
+                    }
+                }
+                zos.closeEntry();
+            }
+        }
+    }
 
     /**
      * Returns the "project" folder associated with the .ignis file
@@ -214,7 +246,7 @@ public class IgnisProjectIO {
                         // Validate engine version
                         String fileVersion = projectJson.getString("engineVersion");
                         if (!isVersionCompatible(fileVersion)) {
-                            System.err.println("Warning: File version (" + fileVersion +
+                            IgnisLogger.error("Warning: File version (" + fileVersion +
                                     ") may not be compatible with the current engine (" + Project.ENGINE_VERSION + ")");
                         }
 

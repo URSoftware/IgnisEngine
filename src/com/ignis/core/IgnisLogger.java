@@ -40,6 +40,21 @@ public final class IgnisLogger {
         log(Level.ERROR, message);
     }
 
+    /**
+     * Loga uma mensagem de erro acompanhada do stack trace da excecao — substitui o
+     * padrao {@code e.printStackTrace()}, roteando o rastro para os listeners (ex.:
+     * console do editor) em vez de despejar direto no stderr do sistema.
+     */
+    public static void error(String message, Throwable t) {
+        if (t == null) {
+            log(Level.ERROR, message);
+            return;
+        }
+        java.io.StringWriter sw = new java.io.StringWriter();
+        t.printStackTrace(new java.io.PrintWriter(sw));
+        log(Level.ERROR, message + "\n" + sw);
+    }
+
     public static synchronized void log(Level level, String message) {
         if (message == null) return;
         

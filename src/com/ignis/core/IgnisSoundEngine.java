@@ -435,10 +435,10 @@ public class IgnisSoundEngine {
             if (file.exists()) {
                 byte[] data = readFileBytes(file);
                 audioCache.put(filePath, data);
-                System.out.println("[IgnisSoundEngine] Áudio pré-carregado: " + filePath);
+                IgnisLogger.info("[IgnisSoundEngine] Áudio pré-carregado: " + filePath);
             }
         } catch (Exception e) {
-            System.err.println("[IgnisSoundEngine] Erro ao pré-carregar: " + e.getMessage());
+            IgnisLogger.error("[IgnisSoundEngine] Erro ao pré-carregar: " + e.getMessage());
         }
     }
     
@@ -457,7 +457,7 @@ public class IgnisSoundEngine {
      */
     public void clearCache() {
         audioCache.clear();
-        System.out.println("[IgnisSoundEngine] Cache limpo");
+        IgnisLogger.info("[IgnisSoundEngine] Cache limpo");
     }
 
     // ==================== MÉTODOS INTERNOS ====================
@@ -474,7 +474,7 @@ public class IgnisSoundEngine {
             } else {
                 File file = new File(filePath);
                 if (!file.exists()) {
-                    System.err.println("[IgnisSoundEngine] Arquivo não encontrado: " + filePath);
+                    IgnisLogger.error("[IgnisSoundEngine] Arquivo não encontrado: " + filePath);
                     return null;
                 }
                 audioStream = AudioSystem.getAudioInputStream(file);
@@ -510,12 +510,12 @@ public class IgnisSoundEngine {
             }
 
         } catch (UnsupportedAudioFileException e) {
-            System.err.println("[IgnisSoundEngine] Formato de áudio não suportado: " + filePath);
-            System.err.println("  Formatos suportados: WAV, AIFF, AU");
-            System.err.println("  Para MP3, é necessário adicionar bibliotecas externas.");
+            IgnisLogger.error("[IgnisSoundEngine] Formato de áudio não suportado: " + filePath);
+            IgnisLogger.error("  Formatos suportados: WAV, AIFF, AU");
+            IgnisLogger.error("  Para MP3, é necessário adicionar bibliotecas externas.");
             return null;
         } catch (Exception e) {
-            System.err.println("[IgnisSoundEngine] Erro ao carregar áudio: " + e.getMessage());
+            IgnisLogger.error("[IgnisSoundEngine] Erro ao carregar áudio: " + e.getMessage());
             return null;
         }
     }

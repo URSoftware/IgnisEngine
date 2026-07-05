@@ -33,7 +33,7 @@ public final class AppIconHelper {
         cachedIcons = new ArrayList<>();
         URL iconUrl = AppIconHelper.class.getResource("/com/ignis/core_assets/icons/IconeIgnis.png");
         if (iconUrl == null) {
-            System.err.println("[AppIconHelper] IconeIgnis.png not found in classpath");
+            IgnisLogger.error("[AppIconHelper] IconeIgnis.png not found in classpath");
             return cachedIcons;
         }
 
@@ -53,7 +53,7 @@ public final class AppIconHelper {
                 }
             }
         } catch (IOException e) {
-            System.err.println("[AppIconHelper] Failed to load application icons: " + e.getMessage());
+            IgnisLogger.error("[AppIconHelper] Failed to load application icons: " + e.getMessage());
         }
 
         return cachedIcons;
@@ -69,7 +69,7 @@ public final class AppIconHelper {
                 window.setIconImages(icons);
             }
         } catch (Exception e) {
-            System.err.println("[AppIconHelper] Error setting icon for window " + window.getClass().getName() + ": " + e.getMessage());
+            IgnisLogger.error("[AppIconHelper] Error setting icon for window " + window.getClass().getName() + ": " + e.getMessage());
         }
     }
 }

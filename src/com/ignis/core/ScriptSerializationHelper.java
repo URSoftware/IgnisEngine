@@ -108,7 +108,7 @@ public final class ScriptSerializationHelper {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error serializing script variables: " + e.getMessage());
+            IgnisLogger.error("Error serializing script variables: " + e.getMessage());
         }
         return variables;
     }
@@ -135,7 +135,7 @@ public final class ScriptSerializationHelper {
 
                     // Ensure the field is annotated with @Serialize
                     if (!field.isAnnotationPresent(Serialize.class)) {
-                        System.out.println("[Serialization Warning] Field '" + fieldName + "' in script '" 
+                        IgnisLogger.info("[Serialization Warning] Field '" + fieldName + "' in script '" 
                                 + clazz.getSimpleName() + "' was loaded from JSON but is not annotated with @Serialize. Ignoring.");
                         continue;
                     }
@@ -172,11 +172,11 @@ public final class ScriptSerializationHelper {
                         }
                     }
                 } catch (Exception ex) {
-                    System.err.println("Failed to load field " + fieldName + ": " + ex.getMessage());
+                    IgnisLogger.error("Failed to load field " + fieldName + ": " + ex.getMessage());
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error loading script variables: " + e.getMessage());
+            IgnisLogger.error("Error loading script variables: " + e.getMessage());
         }
     }
 
