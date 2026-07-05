@@ -1,6 +1,5 @@
 package com.ignis.editor.fx;
 
-import com.ignis.editor.Editor;
 import com.ignis.core.ScriptManager;
 
 import javafx.animation.Animation;
@@ -37,8 +36,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * JavaFX implementation of the Script Code Editor.
- * Replaces com.ignis.editor.ScriptEditorWindow using RichTextFX.
+ * JavaFX implementation of the Script Code Editor (RichTextFX).
+ * Substituiu o antigo ScriptEditorWindow (Swing), removido do main em 05/07/2026.
  */
 public class FxCodeEditor extends Stage {
 
@@ -830,11 +829,9 @@ public class FxCodeEditor extends Stage {
     }
 
     private boolean autoSaveOn() {
-        if (EditorPrefs.isAutoSave()) return true;
-        if (editor instanceof com.ignis.editor.Editor) {
-            return ((com.ignis.editor.Editor) editor).isAutoSaveScriptsEnabled();
-        }
-        return false;
+        // O editor JavaFX controla o auto-save via EditorPrefs (o antigo dono Swing,
+        // com.ignis.editor.Editor, foi removido do main em 05/07/2026).
+        return EditorPrefs.isAutoSave();
     }
 
     private void setupAutoSave() {
@@ -947,9 +944,8 @@ public class FxCodeEditor extends Stage {
                 autoSaveTimer.stop();
             }
             hideAutocompletePopup();
-            if (editor instanceof com.ignis.editor.Editor) {
-                ((com.ignis.editor.Editor) editor).onScriptEditorClosed(scriptName);
-            }
+            // Hook de fechamento do antigo dono Swing (com.ignis.editor.Editor) removido
+            // em 05/07/2026; o editor JavaFX recarrega scripts pelo seu proprio fluxo.
             close();
         }
 

@@ -168,16 +168,9 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <configuration>
-                    <mainClass>com.ignis.editor.Editor</mainClass>
-                </configuration>
-            </plugin>
-            <!-- Editor JavaFX (em migracao). Rodar com:  mvnw javafx:run
-                 O editor Swing classico continua via exec:java (mainClass acima). -->
+            <!-- Editor JavaFX (principal). Rodar com:  mvnw javafx:run
+                 O editor Swing classico (com.ignis.editor.Editor) foi removido do main
+                 em 05/07/2026 e permanece apenas na branch Legado. -->
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
