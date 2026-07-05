@@ -64,6 +64,10 @@ public class Game extends Canvas implements Runnable {
     // Collision system
     private IgnisSampleCollisions.CollisionManager collisionManager;
     private boolean showColliders = false; // Debug view for colliders
+
+    // Visualizador de camera (editor): desenha o retangulo de captura de cada camera
+    // no viewport, para o criador ver "para onde a camera aponta". So no modo de edicao.
+    private boolean showCameraBounds = true;
     
     // ==================== UI SYSTEM ====================
     // Canvas de interface do usuário
@@ -100,7 +104,8 @@ public class Game extends Canvas implements Runnable {
     public enum ToolType {
         MOVE, // Move objects
         ROTATE, // Rotate objects
-        SCALE // Scale objects
+        SCALE, // Scale objects
+        WORLD_PAINT // Pinta/apaga barreiras na grade do World (mundo da cena)
     }
 
     private ToolType currentTool = ToolType.MOVE;
@@ -150,6 +155,19 @@ public class Game extends Canvas implements Runnable {
     private double objectStartX, objectStartY;
     private double objectStartRotation;
     private int objectStartWidth, objectStartHeight;
+
+    // ---- Gizmo de collider (item 8b) ----
+    // Alcas de redimensionamento da hitbox do ColliderComponent do objeto selecionado.
+    // Ativo somente em edicao, com 'showColliders' ligado e um ColliderComponent anexado.
+    // Indices das 8 alcas: 0=NW 1=N 2=NE 3=E 4=SE 5=S 6=SW 7=W.
+    private int colliderHandle = -1;         // alca sob o cursor durante o arraste (-1 = nenhuma)
+    private int hoveredColliderHandle = -1;  // alca sob o cursor no hover (feedback de cursor)
+    private boolean draggingCollider = false;
+    private double colStartMinX, colStartMinY, colStartW, colStartH; // bounds no inicio do arraste
+
+    // ---- Pintura de barreiras do World (ferramenta WORLD_PAINT) ----
+    private boolean paintingWorld = false;   // arraste de pincel em andamento
+    private boolean worldPaintErase = false; // stroke atual apaga (Ctrl) em vez de bloquear
     
     // Robot for infinite drag (mouse warping)
     private Robot robot;
@@ -170,9 +188,40 @@ public class Game extends Canvas implements Runnable {
     }
     
     private TransformListener transformListener;
-    
+
     public void setTransformListener(TransformListener listener) {
         this.transformListener = listener;
+    }
+
+    // Notifica inicio/fim de um arraste de redimensionamento de collider (item 8b),
+    // para o editor registrar undo/redo do ColliderComponent.
+    public interface ColliderEditListener {
+        void onColliderEditStart(GameObject owner, ColliderComponent collider);
+        void onColliderEditEnd(GameObject owner, ColliderComponent collider);
+    }
+
+    private ColliderEditListener colliderEditListener;
+
+    public void setColliderEditListener(ColliderEditListener listener) {
+        this.colliderEditListener = listener;
+    }
+
+    // Notifica inicio/fim de um traco de pintura de barreiras, para o editor registrar
+    // undo/redo do conjunto de celulas bloqueadas do World.
+    public interface WorldPaintListener {
+        void onPaintStrokeStart();
+        void onPaintStrokeEnd();
+    }
+
+    private WorldPaintListener worldPaintListener;
+
+    public void setWorldPaintListener(WorldPaintListener listener) {
+        this.worldPaintListener = listener;
+    }
+
+    /** Define se o proximo traco de WORLD_PAINT apaga (true) ou bloqueia (false). */
+    public void setWorldPaintErase(boolean erase) {
+        this.worldPaintErase = erase;
     }
 
     // Quando true, chamadas a repaint() sao ignoradas. Usado pelo editor JavaFX,
@@ -354,7 +403,17 @@ public class Game extends Canvas implements Runnable {
     public boolean isShowColliders() {
         return showColliders;
     }
-    
+
+    /** Liga/desliga o visualizador de campo de visao das cameras (editor). */
+    public void setShowCameraBounds(boolean show) {
+        this.showCameraBounds = show;
+    }
+
+    /** Se o visualizador de campo de visao das cameras esta ligado. */
+    public boolean isShowCameraBounds() {
+        return showCameraBounds;
+    }
+
     /**
      * Instancia uma prefab no mundo do jogo.
      * Este método pode ser chamado por scripts para criar objetos dinamicamente.
@@ -586,6 +645,39 @@ public class Game extends Canvas implements Runnable {
         if (gameState != GameState.EDITING)
             return;
 
+        // Ferramenta de pintura de barreiras: um clique/arraste bloqueia (ou apaga com
+        // Ctrl) celulas da grade do World. Nao seleciona nem move objetos.
+        if (currentTool == ToolType.WORLD_PAINT) {
+            if (world != null) {
+                paintingWorld = true;
+                if (worldPaintListener != null) worldPaintListener.onPaintStrokeStart();
+                paintCellAt(mouseX, mouseY);
+            }
+            return;
+        }
+
+        // Gizmo de collider (item 8b): alcas da hitbox tem precedencia sobre o gizmo
+        // de transform quando o modo de edicao de collider esta ativo.
+        int ch = getColliderHandleAt(mouseX, mouseY);
+        if (ch != -1) {
+            ColliderComponent cc = editableCollider();
+            double[] b = cc != null ? cc.getWorldBounds() : null;
+            if (b != null) {
+                colliderHandle = ch;
+                draggingCollider = true;
+                colStartMinX = b[0];
+                colStartMinY = b[1];
+                colStartW = b[2];
+                colStartH = b[3];
+                dragStartX = mouseX;
+                dragStartY = mouseY;
+                if (colliderEditListener != null) {
+                    colliderEditListener.onColliderEditStart(selectedObject, cc);
+                }
+                return;
+            }
+        }
+
         // Check if clicked on gizmo first
         if (selectedObject != null) {
             GizmoDragMode mode = getGizmoHitArea(mouseX, mouseY);
@@ -647,6 +739,27 @@ public class Game extends Canvas implements Runnable {
     }
 
     private void handleMouseRelease() {
+        // Fim do traco de pintura de barreiras (WORLD_PAINT).
+        if (paintingWorld) {
+            paintingWorld = false;
+            if (worldPaintListener != null) worldPaintListener.onPaintStrokeEnd();
+            return;
+        }
+        // Fim do arraste de collider (item 8b): marca o projeto sujo via o mesmo
+        // listener (o transform do objeto nao mudou, entao nenhum comando de undo e
+        // gerado; apenas dispara markProjectDirty no editor).
+        if (draggingCollider) {
+            draggingCollider = false;
+            colliderHandle = -1;
+            if (selectedObject != null && colliderEditListener != null) {
+                colliderEditListener.onColliderEditEnd(selectedObject,
+                        selectedObject.getComponent(ColliderComponent.class));
+            } else if (selectedObject != null && transformListener != null) {
+                transformListener.onTransformEnd(selectedObject);
+            }
+            setCursor(Cursor.getDefaultCursor());
+            return;
+        }
         // Notificar fim de transformacao (para undo/auto-save)
         if (currentDragMode != GizmoDragMode.NONE && selectedObject != null && transformListener != null) {
             transformListener.onTransformEnd(selectedObject);
@@ -661,6 +774,16 @@ public class Game extends Canvas implements Runnable {
     }
 
     private void handleMouseDrag(int mouseX, int mouseY) {
+        // Arraste do pincel de barreiras (WORLD_PAINT).
+        if (paintingWorld) {
+            paintCellAt(mouseX, mouseY);
+            return;
+        }
+        // Arraste de alca de collider (item 8b) — independente do gizmo de transform.
+        if (draggingCollider) {
+            handleColliderDrag(mouseX, mouseY);
+            return;
+        }
         if (currentDragMode == GizmoDragMode.NONE || selectedObject == null)
             return;
         if (gameState != GameState.EDITING)
@@ -803,6 +926,18 @@ public class Game extends Canvas implements Runnable {
             return;
         }
 
+        // Hover nas alcas do gizmo de collider (item 8b): cursor de redimensionamento
+        // direcional, com precedencia sobre o gizmo de transform.
+        int colHandle = getColliderHandleAt(mouseX, mouseY);
+        if (colHandle != hoveredColliderHandle) {
+            hoveredColliderHandle = colHandle;
+            repaint();
+        }
+        if (colHandle != -1) {
+            setCursor(Cursor.getPredefinedCursor(colliderHandleCursor(colHandle)));
+            return;
+        }
+
         if (selectedObject != null) {
             GizmoDragMode mode = getGizmoHitArea(mouseX, mouseY);
             if (mode != hoveredGizmoMode) {
@@ -911,6 +1046,211 @@ public class Game extends Canvas implements Runnable {
         return GizmoDragMode.NONE;
     }
 
+    // ==================== GIZMO DE COLLIDER (item 8b) ====================
+
+    /**
+     * ColliderComponent do objeto selecionado elegivel para edicao por gizmo, ou
+     * {@code null}. Requer modo de edicao, {@code showColliders} ligado e um
+     * ColliderComponent anexado.
+     */
+    private ColliderComponent editableCollider() {
+        if (gameState != GameState.EDITING || !showColliders || selectedObject == null
+                || selectedObject instanceof Camera) {
+            return null;
+        }
+        return selectedObject.getComponent(ColliderComponent.class);
+    }
+
+    /** Bloqueia (ou apaga, se worldPaintErase) a celula do World sob o ponto de tela. */
+    private void paintCellAt(int screenX, int screenY) {
+        if (world == null) return;
+        Point2D.Double wp = screenToWorld(screenX, screenY);
+        int col = world.cellCol(wp.x);
+        int row = world.cellRow(wp.y);
+        if (worldPaintErase) {
+            world.unblockCell(col, row);
+        } else {
+            world.blockCell(col, row);
+        }
+        repaint();
+    }
+
+    /** Fator mundo-por-pixel da camera de edicao (1.0 sem transform de camera). */
+    private double editorWorldPerPixel() {
+        Camera cam = getActiveCamera();
+        double zoom = (cam != null && editorCameraMode) ? cam.getZoom() : 1.0;
+        return (zoom > 0) ? 1.0 / zoom : 1.0;
+    }
+
+    /** Ponto em mundo da alca {@code handle} (0..7) para o bounds {@code [minX,minY,w,h]}. */
+    private double[] colliderHandlePoint(double[] b, int handle) {
+        double minX = b[0], minY = b[1], w = b[2], h = b[3];
+        double midX = minX + w / 2.0, midY = minY + h / 2.0, maxX = minX + w, maxY = minY + h;
+        switch (handle) {
+            case 0: return new double[] { minX, minY }; // NW
+            case 1: return new double[] { midX, minY }; // N
+            case 2: return new double[] { maxX, minY }; // NE
+            case 3: return new double[] { maxX, midY }; // E
+            case 4: return new double[] { maxX, maxY }; // SE
+            case 5: return new double[] { midX, maxY }; // S
+            case 6: return new double[] { minX, maxY }; // SW
+            case 7: return new double[] { minX, midY }; // W
+            default: return new double[] { midX, midY };
+        }
+    }
+
+    /** Cursor de redimensionamento AWT correspondente a alca de collider (0..7). */
+    private int colliderHandleCursor(int handle) {
+        switch (handle) {
+            case 0: return Cursor.NW_RESIZE_CURSOR;
+            case 1: return Cursor.N_RESIZE_CURSOR;
+            case 2: return Cursor.NE_RESIZE_CURSOR;
+            case 3: return Cursor.E_RESIZE_CURSOR;
+            case 4: return Cursor.SE_RESIZE_CURSOR;
+            case 5: return Cursor.S_RESIZE_CURSOR;
+            case 6: return Cursor.SW_RESIZE_CURSOR;
+            case 7: return Cursor.W_RESIZE_CURSOR;
+            default: return Cursor.DEFAULT_CURSOR;
+        }
+    }
+
+    /**
+     * Indice (0..7) da alca de collider sob o ponto de tela, ou -1. So retorna algo
+     * quando {@link #editableCollider()} nao e nulo.
+     */
+    private int getColliderHandleAt(int screenX, int screenY) {
+        ColliderComponent cc = editableCollider();
+        if (cc == null) return -1;
+        double[] b = cc.getWorldBounds();
+        if (b == null) return -1;
+        Point2D.Double world = screenToWorld(screenX, screenY);
+        double tol = 7.0 * editorWorldPerPixel();
+        for (int i = 0; i < 8; i++) {
+            double[] p = colliderHandlePoint(b, i);
+            if (Math.abs(world.x - p[0]) <= tol && Math.abs(world.y - p[1]) <= tol) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Aplica o arraste de uma alca de collider, redimensionando a hitbox em mundo. */
+    private void handleColliderDrag(int mouseX, int mouseY) {
+        ColliderComponent cc = editableCollider();
+        if (cc == null) {
+            draggingCollider = false;
+            colliderHandle = -1;
+            return;
+        }
+        Point2D.Double startW = screenToWorld(dragStartX, dragStartY);
+        Point2D.Double curW = screenToWorld(mouseX, mouseY);
+        double dx = curW.x - startW.x;
+        double dy = curW.y - startW.y;
+
+        double minX = colStartMinX, minY = colStartMinY;
+        double maxX = colStartMinX + colStartW, maxY = colStartMinY + colStartH;
+
+        boolean top = (colliderHandle == 0 || colliderHandle == 1 || colliderHandle == 2);
+        boolean bottom = (colliderHandle == 4 || colliderHandle == 5 || colliderHandle == 6);
+        boolean left = (colliderHandle == 0 || colliderHandle == 6 || colliderHandle == 7);
+        boolean right = (colliderHandle == 2 || colliderHandle == 3 || colliderHandle == 4);
+
+        if (top) minY += dy;
+        if (bottom) maxY += dy;
+        if (left) minX += dx;
+        if (right) maxX += dx;
+
+        // Normaliza (permite arrastar uma borda para alem da oposta sem inverter).
+        double newMinX = Math.min(minX, maxX);
+        double newMinY = Math.min(minY, maxY);
+        double newW = Math.abs(maxX - minX);
+        double newH = Math.abs(maxY - minY);
+        cc.resizeToWorldBounds(newMinX, newMinY, newW, newH);
+    }
+
+    /**
+     * Desenha o contorno da hitbox e as 8 alcas de redimensionamento do collider do
+     * objeto selecionado (item 8b). Chamado em espaco de mundo (transform de camera
+     * aplicada) pelo pipeline de render do editor.
+     */
+    private void renderColliderGizmo(Graphics2D g2d, ColliderComponent cc) {
+        double[] b = cc.getWorldBounds();
+        if (b == null) return;
+        double minX = b[0], minY = b[1], w = b[2], h = b[3];
+        double wpp = editorWorldPerPixel();
+
+        Color c = cc.isTrigger() ? new Color(80, 220, 120) : new Color(0, 200, 255);
+        g2d.setColor(c);
+        float dash = (float) (5.0 * wpp);
+        g2d.setStroke(new BasicStroke((float) Math.max(1.0, 1.5 * wpp),
+                BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1f,
+                new float[] { dash, dash }, 0f));
+        if ("Sphere".equalsIgnoreCase(cc.getShape())) {
+            g2d.drawOval((int) minX, (int) minY, (int) w, (int) h);
+        } else {
+            g2d.drawRect((int) minX, (int) minY, (int) w, (int) h);
+        }
+
+        double hs = 5.0 * wpp; // meia-aresta das alcas (tamanho ~constante em tela)
+        g2d.setStroke(new BasicStroke((float) Math.max(1.0, wpp)));
+        for (int i = 0; i < 8; i++) {
+            double[] p = colliderHandlePoint(b, i);
+            g2d.setColor(Color.WHITE);
+            g2d.fillRect((int) (p[0] - hs), (int) (p[1] - hs), (int) (hs * 2), (int) (hs * 2));
+            g2d.setColor(c);
+            g2d.drawRect((int) (p[0] - hs), (int) (p[1] - hs), (int) (hs * 2), (int) (hs * 2));
+        }
+    }
+
+    /**
+     * Desenha o retangulo de captura (frustum 2D) de cada camera da cena em espaco de
+     * mundo, com uma cruz no centro (posicao da camera) e o nome. A camera ativa recebe
+     * destaque (amarelo preenchido); as demais ficam tracejadas em cinza. {@code designW/H}
+     * e a resolucao de referencia usada para o tamanho da captura em zoom 1.
+     */
+    private void renderCameraBounds(Graphics2D g2d, int designW, int designH, GameObject selected) {
+        if (cameras == null || cameras.isEmpty()) return;
+        double wpp = editorWorldPerPixel();
+        Camera active = getActiveCamera();
+        java.awt.Font baseFont = g2d.getFont();
+        for (Camera cam : cameras) {
+            if (cam == null || !cam.isVisible()) continue;
+            double[] r = cam.getFrustumWorldRect(designW, designH);
+            boolean isActive = (cam == active) || cam.isActiveCamera();
+            boolean isSel = (cam == selected);
+            Color col = isActive ? new Color(255, 210, 40) : new Color(165, 165, 175);
+
+            float sw = (float) Math.max(1.0, (isActive ? 2.0 : 1.5) * wpp);
+            if (isSel) {
+                g2d.setStroke(new BasicStroke(sw));
+            } else {
+                float d = (float) (6.0 * wpp);
+                g2d.setStroke(new BasicStroke(sw, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                        1f, new float[] { d, d }, 0f));
+            }
+            g2d.setColor(col);
+            g2d.drawRect((int) r[0], (int) r[1], (int) r[2], (int) r[3]);
+            if (isActive) {
+                g2d.setColor(new Color(col.getRed(), col.getGreen(), col.getBlue(), 22));
+                g2d.fillRect((int) r[0], (int) r[1], (int) r[2], (int) r[3]);
+            }
+
+            // Cruz no centro = posicao da camera.
+            double cx = cam.getX(), cy = cam.getY();
+            double cs = 8.0 * wpp;
+            g2d.setColor(col);
+            g2d.setStroke(new BasicStroke((float) Math.max(1.0, wpp)));
+            g2d.drawLine((int) (cx - cs), (int) cy, (int) (cx + cs), (int) cy);
+            g2d.drawLine((int) cx, (int) (cy - cs), (int) cx, (int) (cy + cs));
+
+            // Rotulo com o nome da camera (canto superior-esquerdo do frustum).
+            String label = (cam.getName() != null ? cam.getName() : "Camera") + (isActive ? " (ativa)" : "");
+            g2d.setFont(baseFont.deriveFont((float) Math.max(9.0, 11.0 * wpp)));
+            g2d.drawString(label, (int) (r[0] + 4.0 * wpp), (int) (r[1] + 14.0 * wpp));
+        }
+        g2d.setFont(baseFont);
+    }
+
     /**
      * Returns the object at the specified screen position (top to bottom in render order).
      * Converts screen coordinates to world coordinates for proper picking.
@@ -982,6 +1322,8 @@ public class Game extends Canvas implements Runnable {
             transformListener.onTransformEnd(selectedObject);
         }
         currentDragMode = GizmoDragMode.NONE;
+        draggingCollider = false;
+        colliderHandle = -1;
         isPanning = false;
         setCursor(Cursor.getDefaultCursor());
     }
@@ -1340,6 +1682,33 @@ public class Game extends Canvas implements Runnable {
 
     // Desenha, no espaco do mundo, os limites do mapa (contorno) e as celulas de
     // barreira (preenchimento vermelho translucido) — feedback visual no editor.
+    /**
+     * Desenha a grade de celulas do World sobre a area visivel, para orientar a
+     * pintura de barreiras (ferramenta WORLD_PAINT). Linhas tenues; as celulas ja
+     * bloqueadas continuam sendo desenhadas por {@link #drawWorldOverlay}.
+     */
+    private void drawWorldPaintGrid(Graphics2D g2d, int width, int height) {
+        if (world == null) return;
+        int cs = world.getCellSize();
+        if (cs <= 0) return;
+        Camera cam = getActiveCamera();
+        double[] vis = (cam != null) ? cam.getVisibleWorldBounds() : new double[] { 0, 0, width, height };
+        int c0 = world.cellCol(vis[0]) - 1, c1 = world.cellCol(vis[2]) + 1;
+        int r0 = world.cellRow(vis[1]) - 1, r1 = world.cellRow(vis[3]) + 1;
+        // Limite de seguranca para nao desenhar milhares de linhas em zoom-out extremo.
+        if ((long) (c1 - c0) * (r1 - r0) > 20000) return;
+        g2d.setColor(new Color(255, 255, 255, 40));
+        g2d.setStroke(new BasicStroke((float) Math.max(0.5, editorWorldPerPixel())));
+        for (int c = c0; c <= c1; c++) {
+            int x = c * cs;
+            g2d.drawLine(x, r0 * cs, x, r1 * cs);
+        }
+        for (int r = r0; r <= r1; r++) {
+            int y = r * cs;
+            g2d.drawLine(c0 * cs, y, c1 * cs, y);
+        }
+    }
+
     private void drawWorldOverlay(Graphics2D g2d) {
         if (world == null) return;
         // Barreiras: so as celulas dentro do retangulo visivel (culling barato).
@@ -1393,6 +1762,60 @@ public class Game extends Canvas implements Runnable {
         return objMaxX < b[0] || objMinX > b[2] || objMaxY < b[1] || objMinY > b[3];
     }
     
+    // ==================== TRANSICAO DE CENAS (runtime) ====================
+
+    /**
+     * Estrategia de carregamento de cena por nome. Registrada pelo host (editor ou
+     * runtime standalone), que sabe onde estao as cenas do projeto. Permite que
+     * scripts troquem de cena via {@link IgnisScript#loadScene(String)} sem o core
+     * conhecer o {@code Project}.
+     */
+    public interface SceneLoader {
+        /** Carrega a cena de nome dado no game vivo. Retorna false se nao existir. */
+        boolean loadScene(String sceneName);
+    }
+
+    private SceneLoader sceneLoader;
+
+    /** Define a estrategia de troca de cena por nome (host: editor/runtime). */
+    public void setSceneLoader(SceneLoader loader) {
+        this.sceneLoader = loader;
+    }
+
+    /**
+     * Solicita a troca para a cena de nome dado (chamado por scripts). Delega ao
+     * {@link SceneLoader} registrado pelo host.
+     *
+     * @return true se a cena foi carregada; false se nao ha loader ou a cena nao existe.
+     */
+    public boolean loadScene(String sceneName) {
+        if (sceneLoader == null || sceneName == null) {
+            IgnisLogger.warn("loadScene(\"" + sceneName + "\") ignorado: nenhum SceneLoader registrado.");
+            return false;
+        }
+        return sceneLoader.loadScene(sceneName);
+    }
+
+    /** Primeiro objeto da cena com a tag dada (ignora caixa), ou null. */
+    public GameObject findByTag(String tag) {
+        if (tag == null) return null;
+        for (GameObject e : entities) {
+            if (e.hasTag(tag)) return e;
+        }
+        return null;
+    }
+
+    /** Todos os objetos da cena com a tag dada (ignora caixa). */
+    public java.util.List<GameObject> findAllByTag(String tag) {
+        java.util.List<GameObject> out = new java.util.ArrayList<>();
+        if (tag != null) {
+            for (GameObject e : entities) {
+                if (e.hasTag(tag)) out.add(e);
+            }
+        }
+        return out;
+    }
+
     /**
      * Registers all entity colliders with the collision manager
      * Call this after loading a scene or adding entities
@@ -1402,7 +1825,12 @@ public class Game extends Canvas implements Runnable {
         
         collisionManager.clear();
         for (GameObject entity : entities) {
-            if (entity.hasCollider()) {
+            // Fonte moderna (item 8c): a hitbox vem do ColliderComponent.
+            ColliderComponent cc = entity.getComponent(ColliderComponent.class);
+            if (cc != null) {
+                cc.ensureRegistered();
+            } else if (entity.hasCollider()) {
+                // Compat: objetos ainda no par legado colliderType/collisionMode.
                 collisionManager.addCollider(entity.getCollider());
             }
         }
@@ -1660,12 +2088,29 @@ public class Game extends Canvas implements Runnable {
             g2d.setTransform(worldTransform);
         }
 
+        // Grade de pintura de barreiras: mostra as celulas do World enquanto a
+        // ferramenta WORLD_PAINT esta ativa (mesmo em mundo ainda vazio).
+        if (gameState == GameState.EDITING && currentTool == ToolType.WORLD_PAINT
+                && world != null && shouldApplyCameraTransform) {
+            AffineTransform paintTransform = g2d.getTransform();
+            drawWorldPaintGrid(g2d, width, height);
+            g2d.setTransform(paintTransform);
+        }
+
         // Debug de colliders (espaco do mundo) — espelha o render() do editor Swing.
         // Independe de selecao; respeita 'showColliders'.
         if (gameState == GameState.EDITING && showColliders && collisionManager != null) {
             AffineTransform colliderTransform = g2d.getTransform();
             collisionManager.debugRender(g2d);
             g2d.setTransform(colliderTransform);
+        }
+
+        // Visualizador de camera (espaco do mundo): retangulo de captura de cada camera,
+        // para o criador ver "para onde a camera aponta". So no editor, respeita a flag.
+        if (gameState == GameState.EDITING && showCameraBounds) {
+            AffineTransform camBoundsTransform = g2d.getTransform();
+            renderCameraBounds(g2d, width, height, selected);
+            g2d.setTransform(camBoundsTransform);
         }
 
         // Realces de multi-selecao (contorno tracejado laranja, sem alcas) para os
@@ -1723,6 +2168,20 @@ public class Game extends Canvas implements Runnable {
             g2d.drawRect(sx - hs / 2 - 2, sy + sh - hs / 2 + 2, hs, hs);
             g2d.drawRect(sx + sw - hs / 2 + 2, sy + sh - hs / 2 + 2, hs, hs);
             g2d.setTransform(selTransform);
+        }
+
+        // Gizmo de collider (item 8b): contorno da hitbox + alcas de redimensionamento
+        // para o objeto selecionado com um ColliderComponent, quando showColliders esta
+        // ligado. Espaco de mundo. Desenhado antes do gizmo de transform para que as
+        // setas de mover/escalar fiquem por cima no centro.
+        if (selected != null && showColliders && gameState == GameState.EDITING
+                && !(selected instanceof Camera)) {
+            ColliderComponent cc = selected.getComponent(ColliderComponent.class);
+            if (cc != null) {
+                AffineTransform colGizmoTransform = g2d.getTransform();
+                renderColliderGizmo(g2d, cc);
+                g2d.setTransform(colGizmoTransform);
+            }
         }
 
         // Gizmos da ferramenta atual (Mover/Rotacionar/Escalar) para o objeto

@@ -36,6 +36,11 @@ public class GameObject {
     protected Game game;
     protected String spritePath;
     protected boolean visible = true; // Controls if object is rendered
+
+    // Organizacao logica (nao afeta render): tag livre para busca/gameplay e camada
+    // nomeada para agrupamento/filtragem. Serializados na Scene.
+    protected String tag = "";
+    protected String layer = "Default";
     
     // Color for the object name in hierarchy (default white)
     protected Color nameColor = Color.WHITE;
@@ -251,9 +256,34 @@ public class GameObject {
     public Color getNameColor() {
         return nameColor;
     }
-    
+
     public void setNameColor(Color nameColor) {
         this.nameColor = nameColor != null ? nameColor : Color.WHITE;
+    }
+
+    // ==================== TAGS & CAMADAS ====================
+
+    /** Tag livre do objeto (busca/gameplay). Nunca null. */
+    public String getTag() {
+        return tag != null ? tag : "";
+    }
+
+    public void setTag(String tag) {
+        this.tag = tag != null ? tag : "";
+    }
+
+    /** True se a tag do objeto e igual (ignora caixa) a {@code tag}. */
+    public boolean hasTag(String tag) {
+        return this.tag != null && this.tag.equalsIgnoreCase(tag);
+    }
+
+    /** Camada nomeada do objeto (agrupamento/filtragem). Nunca null/vazia. */
+    public String getLayer() {
+        return (layer != null && !layer.isEmpty()) ? layer : "Default";
+    }
+
+    public void setLayer(String layer) {
+        this.layer = (layer != null && !layer.isEmpty()) ? layer : "Default";
     }
     
     // ==================== SISTEMA DE ÁUDIO ====================
@@ -393,7 +423,12 @@ public class GameObject {
 
     public void removeComponent(Component component) {
         if (component == null) return;
-        components.remove(component);
+        boolean removed = components.remove(component);
+        if (removed) {
+            // Hook de limpeza (ex.: ColliderComponent se desregistra do CollisionManager)
+            // antes de perder a referencia ao dono.
+            component.onDetach();
+        }
         if (component instanceof IgnisScript) {
             IgnisScript script = (IgnisScript) component;
             scripts.remove(script);
@@ -583,15 +618,24 @@ public class GameObject {
     }
     
     /**
-     * Gets the collider type
+     * Gets the collider type.
+     *
+     * @deprecated Item 8c: a hitbox agora é fonte única no {@link ColliderComponent}.
+     *     Prefira {@code getComponent(ColliderComponent.class)}. Mantido para os
+     *     scripts legados ({@link IgnisScript#setColliderType}) e o editor Swing.
      */
+    @Deprecated
     public IgnisSampleCollisions.ColliderType getColliderType() {
         return colliderType;
     }
-    
+
     /**
-     * Sets the collider type and creates the appropriate collider
+     * Sets the collider type and creates the appropriate collider.
+     *
+     * @deprecated Item 8c: use um {@link ColliderComponent} como fonte única da
+     *     hitbox. Mantido para compatibilidade com scripts legados e o editor Swing.
      */
+    @Deprecated
     public void setColliderType(IgnisSampleCollisions.ColliderType type) {
         this.colliderType = type;
         
@@ -629,15 +673,21 @@ public class GameObject {
     }
     
     /**
-     * Gets the collision mode (TRIGGER or COLLISION)
+     * Gets the collision mode (TRIGGER or COLLISION).
+     *
+     * @deprecated Item 8c: substituído por {@link ColliderComponent#isTrigger()}.
      */
+    @Deprecated
     public IgnisSampleCollisions.CollisionMode getCollisionMode() {
         return collisionMode;
     }
-    
+
     /**
-     * Sets the collision mode
+     * Sets the collision mode.
+     *
+     * @deprecated Item 8c: substituído por {@link ColliderComponent#setTrigger(boolean)}.
      */
+    @Deprecated
     public void setCollisionMode(IgnisSampleCollisions.CollisionMode mode) {
         this.collisionMode = mode;
         if (collider != null) {

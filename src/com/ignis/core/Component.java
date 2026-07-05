@@ -30,6 +30,15 @@ public abstract class Component {
     public void update(float deltaTime) {
     }
 
+    /**
+     * Chamado quando o componente e removido do GameObject (antes de a referencia
+     * {@link #gameObject} ser anulada). Ponto de limpeza para componentes que
+     * registram recursos externos — ex.: o {@link ColliderComponent} se desregistra
+     * do CollisionManager aqui. No-op por padrao.
+     */
+    public void onDetach() {
+    }
+
     // ------------------------------------------------------------------
     // Serializacao generica (plano item 5): por padrao TODO componente
     // persiste seus campos @Serialize por reflexao — a Scene nao precisa de

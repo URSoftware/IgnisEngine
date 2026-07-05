@@ -123,7 +123,34 @@ public abstract class IgnisScript extends Component {
     public Game getGame() { return game; }
     
     // ==================== MÉTODOS DE CONVENIÊNCIA ====================
-    
+
+    /**
+     * Troca a cena ativa do jogo pela cena de nome dado (transição de cenário em
+     * runtime). Requer que o host (editor ou runtime) tenha registrado um
+     * {@code SceneLoader} no {@link Game}.
+     *
+     * @param sceneName nome da cena de destino
+     * @return true se a cena foi carregada; false se não existir ou não houver loader
+     */
+    protected boolean loadScene(String sceneName) {
+        return game != null && game.loadScene(sceneName);
+    }
+
+    /** Alias de {@link #loadScene(String)} (transição de cenário). */
+    protected boolean changeScene(String sceneName) {
+        return loadScene(sceneName);
+    }
+
+    /** Primeiro objeto da cena com a tag dada, ou null. */
+    protected GameObject findByTag(String tag) {
+        return game != null ? game.findByTag(tag) : null;
+    }
+
+    /** Todos os objetos da cena com a tag dada. */
+    protected java.util.List<GameObject> findAllByTag(String tag) {
+        return game != null ? game.findAllByTag(tag) : new java.util.ArrayList<>();
+    }
+
     /**
      * Obtém o GameObject dono deste script.
      * @return O GameObject associado a este script
@@ -879,6 +906,7 @@ public abstract class IgnisScript extends Component {
      * Define o tipo de collider para este objeto.
      * @param type Tipo do collider: "none", "aabb", "circle", "polygon"
      */
+    @SuppressWarnings("deprecation") // API legada de collider (item 8c); mantida para scripts
     protected void setColliderType(String type) {
         if (gameObject == null) return;
         
@@ -906,6 +934,7 @@ public abstract class IgnisScript extends Component {
      * Define o modo de colisão para este objeto.
      * @param mode Modo de colisão: "collision" (resposta física) ou "trigger" (apenas eventos)
      */
+    @SuppressWarnings("deprecation") // API legada de collider (item 8c); mantida para scripts
     protected void setCollisionMode(String mode) {
         if (gameObject == null) return;
         

@@ -124,6 +124,8 @@ public class Scene {
             entityJson.put("rotation", entity.getRotation());
             entityJson.put("zIndex", entity.getZIndex());
             entityJson.put("visible", entity.isVisible());
+            entityJson.put("tag", entity.getTag());
+            entityJson.put("layer", entity.getLayer());
 
             // Serializar todos os componentes anexados
             JSONArray componentsArray = new JSONArray();
@@ -225,6 +227,8 @@ public class Scene {
             entity.setRotation(entityJson.optDouble("rotation", 0.0));
             entity.setZIndex(entityJson.optInt("zIndex", 0));
             entity.setVisible(entityJson.optBoolean("visible", entityJson.optBoolean("visibleCheck", true)));
+            entity.setTag(entityJson.optString("tag", ""));
+            entity.setLayer(entityJson.optString("layer", "Default"));
 
             // CARREGAMENTO DE COMPONENTES E SUPORTE A MIGRACAO RETROATIVA
             if (entityJson.has("components")) {
