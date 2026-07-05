@@ -57,68 +57,67 @@ public class IgnisProjectIO {
     }
 
     /**
-     * Saves a project in .ignis format
-     * 
-     * @param project   The project to be saved
-     * @param ignisFile The destination .ignis file
-     * @throws IOException In case of IO error
-     */
-    public static void save(Project project, File ignisFile) throws IOException {
-        // If the file is being saved outside the projects folder, move it there
-        File projectsRoot = getProjectsRootFolder();
-        String projectName = ignisFile.getName().replace(".ignis", "");
+         * Saves a project in .ignis format
+         * 
+         * @param project   The project to be saved
+         * @param ignisFile The destination .ignis file
+         * @throws IOException In case of IO error
+         */
+        public static void save(Project project, File ignisFile) throws IOException {
+            // If the file is being saved outside the projects folder, move it there
+            File projectsRoot = getProjectsRootFolder();
+            String projectName = ignisFile.getName().replace(".ignis", "");
 
-        // Create project folder inside projects/
-        File projectMainFolder = new File(projectsRoot, projectName);
-        if (!projectMainFolder.exists()) {
-            projectMainFolder.mkdirs();
-        }
-
-        // Create "project" folder inside the project folder
-        File projectFolder = new File(projectMainFolder, PROJECT_FOLDER_NAME);
-        ensureProjectFolderStructure(projectFolder);
-
-        // Relative asset paths in scenes resolve against this folder
-        AssetResolver.setProjectFolder(projectFolder);
-
-        // The .ignis file goes into the project folder
-        File actualIgnisFile = new File(projectMainFolder, projectName + ".ignis");
-
-        // Create ZIP file
-        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(actualIgnisFile))) {
-
-            // 1. Save project.json
-            ZipEntry projectEntry = new ZipEntry(PROJECT_FILE);
-            zos.putNextEntry(projectEntry);
-            byte[] projectBytes = project.toJSON().toString(2).getBytes("UTF-8");
-            zos.write(projectBytes);
-            zos.closeEntry();
-
-            // 2. Save main scene
-            Scene currentScene = project.getCurrentScene();
-            if (currentScene != null) {
-                String sceneFileName = SCENES_DIR + project.getMainScene();
-                ZipEntry sceneEntry = new ZipEntry(sceneFileName);
-                zos.putNextEntry(sceneEntry);
-                byte[] sceneBytes = currentScene.toJSON().toString(2).getBytes("UTF-8");
-                zos.write(sceneBytes);
-                zos.closeEntry();
+            // Create project folder inside projects/
+            File projectMainFolder = new File(projectsRoot, projectName);
+            if (!projectMainFolder.exists()) {
+                projectMainFolder.mkdirs();
             }
 
-            // 3. Create assets directory (empty for now)
-            ZipEntry assetsDir = new ZipEntry(ASSETS_DIR);
-            zos.putNextEntry(assetsDir);
-            zos.closeEntry();
+            // Create "project" folder inside the project folder
+            File projectFolder = new File(projectMainFolder, PROJECT_FOLDER_NAME);
+            ensureProjectFolderStructure(projectFolder);
 
-            // TODO: Copy assets into the ZIP
-            // copyAssetsToZip(zos, project);
+            // Relative asset paths in scenes resolve against this folder
+            AssetResolver.setProjectFolder(projectFolder);
+
+            // The .ignis file goes into the project folder
+            File actualIgnisFile = new File(projectMainFolder, projectName + ".ignis");
+
+            // Create ZIP file
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(actualIgnisFile))) {
+
+                // 1. Save project.json
+                ZipEntry projectEntry = new ZipEntry(PROJECT_FILE);
+                zos.putNextEntry(projectEntry);
+                byte[] projectBytes = project.toJSON().toString(2).getBytes("UTF-8");
+                zos.write(projectBytes);
+                zos.closeEntry();
+
+                // 2. Save ALL scenes
+                for (Scene scene : project.getScenes()) {
+                    String sceneFileName = SCENES_DIR + scene.getSceneName() + ".scene.json";
+                    ZipEntry sceneEntry = new ZipEntry(sceneFileName);
+                    zos.putNextEntry(sceneEntry);
+                    byte[] sceneBytes = scene.toJSON().toString(2).getBytes("UTF-8");
+                    zos.write(sceneBytes);
+                    zos.closeEntry();
+                }
+
+                // 3. Create assets directory (empty for now)
+                ZipEntry assetsDir = new ZipEntry(ASSETS_DIR);
+                zos.putNextEntry(assetsDir);
+                zos.closeEntry();
+
+                // TODO: Copy assets into the ZIP
+                // copyAssetsToZip(zos, project);
+            }
+
+            // Update file reference in project (use actual file in projects folder)
+            project.setProjectFile(actualIgnisFile);
+
+            com.ignis.core.IgnisLogger.info("Projeto salvo em: " + actualIgnisFile.getName());
         }
-
-        // Update file reference in project (use actual file in projects folder)
-        project.setProjectFile(actualIgnisFile);
-
-        com.ignis.core.IgnisLogger.info("Projeto salvo em: " + actualIgnisFile.getName());
-    }
 
     /**
      * Returns the "project" folder associated with the .ignis file
@@ -185,58 +184,66 @@ public class IgnisProjectIO {
     }
 
     /**
-     * Loads a project from .ignis format
-     * 
-     * @param ignisFile The .ignis file to be loaded
-     * @param game      Reference to Game for entities
-     * @return The loaded project
-     * @throws IOException In case of IO error
-     */
-    public static Project load(File ignisFile, Game game) throws IOException {
-        Project project = new Project();
-        project.setProjectFile(ignisFile);
+         * Loads a project from .ignis format
+         * 
+         * @param ignisFile The .ignis file to be loaded
+         * @param game      Reference to Game for entities
+         * @return The loaded project
+         * @throws IOException In case of IO error
+         */
+        public static Project load(File ignisFile, Game game) throws IOException {
+            Project project = new Project();
+            project.setProjectFile(ignisFile);
 
-        // Must be set before parsing scenes: entities load their sprites
-        // immediately, resolving relative paths against the project folder
-        AssetResolver.setProjectFolder(getProjectFolder(ignisFile));
+            // Must be set before parsing scenes: entities load their sprites
+            // immediately, resolving relative paths against the project folder
+            AssetResolver.setProjectFolder(getProjectFolder(ignisFile));
 
-        // Extract and read the ZIP
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(ignisFile))) {
-            ZipEntry entry;
+            // Extract and read the ZIP
+            try (ZipInputStream zis = new ZipInputStream(new FileInputStream(ignisFile))) {
+                ZipEntry entry;
 
-            while ((entry = zis.getNextEntry()) != null) {
-                String entryName = entry.getName();
+                while ((entry = zis.getNextEntry()) != null) {
+                    String entryName = entry.getName();
 
-                if (entryName.equals(PROJECT_FILE)) {
-                    // Read project.json
-                    String json = readZipEntry(zis);
-                    JSONObject projectJson = new JSONObject(json);
+                    if (entryName.equals(PROJECT_FILE)) {
+                        // Read project.json
+                        String json = readZipEntry(zis);
+                        JSONObject projectJson = new JSONObject(json);
 
-                    // Validate engine version
-                    String fileVersion = projectJson.getString("engineVersion");
-                    if (!isVersionCompatible(fileVersion)) {
-                        System.err.println("Warning: File version (" + fileVersion +
-                                ") may not be compatible with the current engine (" + Project.ENGINE_VERSION + ")");
+                        // Validate engine version
+                        String fileVersion = projectJson.getString("engineVersion");
+                        if (!isVersionCompatible(fileVersion)) {
+                            System.err.println("Warning: File version (" + fileVersion +
+                                    ") may not be compatible with the current engine (" + Project.ENGINE_VERSION + ")");
+                        }
+
+                        project.setProjectName(projectJson.getString("projectName"));
+                        project.setMainScene(projectJson.getString("mainScene"));
+
+                    } else if (entryName.startsWith(SCENES_DIR) && entryName.endsWith(".scene.json")) {
+                        // Read scene
+                        String json = readZipEntry(zis);
+                        JSONObject sceneJson = new JSONObject(json);
+                        Scene scene = Scene.fromJSON(sceneJson, game);
+                        project.addScene(scene);
                     }
 
-                    project.setProjectName(projectJson.getString("projectName"));
-                    project.setMainScene(projectJson.getString("mainScene"));
-
-                } else if (entryName.startsWith(SCENES_DIR) && entryName.endsWith(".scene.json")) {
-                    // Read scene
-                    String json = readZipEntry(zis);
-                    JSONObject sceneJson = new JSONObject(json);
-                    Scene scene = Scene.fromJSON(sceneJson, game);
-                    project.setCurrentScene(scene);
+                    zis.closeEntry();
                 }
-
-                zis.closeEntry();
             }
-        }
 
-        com.ignis.core.IgnisLogger.info("Projeto carregado: " + project.getProjectName());
-        return project;
-    }
+            // Set current scene to main scene or first scene
+            Scene mainScene = project.getSceneByName(project.getMainScene());
+            if (mainScene != null) {
+                project.setCurrentScene(mainScene);
+            } else if (!project.getScenes().isEmpty()) {
+                project.setCurrentScene(project.getScenes().get(0));
+            }
+
+            com.ignis.core.IgnisLogger.info("Projeto carregado: " + project.getProjectName() + " (" + project.getScenes().size() + " cenas)");
+            return project;
+        }
 
     /**
      * Reads the content of a ZIP entry as String

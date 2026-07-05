@@ -11,6 +11,7 @@ import com.ignis.core.SpriteComponent;
 import com.ignis.core.Texture2D;
 import com.ignis.core.ColliderComponent;
 import com.ignis.core.HealthComponent;
+import com.ignis.core.RigidbodyComponent;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -77,6 +78,13 @@ import java.io.File;
  * O editor Swing classico continua intacto.
  */
 public class IgnisEditorApp extends Application {
+
+    // Singleton instance for accessing from FxConsolePanel
+    private static IgnisEditorApp instance;
+
+    public static IgnisEditorApp getInstance() {
+        return instance;
+    }
 
     private final Game game = new Game();
     private GameObject selected;
@@ -155,9 +163,10 @@ public class IgnisEditorApp extends Application {
     private ToggleButton btnScale;
 
     @Override
-    public void start(Stage stage) {
-        this.primaryStage = stage;
-        seedSampleScene();
+        public void start(Stage stage) {
+            this.primaryStage = stage;
+            instance = this; // Initialize singleton
+            seedSampleScene();
         // O editor JavaFX renderiza via AnimationTimer (renderWorldTo). O pipeline
         // AWT (repaint/BufferStrategy) e desnecessario e gera trabalho inutil.
         game.setSuppressAwtRepaint(true);
@@ -483,39 +492,38 @@ public class IgnisEditorApp extends Application {
         focusSelectedItem.setAccelerator(new KeyCodeCombination(KeyCode.F));
         focusSelectedItem.setOnAction(e -> focusCameraOnSelected());
         
-        CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
-        showGridItem.setSelected(game.isShowGrid());
-        showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
-        showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
-        
-        Menu gridSizeMenu = new Menu("Grid Size");
-        ToggleGroup gridSizeGroup = new ToggleGroup();
-        int[] gridSizes = {16, 32, 64, 128};
-        for (int size : gridSizes) {
-            RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
-            sizeItem.setToggleGroup(gridSizeGroup);
-            sizeItem.setSelected(game.getGridSize() == size);
-            sizeItem.setOnAction(e -> game.setGridSize(size));
-            gridSizeMenu.getItems().add(sizeItem);
-        }
-        
         CheckMenuItem showCollidersItem = new CheckMenuItem("Show Colliders");
-        showCollidersItem.setSelected(game.isShowColliders());
-        showCollidersItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
-        showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
+                showCollidersItem.setSelected(game.isShowColliders());
+                showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
 
-        consoleMenuItem = new CheckMenuItem("Mostrar Console");
-        consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
-        consoleMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.J, KeyCombination.CONTROL_DOWN));
-        consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
+                CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
+                showGridItem.setSelected(game.isShowGrid());
+                showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
+                showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
 
-        view.getItems().addAll(
-            zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
-            resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
-            showGridItem, gridSizeMenu, new SeparatorMenuItem(),
-            showCollidersItem, new SeparatorMenuItem(),
-            consoleMenuItem
-        );
+                CheckMenuItem snapToGridItem = new CheckMenuItem("Snap to Grid");
+                snapToGridItem.setSelected(game.isSnapToGrid());
+                snapToGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
+                snapToGridItem.setOnAction(e -> game.setSnapToGrid(snapToGridItem.isSelected()));
+
+                Menu gridSizeMenu = new Menu("Grid Size");
+                ToggleGroup gridSizeGroup = new ToggleGroup();
+                int[] gridSizes = {16, 32, 64, 128};
+                for (int size : gridSizes) {
+                    RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
+                    sizeItem.setToggleGroup(gridSizeGroup);
+                    sizeItem.setSelected(game.getGridSize() == size);
+                    sizeItem.setOnAction(e -> game.setGridSize(size));
+                    gridSizeMenu.getItems().add(sizeItem);
+                }
+
+                view.getItems().addAll(
+                    zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
+                    resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
+                    showGridItem, snapToGridItem, gridSizeMenu, new SeparatorMenuItem(),
+                    showCollidersItem, new SeparatorMenuItem(),
+                    consoleMenuItem
+                );
 
         Menu help = new Menu("Ajuda");
         MenuItem about = new MenuItem("Sobre");
@@ -1434,134 +1442,181 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Hierarchy ----------------
 
-    private TreeView<String> buildHierarchy() {
-        refreshHierarchy();
-        hierarchyRoot.setExpanded(true);
-        TreeView<String> tree = new TreeView<>(hierarchyRoot);
-        // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
-        tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
-        // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
-        // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
-        tree.setCellFactory(tv -> {
-            javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
-                @Override protected void updateItem(String item, boolean empty) {
-                    super.updateItem(item, empty);
-                    if (empty || item == null) {
-                        setText(null);
-                        setGraphic(null);
-                        setStyle(null);
-                    } else {
-                        TreeItem<String> treeItem = getTreeItem();
-                        if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
-                            // É um componente
-                            setText("  ↳  " + item);
-                            setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
+        private TreeView<String> buildHierarchy() {
+            refreshHierarchy();
+            hierarchyRoot.setExpanded(true);
+            TreeView<String> tree = new TreeView<>(hierarchyRoot);
+            // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
+            tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+            // Search/filter field for hierarchy
+            TextField hierarchyFilter = new TextField();
+            hierarchyFilter.setPromptText("Filtrar Hierarchy...");
+            hierarchyFilter.textProperty().addListener((obs, oldVal, newVal) -> applyHierarchyFilter(newVal));
+
+            // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
+            // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
+            // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
+            tree.setCellFactory(tv -> {
+                javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
+                    @Override protected void updateItem(String item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText(null);
+                            setGraphic(null);
+                            setStyle(null);
                         } else {
-                            // É um GameObject ou o nó raiz "Cena"
-                            setText(item);
-                            if (treeItem == hierarchyRoot) {
-                                setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
+                            TreeItem<String> treeItem = getTreeItem();
+                            if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
+                                // É um componente
+                                setText("  ↳  " + item);
+                                setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
                             } else {
-                                setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
+                                // É um GameObject ou o nó raiz "Cena"
+                                setText(item);
+                                if (treeItem == hierarchyRoot) {
+                                    setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
+                                } else {
+                                    setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
+                                }
                             }
                         }
                     }
-                }
-            };
-            cell.setOnMousePressed(e -> {
-                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    tv.getSelectionModel().select(cell.getTreeItem());
-                }
-            });
-            cell.setOnDragDetected(e -> {
-                if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
-                    javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
-                    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                    content.putString(cell.getItem());
-                    db.setContent(content);
-                    e.consume();
-                }
-            });
-            return cell;
-        });
-        // Listener de selecao: sincroniza o primario + secundarios a partir da
-        // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
-        // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
-        tree.getSelectionModel().getSelectedItems().addListener(
-                (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
-            if (suppressSelectionEvents) return;
-            suppressSelectionEvents = true;
-            try {
-                var selItems = tree.getSelectionModel().getSelectedItems();
-                java.util.List<GameObject> ents = game.getEntities();
-                if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
-                    setSelected(null);
-                    clearSecondarySelection();
-                    return;
-                }
-                // O item com foco (ultimo clicado) vira o primario.
-                TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
-                if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
-                
-                TreeItem<String> goItem = focusedItem;
-                if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
-                    goItem = focusedItem.getParent();
-                    selectedComponentName = focusedItem.getValue();
-                } else {
-                    selectedComponentName = null;
-                }
-                
-                int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
-                GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
-                setSelected(primary);
-                
-                // Montar a lista de secundarios (os demais).
-                secondarySelection.clear();
-                for (TreeItem<String> ti : selItems) {
-                    if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
-                    TreeItem<String> pItem = ti;
-                    if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
-                        pItem = ti.getParent();
+                };
+                cell.setOnMousePressed(e -> {
+                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                        tv.getSelectionModel().select(cell.getTreeItem());
                     }
-                    int idx = hierarchyRoot.getChildren().indexOf(pItem);
-                    if (idx >= 0 && idx < ents.size()) {
-                        GameObject go = ents.get(idx);
-                        if (go != primary && !secondarySelection.contains(go)) {
-                            secondarySelection.add(go);
+                });
+                cell.setOnDragDetected(e -> {
+                    if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
+                        javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
+                        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+                        content.putString(cell.getItem());
+                        db.setContent(content);
+                        e.consume();
+                    }
+                });
+                return cell;
+            });
+            // Listener de selecao: sincroniza o primario + secundarios a partir da
+            // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
+            // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
+            tree.getSelectionModel().getSelectedItems().addListener(
+                    (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
+                if (suppressSelectionEvents) return;
+                suppressSelectionEvents = true;
+                try {
+                    var selItems = tree.getSelectionModel().getSelectedItems();
+                    java.util.List<GameObject> ents = game.getEntities();
+                    if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
+                        setSelected(null);
+                        clearSecondarySelection();
+                        return;
+                    }
+                    // O item com foco (ultimo clicado) vira o primario.
+                    TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
+                    if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
+                
+                    TreeItem<String> goItem = focusedItem;
+                    if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
+                        goItem = focusedItem.getParent();
+                        selectedComponentName = focusedItem.getValue();
+                    } else {
+                        selectedComponentName = null;
+                    }
+                
+                    int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
+                    GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
+                    setSelected(primary);
+                
+                    // Montar a lista de secundarios (os demais).
+                    secondarySelection.clear();
+                    for (TreeItem<String> ti : selItems) {
+                        if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
+                        TreeItem<String> pItem = ti;
+                        if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
+                            pItem = ti.getParent();
+                        }
+                        int idx = hierarchyRoot.getChildren().indexOf(pItem);
+                        if (idx >= 0 && idx < ents.size()) {
+                            GameObject go = ents.get(idx);
+                            if (go != primary && !secondarySelection.contains(go)) {
+                                secondarySelection.add(go);
+                            }
                         }
                     }
+                    syncHighlights();
+                } finally {
+                    suppressSelectionEvents = false;
                 }
-                syncHighlights();
-            } finally {
-                suppressSelectionEvents = false;
-            }
-        });
-        tree.setOnMouseClicked(ev -> {
-            if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
-                ContextMenu menu;
-                if (sel != null && sel != hierarchyRoot) {
-                    menu = buildHierarchyContextMenu();
-                } else {
-                    menu = new ContextMenu();
-                    MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
-                    criarObjeto.setOnAction(e -> createEntity("GameObject"));
-                    MenuItem criarCamera = new MenuItem("Criar Câmera");
-                    criarCamera.setOnAction(e -> createEntity("Camera"));
-                    menu.getItems().addAll(criarObjeto, criarCamera);
+            });
+            tree.setOnMouseClicked(ev -> {
+                if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
+                    ContextMenu menu;
+                    if (sel != null && sel != hierarchyRoot) {
+                        menu = buildHierarchyContextMenu();
+                    } else {
+                        menu = new ContextMenu();
+                        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
+                        criarObjeto.setOnAction(e -> createEntity("GameObject"));
+                        MenuItem criarCamera = new MenuItem("Criar Câmera");
+                        criarCamera.setOnAction(e -> createEntity("Camera"));
+                        menu.getItems().addAll(criarObjeto, criarCamera);
+                    }
+                    menu.show(tree, ev.getScreenX(), ev.getScreenY());
                 }
-                menu.show(tree, ev.getScreenX(), ev.getScreenY());
+            });
+            // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
+            tree.setOnKeyPressed(ev -> {
+                if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
+                else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
+                else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
+            });
+        
+            // Wrap tree with filter field
+            VBox hierarchyBox = new VBox(4, hierarchyFilter, tree);
+            VBox.setVgrow(tree, Priority.ALWAYS);
+            return tree;
+        }
+
+        // Apply filter to hierarchy tree
+        private void applyHierarchyFilter(String filterText) {
+            if (filterText == null || filterText.trim().isEmpty()) {
+                // Show all items
+                for (TreeItem<String> item : hierarchyRoot.getChildren()) {
+                    item.setExpanded(true);
+                    setItemVisible(item, true);
+                }
+            } else {
+                String lowerFilter = filterText.toLowerCase();
+                for (TreeItem<String> item : hierarchyRoot.getChildren()) {
+                    boolean matches = item.getValue().toLowerCase().contains(lowerFilter);
+                    // Check children too
+                    for (TreeItem<String> child : item.getChildren()) {
+                        if (child.getValue().toLowerCase().contains(lowerFilter)) {
+                            matches = true;
+                            break;
+                        }
+                    }
+                    item.setExpanded(matches);
+                    setItemVisible(item, matches);
+                }
             }
-        });
-        // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
-        tree.setOnKeyPressed(ev -> {
-            if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
-            else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
-            else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
-        });
-        return tree;
-    }
+        }
+    
+        // Helper to set visibility of tree items (by collapsing/expanding or filtering)
+        private void setItemVisible(TreeItem<String> item, boolean visible) {
+            // For TreeView filtering, we use a filtered list approach or just expand/collapse
+            // Since TreeView doesn't have built-in filtering, we expand matching items
+            // and collapse non-matching ones
+            if (visible) {
+                item.setExpanded(true);
+            } else {
+                item.setExpanded(false);
+            }
+        }
 
     // ---------------- Mecanicas de edicao da cena ----------------
 
@@ -2102,63 +2157,109 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
 
-    private javafx.scene.Node buildAssetBrowser() {
-        VBox box = new VBox(4);
-        box.getStyleClass().add("ignis-panel");
-        Label title = new Label("Assets");
-        title.getStyleClass().add("panel-title");
+        private javafx.scene.Node buildAssetBrowser() {
+            VBox box = new VBox(4);
+            box.getStyleClass().add("ignis-panel");
+            Label title = new Label("Assets");
+            title.getStyleClass().add("panel-title");
 
-        assetTree = new TreeView<>();
-        assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                File file = newVal.getValue();
-                if (file != null && file.isFile() && file.getName().endsWith(".java")) {
-                    inspectScriptFile(file);
-                }
-            }
-        });
-        assetTree.setShowRoot(true);
-        assetTree.setCellFactory(tv -> {
-            TreeCell<File> cell = new TreeCell<>() {
-                @Override protected void updateItem(File item, boolean empty) {
-                    super.updateItem(item, empty);
-                    setText(empty || item == null ? null : item.getName());
-                }
-            };
-            // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
-            // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
-            // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
-            cell.setOnMousePressed(e -> {
-                if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    tv.getSelectionModel().select(cell.getTreeItem());
-                }
-            });
-            return cell;
-        });
-        assetTree.setOnMouseClicked(ev -> {
-            TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
-            File file = (sel != null) ? sel.getValue() : null;
-            if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                if (file != null && file.isFile()) {
-                    if (file.getName().endsWith(".prefab.json")) {
-                        instantiatePrefabByName(prefabNameOf(file));
-                    } else if (file.getName().endsWith(".java")) {
-                        openScriptInIgnisEditor(file);
-                    } else {
-                        openAssetFile(file);
+            // Search/filter field for asset browser
+            TextField assetFilter = new TextField();
+            assetFilter.setPromptText("Filtrar Assets...");
+            assetFilter.textProperty().addListener((obs, oldVal, newVal) -> applyAssetFilter(newVal));
+
+            assetTree = new TreeView<>();
+            assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal != null) {
+                    File file = newVal.getValue();
+                    if (file != null && file.isFile() && file.getName().endsWith(".java")) {
+                        inspectScriptFile(file);
                     }
                 }
-            } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                ContextMenu menu = buildAssetsContextMenu(file);
-                menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
-            }
-        });
-        VBox.setVgrow(assetTree, Priority.ALWAYS);
+            });
+            assetTree.setShowRoot(true);
+            assetTree.setCellFactory(tv -> {
+                TreeCell<File> cell = new TreeCell<>() {
+                    @Override protected void updateItem(File item, boolean empty) {
+                        super.updateItem(item, empty);
+                        setText(empty || item == null ? null : item.getName());
+                    }
+                };
+                // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
+                // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
+                // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
+                cell.setOnMousePressed(e -> {
+                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                        tv.getSelectionModel().select(cell.getTreeItem());
+                    }
+                });
+                return cell;
+            });
+            assetTree.setOnMouseClicked(ev -> {
+                TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
+                File file = (sel != null) ? sel.getValue() : null;
+                if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                    if (file != null && file.isFile()) {
+                        if (file.getName().endsWith(".prefab.json")) {
+                            instantiatePrefabByName(prefabNameOf(file));
+                        } else if (file.getName().endsWith(".java")) {
+                            openScriptInIgnisEditor(file);
+                        } else {
+                            openAssetFile(file);
+                        }
+                    }
+                } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
+                    ContextMenu menu = buildAssetsContextMenu(file);
+                    menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
+                }
+            });
+            VBox.setVgrow(assetTree, Priority.ALWAYS);
 
-        box.getChildren().addAll(title, assetTree);
-        refreshAssetBrowser();
-        return box;
-    }
+            box.getChildren().addAll(title, assetFilter, assetTree);
+            refreshAssetBrowser();
+            return box;
+        }
+
+        // Apply filter to asset browser tree
+        private void applyAssetFilter(String filterText) {
+            if (filterText == null || filterText.trim().isEmpty()) {
+                // Show all items
+                if (assetTree.getRoot() != null) {
+                    setAssetItemVisible(assetTree.getRoot(), true);
+                }
+            } else {
+                String lowerFilter = filterText.toLowerCase();
+                if (assetTree.getRoot() != null) {
+                    filterAssetTree(assetTree.getRoot(), lowerFilter);
+                }
+            }
+        }
+
+        // Recursive filter for asset tree
+        private boolean filterAssetTree(TreeItem<File> item, String lowerFilter) {
+            if (item == null) return false;
+        
+            boolean matches = item.getValue() != null && 
+                item.getValue().getName().toLowerCase().contains(lowerFilter);
+        
+            // Check children
+            for (TreeItem<File> child : item.getChildren()) {
+                if (filterAssetTree(child, lowerFilter)) {
+                    matches = true;
+                }
+            }
+        
+            setAssetItemVisible(item, matches);
+            return matches;
+        }
+
+        private void setAssetItemVisible(TreeItem<File> item, boolean visible) {
+            if (visible) {
+                item.setExpanded(true);
+            } else {
+                item.setExpanded(false);
+            }
+        }
 
     // Reconstroi a arvore a partir da pasta do projeto (ou vazia se nenhum projeto).
     private void refreshAssetBrowser() {
@@ -2214,23 +2315,50 @@ public class IgnisEditorApp extends Application {
     }
 
     private void openScriptInIgnisEditor(File file) {
-        if (!requireProject()) return;
-        try {
-            com.ignis.core.ScriptManager sm = game.getScriptManager();
-            if (sm == null) {
-                sm = new com.ignis.core.ScriptManager(projectFolder);
-                game.setScriptManager(sm);
+            if (!requireProject()) return;
+            try {
+                com.ignis.core.ScriptManager sm = game.getScriptManager();
+                if (sm == null) {
+                    sm = new com.ignis.core.ScriptManager(projectFolder);
+                    game.setScriptManager(sm);
+                }
+                String scriptName = file.getName();
+                if (scriptName.endsWith(".java")) {
+                    scriptName = scriptName.substring(0, scriptName.length() - 5);
+                }
+                FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
+                codeEditor.show();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
             }
-            String scriptName = file.getName();
-            if (scriptName.endsWith(".java")) {
-                scriptName = scriptName.substring(0, scriptName.length() - 5);
-            }
-            FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
-            codeEditor.show();
-        } catch (Exception ex) {
-            new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
         }
-    }
+
+        /** Abre o editor de script e posiciona o cursor na linha especificada. */
+        public void openScriptAtLine(String scriptName, int lineNumber) {
+            if (!requireProject()) return;
+            try {
+                com.ignis.core.ScriptManager sm = game.getScriptManager();
+                if (sm == null) {
+                    sm = new com.ignis.core.ScriptManager(projectFolder);
+                    game.setScriptManager(sm);
+                }
+                FxCodeEditor codeEditor = new FxCodeEditor(this, sm, scriptName);
+                codeEditor.show();
+                // Após mostrar, posicionar na linha (com pequeno delay para garantir que a UI esteja pronta)
+                javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(100));
+                pause.setOnFinished(e -> {
+                    try {
+                        // moveTo posiciona o cursor; getCurrentParagraph é 0-based
+                        codeEditor.moveToLine(lineNumber);
+                    } catch (Exception ex) {
+                        com.ignis.core.IgnisLogger.warn("Nao foi possivel posicionar na linha " + lineNumber + ": " + ex.getMessage());
+                    }
+                });
+                pause.play();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Falha ao abrir Editor de Codigo:\n" + ex.getMessage()).showAndWait();
+            }
+        }
 
     private void refreshHierarchy() {
         hierarchyRoot.setValue("Cena  (z menor = atras)");
@@ -2255,10 +2383,16 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(HealthComponent.class) != null) {
                 goItem.getChildren().add(new TreeItem<>("HealthComponent"));
             }
-            
+
+            // Sub-item de RigidbodyComponent se anexado
+            if (go.getComponent(RigidbodyComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("RigidbodyComponent"));
+            }
+
             // Outros componentes / scripts
             for (com.ignis.core.Component comp : go.getComponents()) {
-                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent || comp instanceof HealthComponent) {
+                if (comp instanceof SpriteComponent || comp instanceof ColliderComponent
+                        || comp instanceof HealthComponent || comp instanceof RigidbodyComponent) {
                     continue;
                 }
                 if (comp instanceof com.ignis.core.IgnisScript) {
@@ -2555,7 +2689,12 @@ public class IgnisEditorApp extends Application {
             if (healthComp != null) {
                 inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
             }
-            
+
+            RigidbodyComponent rigidbodyComp = go.getComponent(RigidbodyComponent.class);
+            if (rigidbodyComp != null) {
+                inspectorExtras.getChildren().add(buildRigidbodyComponentSection(go, rigidbodyComp));
+            }
+
             inspectorExtras.getChildren().add(buildColliderSection(go));
             if (go instanceof com.ignis.core.Camera) {
                 inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
@@ -2747,8 +2886,18 @@ public class IgnisEditorApp extends Application {
             if (go.getComponent(HealthComponent.class) == null) {
                 available.add("HealthComponent");
             }
-            
-            // 4. Scripts disponiveis
+
+            // 4. CanvasComponent (UI sobre o jogo) se nao anexado
+            if (go.getComponent(com.ignis.core.CanvasComponent.class) == null) {
+                available.add("CanvasComponent");
+            }
+
+            // 5. RigidbodyComponent (fisica) se nao anexado
+            if (go.getComponent(RigidbodyComponent.class) == null) {
+                available.add("RigidbodyComponent");
+            }
+
+            // 6. Scripts disponiveis
             for (String scriptName : sm.listAvailableScripts()) {
                 if (!go.getScriptNames().contains(scriptName)) {
                     available.add(scriptName);
@@ -2776,14 +2925,22 @@ public class IgnisEditorApp extends Application {
                     HealthComponent health = new HealthComponent();
                     go.addComponent(health);
                     setStatus("HealthComponent adicionado.");
+                } else if (selected.equals("CanvasComponent")) {
+                    go.addComponent(new com.ignis.core.CanvasComponent());
+                    setStatus("CanvasComponent adicionado — monte a interface via scripts (getComponent(CanvasComponent.class)).");
+                } else if (selected.equals("RigidbodyComponent")) {
+                    go.addComponent(new RigidbodyComponent());
+                    setStatus("RigidbodyComponent adicionado — use applyForce/applyImpulse em scripts.");
                 } else {
-                    go.getScriptNames().add(selected);
                     try {
                         com.ignis.core.IgnisScript inst = sm.createScriptInstance(selected, go, game);
                         if (inst != null) {
                             go.addComponent(inst);
                         }
                     } catch (Exception ignore) {}
+                    if (!go.getScriptNames().contains(selected)) {
+                        go.getScriptNames().add(selected); // preserva o anexo sem instancia
+                    }
                     setStatus("Script anexado: " + selected);
                 }
                 markProjectDirty();
@@ -2989,6 +3146,90 @@ public class IgnisEditorApp extends Application {
         });
         grid.add(new Label("Layer"), 0, r);
         grid.add(layerField, 1, r++);
+
+        box.getChildren().add(grid);
+        return box;
+    }
+
+    private javafx.scene.Node buildRigidbodyComponentSection(GameObject go, RigidbodyComponent comp) {
+        VBox box = new VBox(6);
+        box.getChildren().add(sectionTitle("Rigidbody Component"));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(6);
+        grid.setVgap(6);
+
+        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
+        labelCol.setMinWidth(100);
+        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labelCol, fieldCol);
+
+        int row = 0;
+
+        // Velocidade X
+        TextField velXField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityX()));
+        velXField.textProperty().addListener((o, a, b) -> {
+            try { comp.setVelocityX(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Velocidade X"), 0, row);
+        grid.add(velXField, 1, row); row++;
+
+        // Velocidade Y
+        TextField velYField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityY()));
+        velYField.textProperty().addListener((o, a, b) -> {
+            try { comp.setVelocityY(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Velocidade Y"), 0, row);
+        grid.add(velYField, 1, row); row++;
+
+        // Gravidade (useGravity)
+        CheckBox gravityCheck = new CheckBox("Usar gravidade global");
+        gravityCheck.setSelected(comp.isUseGravity());
+        gravityCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setUseGravity(b); markProjectDirty();
+        });
+        grid.add(gravityCheck, 0, row, 2, 1); row++;
+
+        // Gravidade global (estática)
+        TextField gravityField = new TextField(String.format(java.util.Locale.ROOT, "%.1f", RigidbodyComponent.getGlobalGravity()));
+        gravityField.textProperty().addListener((o, a, b) -> {
+            try { RigidbodyComponent.setGlobalGravity(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Gravidade Global"), 0, row);
+        grid.add(gravityField, 1, row); row++;
+
+        // Gravity scale
+        TextField gravScaleField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getGravityScale()));
+        gravScaleField.textProperty().addListener((o, a, b) -> {
+            try { comp.setGravityScale(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Escala Gravidade"), 0, row);
+        grid.add(gravScaleField, 1, row); row++;
+
+        // Massa
+        TextField massField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getMass()));
+        massField.textProperty().addListener((o, a, b) -> {
+            try { comp.setMass(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Massa"), 0, row);
+        grid.add(massField, 1, row); row++;
+
+        // Arrasto linear
+        TextField dragField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getLinearDrag()));
+        dragField.textProperty().addListener((o, a, b) -> {
+            try { comp.setLinearDrag(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
+        });
+        grid.add(new Label("Arrasto Linear"), 0, row);
+        grid.add(dragField, 1, row); row++;
+
+        // Congelado
+        CheckBox frozenCheck = new CheckBox("Congelado (ignora forcas)");
+        frozenCheck.setSelected(comp.isFrozen());
+        frozenCheck.selectedProperty().addListener((o, a, b) -> {
+            comp.setFrozen(b); markProjectDirty();
+        });
+        grid.add(frozenCheck, 0, row, 2, 1); row++;
 
         box.getChildren().add(grid);
         return box;

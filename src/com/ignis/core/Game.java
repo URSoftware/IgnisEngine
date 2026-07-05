@@ -46,9 +46,10 @@ public class Game extends Canvas implements Runnable {
     private boolean editorCameraMode = true;
     
     // Grid display settings
-    private boolean showGrid = false;
-    private int gridSize = 32; // Grid cell size in world units
-    private Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
+        private boolean showGrid = false;
+        private int gridSize = 32; // Grid cell size in world units
+        private Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
+        private boolean snapToGrid = true; // Snap objects to grid when dragging
 
     private Thread thread;
     // volatile: written by the EDT (stop) and read by the game loop thread
@@ -435,18 +436,53 @@ public class Game extends Canvas implements Runnable {
     private double camStartX, camStartY;
     private Runnable onPanUpdate;
 
+    /**
+     * CanvasComponents visiveis de todas as entidades, ordenados por
+     * sortingOrder (menor desenha primeiro; maior fica na frente e recebe
+     * input antes). UI por-objeto persistida na cena — ver CanvasComponent.
+     */
+    public java.util.List<CanvasComponent> getCanvasComponents() {
+        java.util.List<CanvasComponent> list = new java.util.ArrayList<>();
+        for (GameObject go : entities) {
+            if (!go.isVisible()) continue;
+            CanvasComponent cc = go.getComponent(CanvasComponent.class);
+            if (cc != null) list.add(cc);
+        }
+        list.sort(java.util.Comparator.comparingInt(CanvasComponent::getSortingOrder));
+        return list;
+    }
+
+    // Roteia clique de mouse para a UI durante o Play: CanvasComponents do topo
+    // para o fundo, depois o canvas global de runtime. true = UI consumiu.
+    private boolean routeMouseClickToUi(MouseEvent e, boolean pressed) {
+        if (gameState != GameState.PLAYING) return false;
+        java.util.List<CanvasComponent> ccs = getCanvasComponents();
+        for (int i = ccs.size() - 1; i >= 0; i--) {
+            if (ccs.get(i).processMouseClick(e, pressed)) return true;
+        }
+        return uiCanvas != null && uiCanvas.isVisible() && uiCanvas.processMouseClick(e, pressed);
+    }
+
+    // Idem para movimento do mouse (hover de botoes etc.).
+    private void routeMouseMoveToUi(MouseEvent e) {
+        if (gameState != GameState.PLAYING) return;
+        java.util.List<CanvasComponent> ccs = getCanvasComponents();
+        for (int i = ccs.size() - 1; i >= 0; i--) {
+            if (ccs.get(i).processMouseMove(e)) return;
+        }
+        if (uiCanvas != null && uiCanvas.isVisible()) uiCanvas.processMouseMove(e);
+    }
+
     private void setupMouseListeners() {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                // UI Canvas gets priority when playing
-                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
-                    if (uiCanvas.processMouseClick(e, true)) {
-                        e.consume();
-                        return;
-                    }
+                // UI (CanvasComponents + canvas global) tem prioridade no Play
+                if (routeMouseClickToUi(e, true)) {
+                    e.consume();
+                    return;
                 }
-                
+
                 // Middle mouse button for panning - handle first to avoid selection
                 if (e.getButton() == MouseEvent.BUTTON2) {
                     startPanning(e.getX(), e.getY());
@@ -461,14 +497,12 @@ public class Game extends Canvas implements Runnable {
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                // UI Canvas gets priority when playing
-                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
-                    if (uiCanvas.processMouseClick(e, false)) {
-                        e.consume();
-                        return;
-                    }
+                // UI (CanvasComponents + canvas global) tem prioridade no Play
+                if (routeMouseClickToUi(e, false)) {
+                    e.consume();
+                    return;
                 }
-                
+
                 if (e.getButton() == MouseEvent.BUTTON2) {
                     stopPanning();
                     e.consume();
@@ -483,11 +517,9 @@ public class Game extends Canvas implements Runnable {
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
-                // UI Canvas gets priority when playing
-                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
-                    uiCanvas.processMouseMove(e);
-                }
-                
+                // UI (CanvasComponents + canvas global) recebe hover no Play
+                routeMouseMoveToUi(e);
+
                 // Handle panning first
                 if (isPanning) {
                     handlePanning(e.getX(), e.getY());
@@ -498,11 +530,9 @@ public class Game extends Canvas implements Runnable {
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                // UI Canvas gets priority when playing
-                if (gameState == GameState.PLAYING && uiCanvas != null && uiCanvas.isVisible()) {
-                    uiCanvas.processMouseMove(e);
-                }
-                
+                // UI (CanvasComponents + canvas global) recebe hover no Play
+                routeMouseMoveToUi(e);
+
                 updateCursor(e.getX(), e.getY());
             }
         });
@@ -698,56 +728,68 @@ public class Game extends Canvas implements Runnable {
         double deltaY = accumulatedWorld.y - startWorld.y;
 
         switch (currentDragMode) {
-            case AXIS_X:
-                selectedObject.setX(objectStartX + deltaX);
-                break;
-            case AXIS_Y:
-                selectedObject.setY(objectStartY + deltaY);
-                break;
-            case CENTER:
-                selectedObject.setX(objectStartX + deltaX);
-                selectedObject.setY(objectStartY + deltaY);
-                break;
-            case ROTATE:
-                // Calculate rotation based on accumulated angle change
-                double centerX = objectStartX + objectStartWidth / 2.0;
-                double centerY = objectStartY + objectStartHeight / 2.0;
-                double startAngle = Math.atan2(startWorld.y - centerY, startWorld.x - centerX);
-                double currentAngle = Math.atan2(accumulatedWorld.y - centerY, accumulatedWorld.x - centerX);
-                double deltaAngle = Math.toDegrees(currentAngle - startAngle);
-                selectedObject.setRotation(objectStartRotation + deltaAngle);
-                break;
-            case SCALE_X:
-                // Scale from center: adjust position to keep center fixed
-                int newWidth = Math.max(1, objectStartWidth + (int)(deltaX * 2));
-                double oldCenterX = objectStartX + objectStartWidth / 2.0;
-                selectedObject.setWidth(newWidth);
-                selectedObject.setX(oldCenterX - newWidth / 2.0);
-                break;
-            case SCALE_Y:
-                // Scale from center: adjust position to keep center fixed
-                // Dragging up (positive Y) increases height
-                int newHeight = Math.max(1, objectStartHeight + (int)(deltaY * 2));
-                double oldCenterY = objectStartY + objectStartHeight / 2.0;
-                selectedObject.setHeight(newHeight);
-                selectedObject.setY(oldCenterY - newHeight / 2.0);
-                break;
-            case SCALE_UNIFORM:
-                // Uniform scale from center (use world delta)
-                // Dragging right/up increases size
-                double scaleAmount = deltaX + deltaY;
-                int newUniformWidth = Math.max(1, objectStartWidth + (int)scaleAmount);
-                int newUniformHeight = Math.max(1, objectStartHeight + (int)scaleAmount);
-                double origCenterX = objectStartX + objectStartWidth / 2.0;
-                double origCenterY = objectStartY + objectStartHeight / 2.0;
-                selectedObject.setWidth(newUniformWidth);
-                selectedObject.setHeight(newUniformHeight);
-                selectedObject.setX(origCenterX - newUniformWidth / 2.0);
-                selectedObject.setY(origCenterY - newUniformHeight / 2.0);
-                break;
-            default:
-                break;
-        }
+                    case AXIS_X:
+                        selectedObject.setX(objectStartX + deltaX);
+                        if (snapToGrid) selectedObject.setX(snapToGrid(selectedObject.getX()));
+                        break;
+                    case AXIS_Y:
+                        selectedObject.setY(objectStartY + deltaY);
+                        if (snapToGrid) selectedObject.setY(snapToGrid(selectedObject.getY()));
+                        break;
+                    case CENTER:
+                        selectedObject.setX(objectStartX + deltaX);
+                        selectedObject.setY(objectStartY + deltaY);
+                        if (snapToGrid) {
+                            selectedObject.setX(snapToGrid(selectedObject.getX()));
+                            selectedObject.setY(snapToGrid(selectedObject.getY()));
+                        }
+                        break;
+                    case ROTATE:
+                        // Calculate rotation based on accumulated angle change
+                        double centerX = objectStartX + objectStartWidth / 2.0;
+                        double centerY = objectStartY + objectStartHeight / 2.0;
+                        double startAngle = Math.atan2(startWorld.y - centerY, startWorld.x - centerX);
+                        double currentAngle = Math.atan2(accumulatedWorld.y - centerY, accumulatedWorld.x - centerX);
+                        double deltaAngle = Math.toDegrees(currentAngle - startAngle);
+                        selectedObject.setRotation(objectStartRotation + deltaAngle);
+                        break;
+                    case SCALE_X:
+                        // Scale from center: adjust position to keep center fixed
+                        int newWidth = Math.max(1, objectStartWidth + (int)(deltaX * 2));
+                        double oldCenterX = objectStartX + objectStartWidth / 2.0;
+                        selectedObject.setWidth(newWidth);
+                        selectedObject.setX(oldCenterX - newWidth / 2.0);
+                        if (snapToGrid) selectedObject.setX(snapToGrid(selectedObject.getX()));
+                        break;
+                    case SCALE_Y:
+                        // Scale from center: adjust position to keep center fixed
+                        // Dragging up (positive Y) increases height
+                        int newHeight = Math.max(1, objectStartHeight + (int)(deltaY * 2));
+                        double oldCenterY = objectStartY + objectStartHeight / 2.0;
+                        selectedObject.setHeight(newHeight);
+                        selectedObject.setY(oldCenterY - newHeight / 2.0);
+                        if (snapToGrid) selectedObject.setY(snapToGrid(selectedObject.getY()));
+                        break;
+                    case SCALE_UNIFORM:
+                        // Uniform scale from center (use world delta)
+                        // Dragging right/up increases size
+                        double scaleAmount = deltaX + deltaY;
+                        int newUniformWidth = Math.max(1, objectStartWidth + (int)scaleAmount);
+                        int newUniformHeight = Math.max(1, objectStartHeight + (int)scaleAmount);
+                        double origCenterX = objectStartX + objectStartWidth / 2.0;
+                        double origCenterY = objectStartY + objectStartHeight / 2.0;
+                        selectedObject.setWidth(newUniformWidth);
+                        selectedObject.setHeight(newUniformHeight);
+                        selectedObject.setX(origCenterX - newUniformWidth / 2.0);
+                        selectedObject.setY(origCenterY - newUniformHeight / 2.0);
+                        if (snapToGrid) {
+                            selectedObject.setX(snapToGrid(selectedObject.getX()));
+                            selectedObject.setY(snapToGrid(selectedObject.getY()));
+                        }
+                        break;
+                    default:
+                        break;
+                }
 
         // Don't notify listeners during drag - prevents Inspector from updating
         // constantly
@@ -1525,13 +1567,21 @@ public class Game extends Canvas implements Runnable {
         if (uiCanvas != null && uiCanvas.isVisible()) {
             // Ensure canvas has correct screen dimensions
             uiCanvas.updateScreenSize(getWidth(), getHeight());
-            
+
             // Reset transform for screen-space rendering
             g2d.setTransform(originalTransform);
-            
+
             // Render UI hierarchy
             uiCanvas.renderAll(g2d);
         }
+
+        // CanvasComponents das entidades (UI persistente por objeto), por cima
+        // do canvas global, ordenados por sortingOrder.
+        for (CanvasComponent cc : getCanvasComponents()) {
+            g2d.setTransform(originalTransform);
+            cc.render(g2d, getWidth(), getHeight());
+        }
+        g2d.setTransform(originalTransform);
         
         // ==================== ALERTS RENDERING ====================
         // Render alerts on top of everything
@@ -1687,6 +1737,20 @@ public class Game extends Canvas implements Runnable {
         }
 
         g2d.setTransform(originalTransform);
+
+        // ==================== UI RENDERING (espaco de tela) ====================
+        // Canvas global de runtime + CanvasComponents das entidades — paridade
+        // com o render() Swing (a UI nao aparecia no viewport JavaFX) e preview
+        // de design das interfaces tambem no modo de edicao.
+        if (uiCanvas != null && uiCanvas.isVisible()) {
+            uiCanvas.updateScreenSize(width, height);
+            uiCanvas.renderAll(g2d);
+            g2d.setTransform(originalTransform);
+        }
+        for (CanvasComponent cc : getCanvasComponents()) {
+            cc.render(g2d, width, height);
+            g2d.setTransform(originalTransform);
+        }
     }
 
     /**
@@ -2341,15 +2405,39 @@ public class Game extends Canvas implements Runnable {
     }
     
     /**
-     * Returns the current grid cell size.
-     */
-    public int getGridSize() {
-        return gridSize;
-    }
-    
-    /**
-     * Sets the grid color.
-     */
+         * Returns the current grid cell size.
+         */
+        public int getGridSize() {
+            return gridSize;
+        }
+
+        /**
+         * Sets whether objects should snap to grid when dragging.
+         */
+        public void setSnapToGrid(boolean snap) {
+            this.snapToGrid = snap;
+        }
+
+        /**
+         * Returns whether objects snap to grid when dragging.
+         */
+        public boolean isSnapToGrid() {
+            return snapToGrid;
+                    }
+
+                /**
+                 * Snaps a coordinate to the nearest grid line.
+                 * @param coord Coordinate in world units
+                 * @return Snapped coordinate
+                 */
+                public double snapToGrid(double coord) {
+                    if (!snapToGrid || gridSize <= 0) return coord;
+                    return Math.round(coord / gridSize) * gridSize;
+                }
+
+                /**
+                 * Sets the grid color.
+                 */
     public void setGridColor(Color color) {
         this.gridColor = color;
     }

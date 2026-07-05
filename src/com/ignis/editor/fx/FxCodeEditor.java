@@ -943,17 +943,33 @@ public class FxCodeEditor extends Stage {
     }
 
     public void closeEditor() {
-        if (autoSaveTimer != null) {
-            autoSaveTimer.stop();
+            if (autoSaveTimer != null) {
+                autoSaveTimer.stop();
+            }
+            hideAutocompletePopup();
+            if (editor instanceof com.ignis.editor.Editor) {
+                ((com.ignis.editor.Editor) editor).onScriptEditorClosed(scriptName);
+            }
+            close();
         }
-        hideAutocompletePopup();
-        if (editor instanceof com.ignis.editor.Editor) {
-            ((com.ignis.editor.Editor) editor).onScriptEditorClosed(scriptName);
-        }
-        close();
-    }
 
-    public void applyTheme(EditorTheme theme) {
+        /** Move o cursor para a linha especificada (1-based). */
+        public void moveToLine(int lineNumber) {
+            if (codeArea != null && lineNumber > 0) {
+                int paragraphIndex = lineNumber - 1; // 0-based
+                int maxParagraph = codeArea.getParagraphs().size() - 1;
+                if (paragraphIndex > maxParagraph) paragraphIndex = maxParagraph;
+                try {
+                    codeArea.moveTo(paragraphIndex, 0);
+                    // Scroll para garantir que a linha seja visível
+                    codeArea.requestFollowCaret();
+                } catch (Exception ex) {
+                    com.ignis.core.IgnisLogger.warn("Erro ao mover para linha " + lineNumber + ": " + ex.getMessage());
+                }
+            }
+        }
+
+        public void applyTheme(EditorTheme theme) {
         this.activeTheme = theme;
         
         String bgHex = toCssColor(theme.background);

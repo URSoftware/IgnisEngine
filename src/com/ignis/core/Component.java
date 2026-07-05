@@ -29,4 +29,27 @@ public abstract class Component {
      */
     public void update(float deltaTime) {
     }
+
+    // ------------------------------------------------------------------
+    // Serializacao generica (plano item 5): por padrao TODO componente
+    // persiste seus campos @Serialize por reflexao — a Scene nao precisa de
+    // branches hardcoded por tipo. Componentes com estado complexo (ex.:
+    // CanvasComponent, que guarda uma arvore de UI) sobrescrevem os dois.
+    // ------------------------------------------------------------------
+
+    /** Serializa as propriedades deste componente para o JSON da cena. */
+    public org.json.JSONObject saveProperties() {
+        return ScriptSerializationHelper.saveComponentProperties(this);
+    }
+
+    /**
+     * Restaura as propriedades deste componente a partir do JSON da cena.
+     * @param props    Propriedades serializadas (nunca null).
+     * @param resolver Resolve referencias a GameObject por nome (pode ser null).
+     */
+    public void loadProperties(org.json.JSONObject props,
+                               ScriptSerializationHelper.GameObjectResolver resolver) {
+        ScriptSerializationHelper.loadComponentProperties(this, props,
+                resolver != null ? resolver : name -> null);
+    }
 }

@@ -5,6 +5,7 @@ package com.ignis.core;
  */
 public class HealthComponent extends Component {
 
+    @Serialize
     private int health = 100;
 
     /**

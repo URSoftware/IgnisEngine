@@ -5,10 +5,15 @@ package com.ignis.core;
  */
 public class ColliderComponent extends Component {
 
+    @Serialize
     private String shape = "Box"; // Box, Sphere, Capsule
+    @Serialize
     private double friction = 0.5;
+    @Serialize
     private double bounciness = 0.0;
+    @Serialize
     private boolean isTrigger = false;
+    @Serialize
     private String collisionLayer = "Default";
 
     /**

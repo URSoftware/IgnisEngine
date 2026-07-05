@@ -208,17 +208,28 @@ public final class EditorPrefs {
     }
 
     /** Tamanho da grade em px (usa {@code def} se nunca definido). */
-    public static int getGridSize(int def) {
-        return read().optInt("gridSize", def);
-    }
+        public static int getGridSize(int def) {
+            return read().optInt("gridSize", def);
+        }
 
-    public static void setGridSize(int size) {
-        JSONObject json = read();
-        json.put("gridSize", size);
-        write(json);
-    }
+        public static void setGridSize(int size) {
+            JSONObject json = read();
+            json.put("gridSize", size);
+            write(json);
+        }
 
-    /** Mostrar colliders por padrao no viewport (usa {@code def} se nunca definido). */
+        /** Snap à grade ao arrastar objetos (usa {@code def} se nunca definido). Default: true. */
+        public static boolean getSnapToGrid(boolean def) {
+            return read().optBoolean("snapToGrid", def);
+        }
+
+        public static void setSnapToGrid(boolean on) {
+            JSONObject json = read();
+            json.put("snapToGrid", on);
+            write(json);
+        }
+
+        /** Mostrar colliders por padrao no viewport (usa {@code def} se nunca definido). */
     public static boolean getShowColliders(boolean def) {
         return read().optBoolean("showColliders", def);
     }

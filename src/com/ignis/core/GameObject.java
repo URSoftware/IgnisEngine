@@ -368,12 +368,27 @@ public class GameObject {
 
     /**
      * Componentes nativos do motor: serializados por tipo proprio na Scene e
-     * nunca recarregados como script de usuario pelo ScriptManager.
+     * nunca recarregados como script de usuario pelo ScriptManager. Scripts de
+     * usuario sao compilados da pasta do projeto (fora de com.ignis.*), entao a
+     * checagem por pacote distingue nativos de scripts de usuario.
+     *
+     * <p>Excecao: classes de teste (que vivem em {@code com.ignis.*} por herdarem
+     * o pacote da classe sob teste) nao sao nativos — scripts de teste devem ser
+     * tratados como scripts de usuario para fins de coerencia das listas.</p>
      */
     public static boolean isNativeComponent(Component component) {
-        return component instanceof SpriteComponent
-                || component instanceof ColliderComponent
-                || component instanceof HealthComponent;
+        Package pkg = component.getClass().getPackage();
+        if (pkg == null || !pkg.getName().startsWith("com.ignis.")) {
+            return false;
+        }
+        // Classes de teste (inner classes de testes JUnit) vivem no mesmo pacote
+        // das classes de producao por design do JUnit, mas nao sao nativas.
+        String className = component.getClass().getName();
+        if (className.contains("$")) {
+            // Inner class anonima ou nomeada de teste — nao e nativa.
+            return false;
+        }
+        return true;
     }
 
     public void removeComponent(Component component) {
@@ -514,7 +529,7 @@ public class GameObject {
     }
 
     /**
-     * Atualiza os componentes NÃO-script (Collider/Health/futuros) — os scripts
+     * Atualiza os componentes NÃO-script (Collider/Health/Rigidbody/futuros) — os scripts
      * têm ciclo próprio via {@link #tickScripts()}. Chamado pelo loop em Play.
      */
     public void tickComponents(float deltaTime) {
@@ -523,6 +538,14 @@ public class GameObject {
             if (!(comp instanceof IgnisScript)) {
                 comp.update(deltaTime);
             }
+        }
+        // Após a integração da física, zera as acelerações acumuladas de qualquer
+        // RigidbodyComponent deste objeto. Scripts devem reaplicar forças a cada tick
+        // (padrão de engines 2D modernas); sem isto a aceleração se acumularia frame a
+        // frame e objetos acelerariam infinitamente.
+        RigidbodyComponent rb = getComponent(RigidbodyComponent.class);
+        if (rb != null) {
+            rb.resetForces();
         }
     }
     

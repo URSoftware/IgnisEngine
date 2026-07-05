@@ -275,43 +275,52 @@ public class FxSettingsWindow extends Stage {
     }
 
     private Node buildViewportPane() {
-        VBox box = section("Viewport");
+            VBox box = section("Viewport");
 
-        boolean curGrid = game != null && game.isShowGrid();
-        int curSize = game != null ? game.getGridSize() : 32;
-        boolean curColliders = game != null && game.isShowColliders();
+            boolean curGrid = game != null && game.isShowGrid();
+            boolean curSnap = game != null && game.isSnapToGrid();
+            int curSize = game != null ? game.getGridSize() : 32;
+            boolean curColliders = game != null && game.isShowColliders();
 
-        CheckBox showGrid = new CheckBox("Mostrar grade");
-        showGrid.setSelected(curGrid);
-        showGrid.selectedProperty().addListener((o, a, b) -> {
-            if (game != null) game.setShowGrid(b);
-            EditorPrefs.setGridVisible(b);
-        });
+            CheckBox showGrid = new CheckBox("Mostrar grade");
+            showGrid.setSelected(curGrid);
+            showGrid.selectedProperty().addListener((o, a, b) -> {
+                if (game != null) game.setShowGrid(b);
+                EditorPrefs.setGridVisible(b);
+            });
 
-        ComboBox<Integer> gridSize = new ComboBox<>();
-        gridSize.getItems().addAll(16, 32, 64, 128);
-        gridSize.setValue(curSize);
-        gridSize.valueProperty().addListener((o, a, b) -> {
-            if (b == null) return;
-            if (game != null) game.setGridSize(b);
-            EditorPrefs.setGridSize(b);
-        });
+            CheckBox snapToGrid = new CheckBox("Snap à grade ao arrastar");
+            snapToGrid.setSelected(curSnap);
+            snapToGrid.selectedProperty().addListener((o, a, b) -> {
+                if (game != null) game.setSnapToGrid(b);
+                EditorPrefs.setSnapToGrid(b);
+            });
 
-        CheckBox showColliders = new CheckBox("Mostrar colliders");
-        showColliders.setSelected(curColliders);
-        showColliders.selectedProperty().addListener((o, a, b) -> {
-            if (game != null) game.setShowColliders(b);
-            EditorPrefs.setShowColliders(b);
-        });
+            ComboBox<Integer> gridSize = new ComboBox<>();
+            gridSize.getItems().addAll(16, 32, 64, 128);
+            gridSize.setValue(curSize);
+            gridSize.valueProperty().addListener((o, a, b) -> {
+                if (b == null) return;
+                if (game != null) game.setGridSize(b);
+                EditorPrefs.setGridSize(b);
+            });
 
-        box.getChildren().addAll(
-                showGrid,
-                labeledRow("Tamanho da grade (px)", gridSize),
-                showColliders,
-                hint("Tambem usado como padrao ao iniciar o editor.")
-        );
-        return box;
-    }
+            CheckBox showColliders = new CheckBox("Mostrar colliders");
+            showColliders.setSelected(curColliders);
+            showColliders.selectedProperty().addListener((o, a, b) -> {
+                if (game != null) game.setShowColliders(b);
+                EditorPrefs.setShowColliders(b);
+            });
+
+            box.getChildren().addAll(
+                    showGrid,
+                    snapToGrid,
+                    labeledRow("Tamanho da grade (px)", gridSize),
+                    showColliders,
+                    hint("Tambem usado como padrao ao iniciar o editor.")
+            );
+            return box;
+        }
 
     // ================= IA & MCP =================
 
