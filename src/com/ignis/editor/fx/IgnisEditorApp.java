@@ -1770,9 +1770,15 @@ public class IgnisEditorApp extends Application {
         canvas.setOnKeyPressed(e -> {
             if (!playing) return;
             int vk = toAwtKeyCode(e.getCode());
+            java.awt.event.KeyEvent awt = buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_PRESSED, vk);
+            // A UI da cena tem prioridade no Play (foco/navegacao por teclado — item 12).
+            com.ignis.core.ui.UICanvas ui = game.getUICanvas();
+            if (ui != null && ui.isVisible() && ui.processKeyPressed(awt)) {
+                e.consume();
+                return;
+            }
             if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
-                com.ignis.core.Input.getInstance().keyPressed(
-                        buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_PRESSED, vk));
+                com.ignis.core.Input.getInstance().keyPressed(awt);
                 e.consume();
             }
         });
@@ -1782,6 +1788,16 @@ public class IgnisEditorApp extends Application {
             if (vk != java.awt.event.KeyEvent.VK_UNDEFINED) {
                 com.ignis.core.Input.getInstance().keyReleased(
                         buildAwtKeyEvent(java.awt.event.KeyEvent.KEY_RELEASED, vk));
+                e.consume();
+            }
+        });
+        canvas.setOnKeyTyped(e -> {
+            if (!playing) return;
+            String ch = e.getCharacter();
+            if (ch == null || ch.isEmpty()) return;
+            com.ignis.core.ui.UICanvas ui = game.getUICanvas();
+            if (ui != null && ui.isVisible()
+                    && ui.processKeyTyped(buildAwtKeyTypedEvent(ch.charAt(0)))) {
                 e.consume();
             }
         });
@@ -1808,6 +1824,13 @@ public class IgnisEditorApp extends Application {
     private java.awt.event.KeyEvent buildAwtKeyEvent(int id, int vk) {
         return new java.awt.event.KeyEvent(awtEventSource, id, System.currentTimeMillis(), 0,
                 vk, java.awt.event.KeyEvent.CHAR_UNDEFINED);
+    }
+
+    // Evento AWT KEY_TYPED (portador de caractere) para roteamento de digitacao a
+    // campos de texto da UI da cena (item 12).
+    private java.awt.event.KeyEvent buildAwtKeyTypedEvent(char ch) {
+        return new java.awt.event.KeyEvent(awtEventSource, java.awt.event.KeyEvent.KEY_TYPED,
+                System.currentTimeMillis(), 0, java.awt.event.KeyEvent.VK_UNDEFINED, ch);
     }
 
     private java.awt.event.MouseEvent buildAwtMouseEvent(javafx.scene.input.MouseEvent e, int id) {
@@ -3327,6 +3350,14 @@ public class IgnisEditorApp extends Application {
         return sec;
     }
 
+    // Rotina comum apos adicionar/remover um componente (inclusive por undo/redo):
+    // atualiza a Hierarchy, reconstroi o Inspector e marca o projeto como modificado.
+    private void afterComponentChange(GameObject go) {
+        refreshHierarchy();
+        rebuildInspectorExtras(go);
+        markProjectDirty();
+    }
+
     private void openAddComponentDialog(GameObject go) {
         if (!requireProject()) return;
         try {
@@ -3379,35 +3410,46 @@ public class IgnisEditorApp extends Application {
             String selected = dialog.showAndGetResult();
             
             if (selected != null) {
-                if (selected.equals("SpriteComponent")) {
-                    SpriteComponent sprite = new SpriteComponent();
-                    go.addComponent(sprite);
-                    setStatus("SpriteComponent adicionado.");
-                } else if (selected.equals("ColliderComponent")) {
-                    ColliderComponent collider = new ColliderComponent();
-                    go.addComponent(collider);
-                    setStatus("ColliderComponent adicionado.");
-                } else if (selected.equals("HealthComponent")) {
-                    HealthComponent health = new HealthComponent();
-                    go.addComponent(health);
-                    setStatus("HealthComponent adicionado.");
-                } else if (selected.equals("CanvasComponent")) {
-                    go.addComponent(new com.ignis.core.CanvasComponent());
-                    setStatus("CanvasComponent adicionado — monte a interface via scripts (getComponent(CanvasComponent.class)).");
-                } else if (selected.equals("RigidbodyComponent")) {
-                    go.addComponent(new RigidbodyComponent());
-                    setStatus("RigidbodyComponent adicionado — use applyForce/applyImpulse em scripts.");
+                // Componentes nativos: instancia limpa (permite undo/redo por referencia).
+                com.ignis.core.Component nativeComp = null;
+                if (selected.equals("SpriteComponent")) nativeComp = new SpriteComponent();
+                else if (selected.equals("ColliderComponent")) nativeComp = new ColliderComponent();
+                else if (selected.equals("HealthComponent")) nativeComp = new HealthComponent();
+                else if (selected.equals("CanvasComponent")) nativeComp = new com.ignis.core.CanvasComponent();
+                else if (selected.equals("RigidbodyComponent")) nativeComp = new RigidbodyComponent();
+
+                if (nativeComp != null) {
+                    final com.ignis.core.Component comp = nativeComp;
+                    final String label = selected;
+                    go.addComponent(comp);
+                    undoManager.push("Adicionar " + label,
+                            () -> { go.removeComponent(comp); afterComponentChange(go); },
+                            () -> { go.addComponent(comp); afterComponentChange(go); });
+                    setStatus(label + " adicionado.");
                 } else {
+                    // Script de usuario (instancia opcional + anexo por nome).
+                    final String scriptName = selected;
+                    com.ignis.core.IgnisScript tmp = null;
                     try {
-                        com.ignis.core.IgnisScript inst = sm.createScriptInstance(selected, go, game);
-                        if (inst != null) {
-                            go.addComponent(inst);
-                        }
-                    } catch (Exception ignore) {}
-                    if (!go.getScriptNames().contains(selected)) {
-                        go.getScriptNames().add(selected); // preserva o anexo sem instancia
+                        tmp = sm.createScriptInstance(scriptName, go, game);
+                        if (tmp != null) go.addComponent(tmp);
+                    } catch (Exception ignore) { /* compilacao pode falhar; anexa por nome */ }
+                    if (!go.getScriptNames().contains(scriptName)) {
+                        go.getScriptNames().add(scriptName); // preserva o anexo sem instancia
                     }
-                    setStatus("Script anexado: " + selected);
+                    final com.ignis.core.IgnisScript inst = tmp;
+                    undoManager.push("Anexar " + scriptName,
+                            () -> {
+                                if (inst != null) go.removeComponent(inst);
+                                go.removeScriptByName(scriptName);
+                                afterComponentChange(go);
+                            },
+                            () -> {
+                                if (inst != null) go.addComponent(inst);
+                                if (!go.getScriptNames().contains(scriptName)) go.getScriptNames().add(scriptName);
+                                afterComponentChange(go);
+                            });
+                    setStatus("Script anexado: " + scriptName);
                 }
                 markProjectDirty();
                 refreshHierarchy();
@@ -3551,23 +3593,42 @@ public class IgnisEditorApp extends Application {
         Button remove = new Button("Remover");
         remove.setOnAction(e -> {
             String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null) {
-                if (sel.equals("SpriteComponent")) {
-                    SpriteComponent sprite = go.getComponent(SpriteComponent.class);
-                    if (sprite != null) go.removeComponent(sprite);
-                } else if (sel.equals("ColliderComponent")) {
-                    ColliderComponent collider = go.getComponent(ColliderComponent.class);
-                    if (collider != null) go.removeComponent(collider);
-                } else if (sel.equals("HealthComponent")) {
-                    HealthComponent health = go.getComponent(HealthComponent.class);
-                    if (health != null) go.removeComponent(health);
-                } else {
-                    go.removeScriptByName(sel);
+            if (sel == null) return;
+            // Componente nativo: remove por referencia, com undo/redo.
+            com.ignis.core.Component comp = null;
+            if (sel.equals("SpriteComponent")) comp = go.getComponent(SpriteComponent.class);
+            else if (sel.equals("ColliderComponent")) comp = go.getComponent(ColliderComponent.class);
+            else if (sel.equals("HealthComponent")) comp = go.getComponent(HealthComponent.class);
+
+            if (comp != null) {
+                final com.ignis.core.Component removed = comp;
+                final String label = sel;
+                go.removeComponent(removed);
+                undoManager.push("Remover " + label,
+                        () -> { go.addComponent(removed); afterComponentChange(go); },
+                        () -> { go.removeComponent(removed); afterComponentChange(go); });
+            } else {
+                // Script anexado (por nome): captura a instancia viva, se houver.
+                final String scriptName = sel;
+                com.ignis.core.IgnisScript found = null;
+                for (com.ignis.core.IgnisScript s : go.getScripts()) {
+                    if (s.getScriptName().equals(scriptName)) { found = s; break; }
                 }
-                rebuildInspectorExtras(go);
-                refreshHierarchy();
-                markProjectDirty();
+                final com.ignis.core.IgnisScript inst = found;
+                go.removeScriptByName(scriptName);
+                undoManager.push("Remover " + scriptName,
+                        () -> {
+                            if (inst != null) go.addComponent(inst);
+                            if (!go.getScriptNames().contains(scriptName)) go.getScriptNames().add(scriptName);
+                            afterComponentChange(go);
+                        },
+                        () -> {
+                            if (inst != null) go.removeComponent(inst);
+                            go.removeScriptByName(scriptName);
+                            afterComponentChange(go);
+                        });
             }
+            afterComponentChange(go);
         });
         
         Button open = new Button("Abrir");

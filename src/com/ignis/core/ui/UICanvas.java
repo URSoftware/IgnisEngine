@@ -237,11 +237,30 @@ public class UICanvas extends UIComponent {
      */
     public boolean processKeyPressed(KeyEvent e) {
         if (!visible || !enabled) return false;
-        
-        // TODO: Implementar foco e navegação por teclado
+
+        // Tab / Shift+Tab: navega entre os componentes focaveis, ciclando.
+        if (e.getKeyCode() == KeyEvent.VK_TAB) {
+            moveFocus(!e.isShiftDown());
+            return true;
+        }
+
+        UIComponent focused = getFocusedComponent();
+        if (focused == null) return false;
+
+        // Enter/Espaco ativam o componente focado (botoes), exceto campos de texto.
+        if ((e.getKeyCode() == KeyEvent.VK_ENTER || e.getKeyCode() == KeyEvent.VK_SPACE)
+                && !(focused instanceof UITextField)) {
+            focused.activate();
+            return true;
+        }
+
+        // Campo de texto focado recebe teclas de navegacao/edicao (setas, backspace...).
+        if (focused instanceof UITextField) {
+            return ((UITextField) focused).handleKeyPressed(e);
+        }
         return false;
     }
-    
+
     /**
      * Processa tecla solta.
      * @param e Evento de teclado
@@ -249,9 +268,72 @@ public class UICanvas extends UIComponent {
      */
     public boolean processKeyReleased(KeyEvent e) {
         if (!visible || !enabled) return false;
-        
-        // TODO: Implementar foco e navegação por teclado
         return false;
+    }
+
+    /**
+     * Encaminha um caractere digitado ao campo de texto focado, se houver.
+     * @param e Evento de teclado (KEY_TYPED)
+     * @return true se um campo de texto consumiu o caractere
+     */
+    public boolean processKeyTyped(KeyEvent e) {
+        if (!visible || !enabled) return false;
+        UIComponent focused = getFocusedComponent();
+        if (focused instanceof UITextField) {
+            return ((UITextField) focused).handleKeyTyped(e);
+        }
+        return false;
+    }
+
+    // ==================== FOCO / NAVEGAÇÃO ====================
+
+    private void collectFocusables(UIComponent node, java.util.List<UIComponent> out) {
+        for (UIComponent c : node.getChildren()) {
+            if (c.isVisible() && c.isEnabled() && c.isInteractive()) {
+                out.add(c);
+            }
+            collectFocusables(c, out);
+        }
+    }
+
+    /** Componentes focaveis (interativos, habilitados e visiveis) em ordem de arvore. */
+    public java.util.List<UIComponent> getFocusables() {
+        java.util.List<UIComponent> out = new java.util.ArrayList<>();
+        collectFocusables(this, out);
+        return out;
+    }
+
+    /** Componente atualmente focado, ou null. */
+    public UIComponent getFocusedComponent() {
+        for (UIComponent c : getFocusables()) {
+            if (c.isFocused()) return c;
+        }
+        return null;
+    }
+
+    /** Move o foco para o proximo (forward) ou anterior componente focavel, ciclando. */
+    public void moveFocus(boolean forward) {
+        java.util.List<UIComponent> f = getFocusables();
+        if (f.isEmpty()) return;
+        int idx = -1;
+        for (int i = 0; i < f.size(); i++) {
+            if (f.get(i).isFocused()) { idx = i; break; }
+        }
+        for (UIComponent c : f) c.setFocused(false);
+        int next;
+        if (idx < 0) {
+            next = forward ? 0 : f.size() - 1;
+        } else {
+            next = (((idx + (forward ? 1 : -1)) % f.size()) + f.size()) % f.size();
+        }
+        f.get(next).setFocused(true);
+    }
+
+    /** Define o foco para um componente especifico (limpa o foco dos demais). */
+    public void setFocus(UIComponent target) {
+        for (UIComponent c : getFocusables()) {
+            c.setFocused(c == target);
+        }
     }
     
     // ==================== MÉTODOS DE CONVENIÊNCIA ====================
