@@ -553,6 +553,13 @@ public class IgnisEditorApp extends Application {
                     gridSizeMenu.getItems().add(sizeItem);
                 }
 
+                // Item de alternancia do Console (dock inferior). Instanciado aqui —
+                // antes so era declarado como campo e entrava null no menu, causando
+                // NullPointerException ao renderizar a MenuBar no start.
+                consoleMenuItem = new CheckMenuItem("Mostrar Console");
+                consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
+                consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
+
                 view.getItems().addAll(
                     zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
                     resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
