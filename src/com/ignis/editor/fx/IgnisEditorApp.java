@@ -284,11 +284,13 @@ public class IgnisEditorApp extends Application {
         wireFxInputToEngine(canvas);
 
         // ---- Hierarchy + Asset Browser (esquerda) ----
-        hierarchy = buildHierarchy();
+        // buildHierarchy() atribui o campo 'hierarchy' (TreeView) e devolve o painel
+        // (VBox com o campo de filtro + a arvore).
+        javafx.scene.Node hierarchyPanel = buildHierarchy();
         javafx.scene.Node assetBrowser = buildAssetBrowser();
         leftSplit = new SplitPane();
         leftSplit.setOrientation(Orientation.VERTICAL);
-        leftSplit.getItems().addAll(hierarchy, assetBrowser);
+        leftSplit.getItems().addAll(hierarchyPanel, assetBrowser);
         leftSplit.setDividerPositions(0.6);
 
         // ---- Inspector (direita) ----
@@ -1884,10 +1886,11 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Hierarchy ----------------
 
-        private TreeView<String> buildHierarchy() {
+        private javafx.scene.Node buildHierarchy() {
             refreshHierarchy();
             hierarchyRoot.setExpanded(true);
             TreeView<String> tree = new TreeView<>(hierarchyRoot);
+            this.hierarchy = tree;
             // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
             tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         
@@ -2017,10 +2020,11 @@ public class IgnisEditorApp extends Application {
                 else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
             });
         
-            // Wrap tree with filter field
+            // Painel: campo de filtro acima da arvore (antes o VBox era montado mas
+            // o metodo retornava so a 'tree', deixando o filtro da Hierarchy orfao).
             VBox hierarchyBox = new VBox(4, hierarchyFilter, tree);
             VBox.setVgrow(tree, Priority.ALWAYS);
-            return tree;
+            return hierarchyBox;
         }
 
         // Apply filter to hierarchy tree
