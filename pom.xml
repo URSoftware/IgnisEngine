@@ -81,7 +81,27 @@
             <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            
+            <groupId>com.fxutilities</groupId>
+            <artifactId>FXEvents</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+
+        </dependency>
+
     </dependencies>
+
+    <repositories>
+    
+        <repository>
+        
+            <id>project-local-repo</id>
+            <url>file://${project.basedir}/libs/repository</url>
+        
+        </repository>
+    
+    </repositories>
 
     <build>
         <sourceDirectory>src</sourceDirectory>
