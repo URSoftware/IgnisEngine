@@ -1208,11 +1208,13 @@ public class Game extends Canvas implements Runnable {
      * destaque (amarelo preenchido); as demais ficam tracejadas em cinza. {@code designW/H}
      * e a resolucao de referencia usada para o tamanho da captura em zoom 1.
      */
-    private void renderCameraBounds(Graphics2D g2d, int designW, int designH, GameObject selected) {
+    private void renderCameraBounds(Graphics2D g2d, int designW, int designH, GameObject selected,
+                                    AffineTransform screenTransform) {
         if (cameras == null || cameras.isEmpty()) return;
         double wpp = editorWorldPerPixel();
         Camera active = getActiveCamera();
         java.awt.Font baseFont = g2d.getFont();
+        AffineTransform worldTransform = g2d.getTransform();
         for (Camera cam : cameras) {
             if (cam == null || !cam.isVisible()) continue;
             double[] r = cam.getFrustumWorldRect(designW, designH);
@@ -1243,10 +1245,17 @@ public class Game extends Canvas implements Runnable {
             g2d.drawLine((int) (cx - cs), (int) cy, (int) (cx + cs), (int) cy);
             g2d.drawLine((int) cx, (int) (cy - cs), (int) cx, (int) (cy + cs));
 
-            // Rotulo com o nome da camera (canto superior-esquerdo do frustum).
+            // Rotulo em ESPACO DE TELA: a transform da camera inverte o eixo Y, o que
+            // espelharia o texto se desenhado em espaco de mundo. O canto superior-
+            // esquerdo do frustum na tela corresponde ao mundo (minX, maxY) por causa da
+            // inversao de Y.
             String label = (cam.getName() != null ? cam.getName() : "Camera") + (isActive ? " (ativa)" : "");
-            g2d.setFont(baseFont.deriveFont((float) Math.max(9.0, 11.0 * wpp)));
-            g2d.drawString(label, (int) (r[0] + 4.0 * wpp), (int) (r[1] + 14.0 * wpp));
+            Point2D.Double topLeft = worldToScreen(r[0], r[1] + r[3]);
+            g2d.setTransform(screenTransform != null ? screenTransform : new AffineTransform());
+            g2d.setFont(baseFont.deriveFont(11f));
+            g2d.setColor(col);
+            g2d.drawString(label, (float) (topLeft.x + 4.0), (float) (topLeft.y + 13.0));
+            g2d.setTransform(worldTransform);
         }
         g2d.setFont(baseFont);
     }
@@ -2109,7 +2118,7 @@ public class Game extends Canvas implements Runnable {
         // para o criador ver "para onde a camera aponta". So no editor, respeita a flag.
         if (gameState == GameState.EDITING && showCameraBounds) {
             AffineTransform camBoundsTransform = g2d.getTransform();
-            renderCameraBounds(g2d, width, height, selected);
+            renderCameraBounds(g2d, width, height, selected, originalTransform);
             g2d.setTransform(camBoundsTransform);
         }
 
