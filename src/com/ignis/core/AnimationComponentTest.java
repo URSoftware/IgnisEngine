@@ -20,7 +20,7 @@ public class AnimationComponentTest {
      * @param args Command line arguments.
      */
     public static void main(String[] args) {
-        System.out.println("=== Testing AnimationComponent ===");
+        IgnisLogger.info("=== Testing AnimationComponent ===");
 
         // Setup asset folder structure temporarily
         File projectDir = new File(".");
@@ -91,36 +91,35 @@ public class AnimationComponentTest {
             animator.start(); // loads controller
 
             // 4. Assert initial idle state
-            System.out.println("Current state (initial): " + animator.getCurrentState());
+            IgnisLogger.info("Current state (initial): " + animator.getCurrentState());
             assert "idle".equals(animator.getCurrentState()) : "Should start in idle state";
 
             // Update tick to resolve idle sprite
             animator.update(0.1f);
-            System.out.println("Idle sprite path: " + (sprite.getTexture() != null ? sprite.getTexture().getPath() : "null"));
+            IgnisLogger.info("Idle sprite path: " + (sprite.getTexture() != null ? sprite.getTexture().getPath() : "null"));
             assert sprite.getTexture() != null && sprite.getTexture().getPath().contains("test_idle") : "Sprite should be test_idle";
 
             // 5. Trigger transition to walk state by changing float parameter
             animator.setFloat("speed", 2.0f);
             animator.update(0.1f); // Evaluates transitions
-            System.out.println("Current state (after speed > 1.0): " + animator.getCurrentState());
+            IgnisLogger.info("Current state (after speed > 1.0): " + animator.getCurrentState());
             assert "walk".equals(animator.getCurrentState()) : "Should transition to walk state";
 
             // Update tick to resolve walk sprite
             animator.update(0.1f);
-            System.out.println("Walk sprite path: " + (sprite.getTexture() != null ? sprite.getTexture().getPath() : "null"));
+            IgnisLogger.info("Walk sprite path: " + (sprite.getTexture() != null ? sprite.getTexture().getPath() : "null"));
             assert sprite.getTexture() != null && sprite.getTexture().getPath().contains("test_walk") : "Sprite should be test_walk";
 
             // 6. Transition back to idle
             animator.setFloat("speed", 0.5f);
             animator.update(0.1f);
-            System.out.println("Current state (after speed <= 1.0): " + animator.getCurrentState());
+            IgnisLogger.info("Current state (after speed <= 1.0): " + animator.getCurrentState());
             assert "idle".equals(animator.getCurrentState()) : "Should transition back to idle state";
 
-            System.out.println("=== All tests passed successfully! ===");
+            IgnisLogger.info("=== All tests passed successfully! ===");
 
         } catch (Exception e) {
-            System.err.println("Test failed with exception:");
-            e.printStackTrace();
+            IgnisLogger.error("Test failed with exception:", e);
         } finally {
             // Clean up files
             try {

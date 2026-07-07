@@ -219,7 +219,7 @@ public class AnimationComponent extends IgnisScript {
                     anim = AnimationIO.load(animFile);
                     animationCache.put(state.animationPath, anim);
                 } catch (Exception e) {
-                    System.err.println("[AnimationComponent] Failed to load animation: " + state.animationPath);
+                    IgnisLogger.error("[AnimationComponent] Failed to load animation: " + state.animationPath, e);
                 }
             }
         }
@@ -278,7 +278,7 @@ public class AnimationComponent extends IgnisScript {
 
         File file = AssetResolver.resolve(path);
         if (file == null || !file.exists()) {
-            System.err.println("[AnimationComponent] Controller file not found: " + path);
+            IgnisLogger.error("[AnimationComponent] Controller file not found: " + path);
             return;
         }
 
@@ -379,8 +379,7 @@ public class AnimationComponent extends IgnisScript {
             }
 
         } catch (Exception e) {
-            System.err.println("[AnimationComponent] Error parsing controller JSON " + path + ": " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("[AnimationComponent] Error parsing controller JSON " + path, e);
         }
     }
 
