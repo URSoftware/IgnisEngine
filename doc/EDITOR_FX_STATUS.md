@@ -106,6 +106,4 @@ run-editor-javafx.bat
 ```
 
 ### Editor Clássico (Swing) - Fallback
-```bash
-./mvnw exec:java
-```
+Removido da branch `main` em 05/07/2026; disponível apenas na branch `Legado` (o `exec:java` foi retirado do `pom`).

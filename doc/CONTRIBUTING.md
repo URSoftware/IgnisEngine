@@ -73,10 +73,10 @@ Antes de enviar sua contribuição, verifique se tudo compila e roda corretament
 
 # Rodar o editor nativo JavaFX
 ./mvnw javafx:run
-
-# Rodar o editor Swing legado (para testes de paridade)
-./mvnw exec:java
 ```
+
+O editor Swing legado foi removido da branch `main` (05/07/2026); para testes de paridade use a branch `Legado`.
+
 
 ---
 

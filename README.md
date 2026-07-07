@@ -45,8 +45,8 @@ IgnisEngine/
 │   │   ├── Game.java        # Loop do jogo, tick/render e canvas
 │   │   ├── GameObject.java  # Classe base para objetos de jogo
 │   │   └── ui/              # Componentes de interface in-game
-│   ├── editor/              # Editor visual Swing (legado)
-│   │   └── fx/              # Editor visual JavaFX (moderno)
+│   ├── editor/              # Integracao com IA e janelas auxiliares do editor
+│   │   └── fx/              # Editor visual JavaFX (principal)
 │   ├── builder/             # Compilador e empacotador de projetos
 │   ├── animation/           # Sistema de animacao 2D
 │   ├── imageeditor/         # Editor de imagens integrado
@@ -147,10 +147,7 @@ run-editor-javafx.bat
 ./mvnw javafx:run
 ```
 
-**Modo Classico Swing (Legado):**
-```bash
-./mvnw exec:java
-```
+O editor classico Swing foi removido da branch `main` e permanece disponivel apenas na branch `Legado`.
 
 ### Compilacao e Empacotamento
 ```bash

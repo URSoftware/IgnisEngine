@@ -3,7 +3,7 @@
 > Status: **F0 + F1 + F2 + F3 + F3.5 concluídas na `main`** · infra · casca/ponte · projeto+seleção+Inspector · janelas-ferramenta JavaFX 100% ligadas ao menu · input do jogo roteado · **tela de seleção/recentes de projeto + salvar/abrir/fechar/trocar + criar/duplicar/deletar/renomear/reordenar + Asset Browser** · Java 17 · JavaFX 17 · 2026-06-15 · próximo: **F4**
 > Complementa [ARCHITECTURE.md](ARCHITECTURE.md) e [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md).
 >
-> **Como rodar:** editor JavaFX (em migração) → `mvnw javafx:run` · editor Swing clássico → `mvnw exec:java`.
+> **Como rodar:** editor JavaFX → `mvnw javafx:run`. O editor Swing clássico foi removido da `main` (05/07/2026) e vive só na branch `Legado`.
 > Ponte de render: `com.ignis.core.Game#renderWorldTo` → `BufferedImage` → `SwingFXUtils` → `Canvas` em `com.ignis.editor.fx.IgnisEditorApp`.
 
 ## Estratégia de branches

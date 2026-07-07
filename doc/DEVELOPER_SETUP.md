@@ -35,10 +35,7 @@ git submodule update --init --recursive
 
 ## 3. Execução do Editor
 
-Existem duas versões do editor disponíveis no projeto: o editor moderno baseado em JavaFX (em desenvolvimento/migração) e o editor clássico baseado em Swing (legado).
-
-### A. Editor Moderno (JavaFX) - Padrão da branch main
-O editor moderno JavaFX é o foco atual de desenvolvimento. Para executá-lo, você pode usar os seguintes comandos:
+O editor oficial da branch `main` é o JavaFX. O editor clássico Swing foi removido do `main` em 05/07/2026 e permanece disponível apenas na branch `Legado` (para rodá-lo, faça checkout dessa branch e siga o README dela).
 
 **No Windows (Script Facilitador):**
 ```cmd
@@ -49,12 +46,6 @@ run-editor-javafx.bat
 **Via Maven Wrapper (Qualquer SO):**
 ```bash
 ./mvnw javafx:run
-```
-
-### B. Editor Clássico (Swing) - Legado
-Para rodar a versão legada em Swing:
-```bash
-./mvnw exec:java
 ```
 
 ---
@@ -73,8 +64,8 @@ IgnisEngine/
 │   └── com/ignis/
 │       ├── core/         # Ciclo de vida, lógica e componentes do jogo
 │       │   └── ui/       # Componentes de interface in-game desenhados no canvas
-│       ├── editor/       # Classes do editor Swing legado
-│       │   └── fx/       # Classes do editor moderno JavaFX
+│       ├── editor/       # Integração com IA e janelas auxiliares do editor
+│       │   └── fx/       # Classes do editor JavaFX (principal)
 │       ├── imageeditor/  # Sub-editor de pintura de imagens
 │       ├── audioeditor/  # Sub-editor de DAW de áudio
 │       ├── animation/    # Sistemas de animações
@@ -97,7 +88,7 @@ IgnisEngine/
    - Defina o **SDK** para o JDK 17+.
    - Defina o **Language Level** para 17.
 5. Deixe o IntelliJ importar as dependências do Maven automaticamente.
-6. Para executar, crie uma configuração de execução do tipo **Maven** com a linha de comando `javafx:run` ou `exec:java`.
+6. Para executar, crie uma configuração de execução do tipo **Maven** com a linha de comando `javafx:run`.
 
 ### VS Code
 1. Certifique-se de ter instalado o pacote **Extension Pack for Java** e **Maven for Java**.

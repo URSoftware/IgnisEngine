@@ -19,8 +19,8 @@ javac -cp "$jsonJar" -d target/classes $files
 ### Step 2: Start the Editor
 
 ```bash
-# Using Maven
-mvn exec:java
+# Using Maven (editor JavaFX)
+mvn javafx:run
 
 # OR using Java directly
 java -cp "target/classes:$env:USERPROFILE\.m2\repository\org\json\json\20231013\json-20231013.jar" com.ignis.editor.Editor
