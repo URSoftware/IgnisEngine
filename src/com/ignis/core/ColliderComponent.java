@@ -101,7 +101,7 @@ public class ColliderComponent extends Component {
      */
     public void onPhysicsImpact(CollisionData data) {
         if (gameObject != null) {
-            gameObject.onCollisionEnter.invoke(data);
+            gameObject.notifyCollisionEnter(data);
         }
     }
 

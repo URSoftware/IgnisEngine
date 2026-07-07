@@ -148,12 +148,14 @@ class RigidbodyComponentTest {
 
     @Test
     void colisaoRemoveComponenteDeVelocidadeNaNormal() {
+        Game game = new Game();
         GameObject a = new GameObject();
         a.setName("A");
         a.setX(0.0);
         a.setY(0.0);
         a.setWidth(32);
         a.setHeight(32);
+        a.setGame(game);
         RigidbodyComponent rbA = new RigidbodyComponent();
         rbA.setUseGravity(false);
         a.addComponent(rbA);
@@ -172,6 +174,7 @@ class RigidbodyComponentTest {
         // A normal aponta de B para A (para a esquerda, -X), e a velocidade de A
         // tem componente +X na normal — o Rigbody deve remove-la.
         a.notifyCollision(b);
+        game.getSceneDispatcher().processPendingSignals();
 
         // Velocidade X deve ser zero (componente removida); Y permanece zero.
         assertEquals(0.0, rbA.getVelocityX(), EPS, "colisao deve zerar componente de velocidade na normal");
@@ -211,8 +214,10 @@ class RigidbodyComponentTest {
 
     @Test
     void bouncinessRefleteVelocidadeNaNormal() {
+        Game game = new Game();
         GameObject a = new GameObject();
         a.setX(0.0); a.setY(0.0); a.setWidth(32); a.setHeight(32);
+        a.setGame(game);
         RigidbodyComponent rbA = new RigidbodyComponent();
         rbA.setUseGravity(false);
         a.addComponent(rbA);
@@ -226,6 +231,7 @@ class RigidbodyComponentTest {
         GameObject b = new GameObject();
         b.setX(40.0); b.setY(0.0); b.setWidth(32); b.setHeight(32);
         a.notifyCollision(b); // normal aponta de B para A (-X)
+        game.getSceneDispatcher().processPendingSignals();
 
         assertEquals(-100.0, rbA.getVelocityX(), EPS, "bounciness 1 deve refletir a velocidade na normal");
         assertEquals(0.0, rbA.getVelocityY(), EPS);
@@ -233,8 +239,10 @@ class RigidbodyComponentTest {
 
     @Test
     void frictionAtenuaVelocidadeTangencial() {
+        Game game = new Game();
         GameObject a = new GameObject();
         a.setX(0.0); a.setY(0.0); a.setWidth(32); a.setHeight(32);
+        a.setGame(game);
         RigidbodyComponent rbA = new RigidbodyComponent();
         rbA.setUseGravity(false);
         a.addComponent(rbA);
@@ -249,6 +257,7 @@ class RigidbodyComponentTest {
         GameObject b = new GameObject();
         b.setX(40.0); b.setY(0.0); b.setWidth(32); b.setHeight(32);
         a.notifyCollision(b); // normal -X; tangencial = eixo Y
+        game.getSceneDispatcher().processPendingSignals();
 
         assertEquals(0.0, rbA.getVelocityX(), EPS, "normal removida (bounciness 0)");
         assertEquals(25.0, rbA.getVelocityY(), EPS, "tangencial reduzida pela metade (friction 0.5)");

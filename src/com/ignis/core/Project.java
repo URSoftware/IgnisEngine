@@ -112,6 +112,12 @@ public class Project {
         return new ArrayList<>(scenes); // Return copy to prevent external modification
     }
     
+    /** Clears all scenes from the project */
+    public void clearScenes() {
+        this.scenes.clear();
+        this.currentScene = null;
+    }
+    
     /** Gets a scene by name */
     public Scene getSceneByName(String name) {
         for (Scene scene : scenes) {

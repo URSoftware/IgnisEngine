@@ -1,5 +1,7 @@
 package com.ignis.core;
 
+import com.fxutilities.fxevents.core.SignalReceiver;
+
 /**
  * Gameplay component that manages entity health and reacts to collision events.
  */
@@ -14,11 +16,23 @@ public class HealthComponent extends Component {
     public HealthComponent() {
     }
 
+    private SignalReceiver collisionReceiver = payload -> {
+        if (payload instanceof CollisionData) {
+            handleCollision((CollisionData) payload);
+        }
+    };
+
     @Override
     public void awake() {
-        if (gameObject != null) {
-            // Subscribes to the collision enter event of the owner GameObject
-            gameObject.onCollisionEnter.subscribe(this::handleCollision);
+        if (gameObject != null && gameObject.getGame() != null && gameObject.getGame().getSceneDispatcher() != null) {
+            gameObject.getGame().getSceneDispatcher().connect("onCollisionEnter_" + gameObject.getId(), collisionReceiver);
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        if (gameObject != null && gameObject.getGame() != null && gameObject.getGame().getSceneDispatcher() != null) {
+            gameObject.getGame().getSceneDispatcher().disconnect("onCollisionEnter_" + gameObject.getId(), collisionReceiver);
         }
     }
 

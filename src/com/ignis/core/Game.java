@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import com.ignis.core.ui.UICanvas;
+import com.fxutilities.fxevents.core.GameSignalBus;
+import com.fxutilities.fxevents.core.SceneSignalDispatcher;
 
 public class Game extends Canvas implements Runnable {
 
@@ -102,6 +104,13 @@ public class Game extends Canvas implements Runnable {
     // Lista de objetos criados em runtime (durante o jogo)
     // Estes objetos serão removidos quando o jogo parar
     private List<GameObject> runtimeObjects = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    // ==================== EVENT SYSTEM ====================
+    private GameSignalBus gameSignalBus = new GameSignalBus();
+    private SceneSignalDispatcher sceneSignalDispatcher = new SceneSignalDispatcher();
+
+    public GameSignalBus getSignalBus() { return gameSignalBus; }
+    public SceneSignalDispatcher getSceneDispatcher() { return sceneSignalDispatcher; }
 
     // ==================== SELECTION SYSTEM ====================
     private GameObject selectedObject = null;
@@ -1599,6 +1608,10 @@ public class Game extends Canvas implements Runnable {
 
             // Marca o instante do tick para o calculo do alpha de interpolacao.
             lastTickNanos = System.nanoTime();
+            
+            // Processa os sinais pendentes no dispatcher da cena e no bus global
+            if (sceneSignalDispatcher != null) sceneSignalDispatcher.processPendingSignals();
+            if (gameSignalBus != null) gameSignalBus.processGlobalSignals();
         }
     }
 
@@ -2717,11 +2730,25 @@ public class Game extends Canvas implements Runnable {
         this.entities.remove(entity);
         // Também remover da lista de objetos de runtime (se existir)
         this.runtimeObjects.remove(entity);
+        
+        // Expurgar conexões de eventos da entidade na cena atual
+        if (this.sceneSignalDispatcher != null) {
+            this.sceneSignalDispatcher.purgeEntityConnections(entity.getId());
+        }
+        // Expurgar conexões globais dos scripts atachados
+        if (this.gameSignalBus != null) {
+            for (Component comp : entity.getComponents()) {
+                if (comp instanceof IgnisScript) {
+                    this.gameSignalBus.disconnectAllForInstance(comp);
+                }
+            }
+        }
     }
 
     public void clearEntities() {
         this.entities.clear();
         this.runtimeObjects.clear();
+        this.sceneSignalDispatcher = new SceneSignalDispatcher(); // Reset scene connections
     }
 
     public java.util.List<GameObject> getEntities() {

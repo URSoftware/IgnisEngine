@@ -1,5 +1,7 @@
 package com.ignis.core;
 
+import com.fxutilities.fxevents.core.SignalReceiver;
+
 /**
  * Componente de fisica basica para o padrao Entidade-Componente do IgnisEngine.
  *
@@ -39,10 +41,23 @@ public class RigidbodyComponent extends Component {
     // compartilhem o mesmo valor sem que cada instancia precise ser configurada.
     private static double globalGravity = 980.0;
 
+    private SignalReceiver collisionReceiver = payload -> {
+        if (payload instanceof CollisionData) {
+            onCollision((CollisionData) payload);
+        }
+    };
+
     @Override
     public void awake() {
-        if (gameObject != null) {
-            gameObject.onCollisionEnter.subscribe(this::onCollision);
+        if (gameObject != null && gameObject.getGame() != null && gameObject.getGame().getSceneDispatcher() != null) {
+            gameObject.getGame().getSceneDispatcher().connect("onCollisionEnter_" + gameObject.getId(), collisionReceiver);
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        if (gameObject != null && gameObject.getGame() != null && gameObject.getGame().getSceneDispatcher() != null) {
+            gameObject.getGame().getSceneDispatcher().disconnect("onCollisionEnter_" + gameObject.getId(), collisionReceiver);
         }
     }
 

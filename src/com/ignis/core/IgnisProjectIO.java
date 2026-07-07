@@ -205,12 +205,113 @@ public class IgnisProjectIO {
                 "scripts",           // User scripts
                 "scenes",            // Game scenes
                 "prefabs",           // Prefabricated objects
-                "data"               // Game data (configs, dialogs, etc.)
+                "data",              // Game data (configs, dialogs, etc.)
+                ".vscode"            // VSCode configurations
         };
         for (String subfolder : subfolders) {
             File folder = new File(projectFolder, subfolder);
             if (!folder.exists()) {
                 folder.mkdirs();
+            }
+        }
+
+        // Setup VSCode Java settings for IgnisEngine autocompletion
+        File vscodeSettings = new File(new File(projectFolder, ".vscode"), "settings.json");
+        try {
+            String enginePath = new File(".").getAbsolutePath().replace("\\", "/");
+            if (enginePath.endsWith("/.")) {
+                enginePath = enginePath.substring(0, enginePath.length() - 2);
+            }
+            
+            File classesDir = new File(enginePath, "target/classes");
+            File apiJar = new File(enginePath, "target/ignis-engine-api.jar");
+            if (classesDir.exists() && classesDir.isDirectory()) {
+                packFolderToJar(classesDir, apiJar);
+            }
+
+            String settingsContent = "{\n" +
+                    "    \"java.project.referencedLibraries\": [\n" +
+                    "        \"" + enginePath + "/target/ignis-engine-api.jar\",\n" +
+                    "        \"" + enginePath + "/target/*.jar\",\n" +
+                    "        \"" + enginePath + "/libs/repository/**/*.jar\"\n" +
+                    "    ]\n" +
+                    "}";
+            java.nio.file.Files.writeString(vscodeSettings.toPath(), settingsContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+
+            // Generate Eclipse JDT .project and .classpath for bulletproof VSCode support
+            File eclipseProjectFile = new File(projectFolder, ".project");
+            String projectContent = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<projectDescription>\n" +
+                    "\t<name>" + projectFolder.getName() + "</name>\n" +
+                    "\t<comment></comment>\n" +
+                    "\t<projects>\n" +
+                    "\t</projects>\n" +
+                    "\t<buildSpec>\n" +
+                    "\t\t<buildCommand>\n" +
+                    "\t\t\t<name>org.eclipse.jdt.core.javabuilder</name>\n" +
+                    "\t\t\t<arguments>\n" +
+                    "\t\t\t</arguments>\n" +
+                    "\t\t</buildCommand>\n" +
+                    "\t</buildSpec>\n" +
+                    "\t<natures>\n" +
+                    "\t\t<nature>org.eclipse.jdt.core.javanature</nature>\n" +
+                    "\t</natures>\n" +
+                    "</projectDescription>\n";
+            java.nio.file.Files.writeString(eclipseProjectFile.toPath(), projectContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+
+            File eclipseClasspathFile = new File(projectFolder, ".classpath");
+            StringBuilder classpathBuilder = new StringBuilder();
+            classpathBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+            classpathBuilder.append("<classpath>\n");
+            classpathBuilder.append("\t<classpathentry kind=\"src\" path=\"scripts\"/>\n");
+            classpathBuilder.append("\t<classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n");
+            classpathBuilder.append("\t<classpathentry kind=\"lib\" path=\"").append(apiJar.getAbsolutePath().replace("\\", "/")).append("\"/>\n");
+            
+            File repos = new File(enginePath, "libs/repository");
+            if (repos.exists() && repos.isDirectory()) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(repos.toPath())) {
+                    stream.filter(java.nio.file.Files::isRegularFile)
+                          .filter(p -> p.toString().endsWith(".jar"))
+                          .forEach(p -> {
+                              classpathBuilder.append("\t<classpathentry kind=\"lib\" path=\"")
+                                              .append(p.toAbsolutePath().toString().replace("\\", "/"))
+                                              .append("\"/>\n");
+                          });
+                }
+            }
+            
+            classpathBuilder.append("\t<classpathentry kind=\"output\" path=\"bin\"/>\n");
+            classpathBuilder.append("</classpath>\n");
+            java.nio.file.Files.writeString(eclipseClasspathFile.toPath(), classpathBuilder.toString(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+
+        } catch (Exception e) {
+            IgnisLogger.error("Failed to generate VSCode settings and Eclipse project files: " + e.getMessage());
+        }
+    }
+
+    private static void packFolderToJar(File sourceFolder, File targetJar) throws IOException {
+        // Only pack if the jar doesn't exist or is older than the classes root
+        if (targetJar.exists() && targetJar.lastModified() > sourceFolder.lastModified()) {
+            return;
+        }
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(targetJar))) {
+            packFolderToJarRecursively(sourceFolder, sourceFolder, zos);
+        }
+    }
+
+    private static void packFolderToJarRecursively(File rootFolder, File currentFolder, java.util.zip.ZipOutputStream zos) throws IOException {
+        File[] files = currentFolder.listFiles();
+        if (files == null) return;
+        
+        for (File file : files) {
+            if (file.isDirectory()) {
+                packFolderToJarRecursively(rootFolder, file, zos);
+            } else {
+                String entryName = rootFolder.toPath().relativize(file.toPath()).toString().replace("\\", "/");
+                java.util.zip.ZipEntry ze = new java.util.zip.ZipEntry(entryName);
+                zos.putNextEntry(ze);
+                java.nio.file.Files.copy(file.toPath(), zos);
+                zos.closeEntry();
             }
         }
     }
@@ -226,6 +327,7 @@ public class IgnisProjectIO {
         public static Project load(File ignisFile, Game game) throws IOException {
             Project project = new Project();
             project.setProjectFile(ignisFile);
+            project.clearScenes();
 
             // Must be set before parsing scenes: entities load their sprites
             // immediately, resolving relative paths against the project folder

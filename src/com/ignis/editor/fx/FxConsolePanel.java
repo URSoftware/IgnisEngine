@@ -36,7 +36,7 @@ import java.util.function.Predicate;
 public final class FxConsolePanel extends VBox {
 
     /** Severidade de uma linha do console. */
-    public enum Level { INFO, WARN, ERROR }
+    public enum Level { INFO, WARN, ERROR, SCRIPT }
 
     private static final int MAX_LINES = 2000;
 
@@ -47,6 +47,7 @@ public final class FxConsolePanel extends VBox {
     private final ToggleButton showInfo = new ToggleButton("Info");
     private final ToggleButton showWarn = new ToggleButton("Avisos");
     private final ToggleButton showErr = new ToggleButton("Erros");
+    private final ToggleButton showScript = new ToggleButton("Scripts");
     private final CheckBox autoScroll = new CheckBox("Auto-scroll");
     private final Label counter = new Label();
 
@@ -71,12 +72,15 @@ public final class FxConsolePanel extends VBox {
         showInfo.setSelected(true);
         showWarn.setSelected(true);
         showErr.setSelected(true);
+        showScript.setSelected(true);
         showInfo.setTooltip(new Tooltip("Mostrar mensagens de informacao"));
         showWarn.setTooltip(new Tooltip("Mostrar avisos"));
         showErr.setTooltip(new Tooltip("Mostrar erros"));
+        showScript.setTooltip(new Tooltip("Mostrar logs de scripts"));
         showInfo.setOnAction(e -> applyFilter());
         showWarn.setOnAction(e -> applyFilter());
         showErr.setOnAction(e -> applyFilter());
+        showScript.setOnAction(e -> applyFilter());
 
         autoScroll.setSelected(true);
 
@@ -87,7 +91,7 @@ public final class FxConsolePanel extends VBox {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         counter.getStyleClass().add("toolbar-label");
 
-        HBox bar = new HBox(6, title, new Region(), showInfo, showWarn, showErr,
+        HBox bar = new HBox(6, title, new Region(), showInfo, showWarn, showErr, showScript,
                         autoScroll, spacer, counter, clear);
                 bar.setAlignment(Pos.CENTER_LEFT);
 
@@ -113,9 +117,10 @@ public final class FxConsolePanel extends VBox {
                 com.ignis.core.IgnisLogger.addListener((level, message) -> {
                     Level fxLevel;
                     switch (level) {
-                        case ERROR: fxLevel = Level.ERROR; break;
-                        case WARN:  fxLevel = Level.WARN; break;
-                        default:    fxLevel = Level.INFO; break;
+                        case ERROR:  fxLevel = Level.ERROR; break;
+                        case WARN:   fxLevel = Level.WARN; break;
+                        case SCRIPT: fxLevel = Level.SCRIPT; break;
+                        default:     fxLevel = Level.INFO; break;
                     }
                     log(fxLevel, message);
                 });
@@ -207,9 +212,10 @@ public final class FxConsolePanel extends VBox {
     private void applyFilter() {
         Predicate<Entry> p = e -> {
             switch (e.level) {
-                case WARN:  return showWarn.isSelected();
-                case ERROR: return showErr.isSelected();
-                default:    return showInfo.isSelected();
+                case WARN:   return showWarn.isSelected();
+                case ERROR:  return showErr.isSelected();
+                case SCRIPT: return showScript.isSelected();
+                default:     return showInfo.isSelected();
             }
         };
         filtered.setPredicate(p);
@@ -238,9 +244,10 @@ public final class FxConsolePanel extends VBox {
             String base = "-fx-font-family: 'Consolas','Menlo','monospace'; -fx-font-size: 12px;"
                     + " -fx-background-color: transparent;";
             switch (item.level) {
-                case ERROR: setStyle(base + " -fx-text-fill: #e06c75;"); break;
-                case WARN:  setStyle(base + " -fx-text-fill: #d9a441;"); break;
-                default:    setStyle(base); // INFO: cor de texto herda do tema
+                case ERROR:  setStyle(base + " -fx-text-fill: #e06c75;"); break;
+                case WARN:   setStyle(base + " -fx-text-fill: #d9a441;"); break;
+                case SCRIPT: setStyle(base + " -fx-text-fill: #43a047;"); break;
+                default:     setStyle(base); // INFO: cor de texto herda do tema
             }
         }
     }

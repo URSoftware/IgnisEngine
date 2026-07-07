@@ -1,4 +1,6 @@
 import com.ignis.core.IgnisScript;
+import com.ignis.core.*;
+import com.fxutilities.fxevents.core.*;
 
 /**
  * PlayerControllerMCP - criado remotamente pelo agente via bridge HTTP do MCP.
@@ -18,11 +20,15 @@ public class PlayerControllerMCP extends IgnisScript {
 
     @Override
     public void tick() {
+        handleInput();
+    }
+
+    private void handleInput() {
         double dt = getDeltaTime();
         double dx = getHorizontalAxis() * speed * dt;
         double dy = -getVerticalAxis() * speed * dt;
         if (dx != 0 || dy != 0) setPosition(getX() + dx, getY() + dy);
-        if (isKeyPressed("Q")) setRotation(getRotation() - turnSpeed * dt);
-        if (isKeyPressed("E")) setRotation(getRotation() + turnSpeed * dt);
+        if (isKeyPressed("E")) setRotation(getRotation() - turnSpeed * dt);
+        if (isKeyPressed("Q")) setRotation(getRotation() + turnSpeed * dt);
     }
 }

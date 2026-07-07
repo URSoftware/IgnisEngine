@@ -10,7 +10,7 @@ import java.util.List;
  */
 public final class IgnisLogger {
 
-    public enum Level { INFO, WARN, ERROR }
+    public enum Level { INFO, WARN, ERROR, SCRIPT }
 
     public interface LogListener {
         void onLog(Level level, String message);
@@ -38,6 +38,10 @@ public final class IgnisLogger {
 
     public static void error(String message) {
         log(Level.ERROR, message);
+    }
+
+    public static void script(String message) {
+        log(Level.SCRIPT, message);
     }
 
     /**
@@ -73,6 +77,8 @@ public final class IgnisLogger {
             System.err.println("[IgnisEngine] ERROR: " + message);
         } else if (level == Level.WARN) {
             System.out.println("[IgnisEngine] WARNING: " + message);
+        } else if (level == Level.SCRIPT) {
+            System.out.println("[IgnisEngine] SCRIPT: " + message);
         } else {
             System.out.println("[IgnisEngine] INFO: " + message);
         }

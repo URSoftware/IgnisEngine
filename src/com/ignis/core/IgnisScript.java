@@ -1,6 +1,9 @@
 package com.ignis.core;
 
 import com.ignis.core.ui.*;
+import com.fxutilities.fxevents.core.SceneSignalDispatcher;
+import com.fxutilities.fxevents.core.GameSignalBus;
+import com.fxutilities.fxevents.core.SignalReceiver;
 import java.awt.Color;
 
 /**
@@ -18,6 +21,10 @@ public abstract class IgnisScript extends Component {
     private boolean started = false;
     private boolean enabled = true;
     private String scriptName;
+
+    // Event system
+    protected SceneSignalDispatcher sceneDispatcher;
+    protected GameSignalBus gameBus;
 
     /**
      * Classe interna para acesso à transformação do objeto.
@@ -59,6 +66,13 @@ public abstract class IgnisScript extends Component {
     public void init(GameObject gameObject, Game game) {
         this.gameObject = gameObject;
         this.game = game;
+        if (game != null) {
+            this.sceneDispatcher = game.getSceneDispatcher();
+            this.gameBus = game.getSignalBus();
+            if (this.sceneDispatcher != null) {
+                this.sceneDispatcher.connectAnnotatedMethods(gameObject.getId(), this);
+            }
+        }
         this.transform.sync();
     }
 
@@ -231,7 +245,7 @@ public abstract class IgnisScript extends Component {
      * @param message Mensagem a imprimir
      */
     protected void println(String message) {
-        com.ignis.core.IgnisLogger.info("[" + scriptName + "] " + message);
+        com.ignis.core.IgnisLogger.script("[" + scriptName + "] " + message);
     }
     
     /**
@@ -239,7 +253,7 @@ public abstract class IgnisScript extends Component {
      * @param message Mensagem a imprimir
      */
     protected void print(String message) {
-        com.ignis.core.IgnisLogger.info(message);
+        com.ignis.core.IgnisLogger.script(message);
     }
     
     // ==================== MÉTODOS DE INPUT ====================
@@ -623,7 +637,7 @@ public abstract class IgnisScript extends Component {
      * Log de debug.
      */
     protected void log(String message) {
-        System.out.println("[" + scriptName + "] " + message);
+        com.ignis.core.IgnisLogger.script("[" + scriptName + "] " + message);
     }
 
     // ==================== MÉTODOS DE ÁUDIO ====================
@@ -1649,5 +1663,64 @@ public abstract class IgnisScript extends Component {
     protected boolean isUIBlocking() {
         UICanvas canvas = getUICanvas();
         return canvas != null && canvas.isBlockingGameInput();
+    }
+
+    // ==================== EVENT SYSTEM ====================
+
+    /**
+     * Emite um sinal local na cena.
+     */
+    protected void emit(String signal, Object payload) {
+        if (sceneDispatcher != null) {
+            if (gameObject != null && !signal.contains(":")) {
+                sceneDispatcher.enqueue(gameObject.getId() + ":" + signal, payload);
+            } else {
+                sceneDispatcher.enqueue(signal, payload);
+            }
+        }
+    }
+
+    /**
+     * Conecta a um sinal local na cena.
+     */
+    protected void on(String signal, SignalReceiver receiver) {
+        if (sceneDispatcher != null) {
+            if (gameObject != null && !signal.contains(":")) {
+                sceneDispatcher.connect(gameObject.getId() + ":" + signal, receiver);
+            } else {
+                sceneDispatcher.connect(signal, receiver);
+            }
+        }
+    }
+
+    /**
+     * Desconecta de um sinal local na cena.
+     */
+    protected void off(String signal, SignalReceiver receiver) {
+        if (sceneDispatcher != null) {
+            if (gameObject != null && !signal.contains(":")) {
+                sceneDispatcher.disconnect(gameObject.getId() + ":" + signal, receiver);
+            } else {
+                sceneDispatcher.disconnect(signal, receiver);
+            }
+        }
+    }
+
+    /**
+     * Emite um sinal global.
+     */
+    protected void emitGlobal(String signal, Object payload) {
+        if (gameBus != null) {
+            gameBus.enqueueGlobal(signal, payload);
+        }
+    }
+
+    /**
+     * Conecta a um sinal global.
+     */
+    protected void onGlobal(String signal, SignalReceiver receiver) {
+        if (gameBus != null) {
+            gameBus.connectGlobal(this, signal, receiver);
+        }
     }
 }

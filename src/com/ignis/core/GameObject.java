@@ -8,7 +8,8 @@ import org.json.JSONObject;
 
 public class GameObject {
 
-    public final Event<CollisionData> onCollisionEnter = new Event<>();
+    // The old decoupled Event has been replaced by FXEvents signals.
+    // See notifyCollisionEnter()
 
     protected String id;
     protected String name;
@@ -604,8 +605,19 @@ public class GameObject {
         }
         double cx = (getX() + getWidth() / 2.0 + (other != null ? other.getX() + other.getWidth() / 2.0 : 0)) / 2.0;
         double cy = (getY() + getHeight() / 2.0 + (other != null ? other.getY() + other.getHeight() / 2.0 : 0)) / 2.0;
-        onCollisionEnter.invoke(new CollisionData(other,
-                String.format(java.util.Locale.ROOT, "(%.1f, %.1f)", cx, cy)));
+        
+        CollisionData data = new CollisionData(other, String.format(java.util.Locale.ROOT, "(%.1f, %.1f)", cx, cy));
+        notifyCollisionEnter(data);
+    }
+    
+    /**
+     * Notifica componentes e scripts sobre colisão via sinal FXEvents da cena.
+     */
+    public void notifyCollisionEnter(CollisionData data) {
+        if (game != null && game.getSceneDispatcher() != null) {
+            game.getSceneDispatcher().enqueue("onCollisionEnter_" + this.getId(), data);
+            game.getSceneDispatcher().enqueue(this.getId() + ":onCollisionEnter", data);
+        }
     }
     
     // ==================== COLLISION SYSTEM ====================

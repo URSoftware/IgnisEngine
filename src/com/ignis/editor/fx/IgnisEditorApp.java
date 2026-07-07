@@ -2823,6 +2823,21 @@ public class IgnisEditorApp extends Application {
 
     // Abre o arquivo com o aplicativo padrao do sistema (best-effort).
     private void openAssetFile(File f) {
+        if (f.getName().endsWith(".java") && currentProject != null && currentProject.getProjectFile() != null) {
+            try {
+                // Tenta abrir o VSCode em modo Workspace (garante leitura do .vscode/settings.json)
+                File projectRoot = currentProject.getProjectFile().getParentFile();
+                boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+                String codeCmd = isWindows ? "code.cmd" : "code";
+                ProcessBuilder pb = new ProcessBuilder(codeCmd, projectRoot.getAbsolutePath(), f.getAbsolutePath());
+                pb.start();
+                setStatus("Abrindo no VSCode: " + f.getName());
+                return; // Sucesso, não precisa fallback
+            } catch (Exception e) {
+                com.ignis.core.IgnisLogger.warn("Comando 'code' falhou ou não encontrado. Usando fallback do sistema.");
+            }
+        }
+
         try {
             if (java.awt.Desktop.isDesktopSupported()
                     && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
