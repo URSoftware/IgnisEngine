@@ -155,6 +155,7 @@ public class IgnisEditorApp extends Application {
     private VBox inspectorExtras;
 
     private Label cameraPosLabel;
+    private ToggleButton cameraPreviewToggle;
     private Label cameraZoomLabel;
     // Seletor de cena ativa na toolbar (organizador de cenários). 'updatingSceneSelector'
     // evita que a repopulação programática dispare o handler de troca de cena.
@@ -230,6 +231,17 @@ public class IgnisEditorApp extends Application {
         btnResetCam.setOnAction(e -> resetCamera());
         Button btnFocusSelected = new Button("Focus Selected");
         btnFocusSelected.setOnAction(e -> focusCameraOnSelected());
+        Button btnFrameAll = new Button("Enquadrar Tudo");
+        btnFrameAll.setTooltip(new Tooltip("Centraliza e ajusta o zoom para mostrar todos os objetos da cena (Shift+F)"));
+        btnFrameAll.setOnAction(e -> frameAllObjects());
+
+        // Preview da camera do jogo: ligado, a Scene View mostra exatamente o que a
+        // camera ativa da cena ve; desligado (padrao), navega-se livre pela cena com
+        // a camera do editor, sem mexer na camera do jogo.
+        cameraPreviewToggle = new ToggleButton("Ver Câmera do Jogo");
+        cameraPreviewToggle.setTooltip(new Tooltip(
+                "Alterna entre a visão livre do editor e a visão da câmera ativa do jogo"));
+        cameraPreviewToggle.setOnAction(e -> setCameraPreview(cameraPreviewToggle.isSelected()));
 
         cameraPosLabel = new Label("Cam Pos: (0.0, 0.0)");
         cameraPosLabel.getStyleClass().add("toolbar-label");
@@ -249,7 +261,8 @@ public class IgnisEditorApp extends Application {
             btnOpen, btnBuild, new Separator(),
             playButton, stopButton, new Separator(),
             btnMove, btnRotate, btnScale, btnWorldPaint, new Separator(),
-            btnZoomIn, btnZoomOut, btnResetCam, btnFocusSelected, new Separator(),
+            btnZoomIn, btnZoomOut, btnResetCam, btnFocusSelected, btnFrameAll,
+            cameraPreviewToggle, new Separator(),
             new Label("Cena:"), sceneSelector, btnScenes, new Separator(),
             cameraPosLabel, cameraZoomLabel
         );
@@ -388,7 +401,7 @@ public class IgnisEditorApp extends Application {
                     zoomCamera(0.8);
                     ev.consume();
                 } else if (ev.getCode() == KeyCode.DIGIT0 || ev.getCode() == KeyCode.NUMPAD0) {
-                    com.ignis.core.Camera cam = game.getMainCamera();
+                    com.ignis.core.Camera cam = game.getViewCamera();
                     if (cam != null) {
                         cam.setZoom(1.0);
                         updateCameraLabels();
@@ -512,7 +525,7 @@ public class IgnisEditorApp extends Application {
         MenuItem zoom100Item = new MenuItem("Zoom to 100%");
         zoom100Item.setAccelerator(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.CONTROL_DOWN));
         zoom100Item.setOnAction(e -> {
-            com.ignis.core.Camera cam = game.getMainCamera();
+            com.ignis.core.Camera cam = game.getViewCamera();
             if (cam != null) {
                 cam.setZoom(1.0);
                 updateCameraLabels();
@@ -526,6 +539,10 @@ public class IgnisEditorApp extends Application {
         MenuItem focusSelectedItem = new MenuItem("Focus on Selected");
         focusSelectedItem.setAccelerator(new KeyCodeCombination(KeyCode.F));
         focusSelectedItem.setOnAction(e -> focusCameraOnSelected());
+
+        MenuItem frameAllItem = new MenuItem("Enquadrar Tudo");
+        frameAllItem.setAccelerator(new KeyCodeCombination(KeyCode.F, KeyCombination.SHIFT_DOWN));
+        frameAllItem.setOnAction(e -> frameAllObjects());
         
         CheckMenuItem showCollidersItem = new CheckMenuItem("Show Colliders");
                 showCollidersItem.setSelected(game.isShowColliders());
@@ -563,9 +580,18 @@ public class IgnisEditorApp extends Application {
                 consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
                 consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
 
+                // Espelho do toggle da toolbar: ver a cena pela camera ativa do jogo.
+                CheckMenuItem cameraPreviewItem = new CheckMenuItem("Ver pela Câmera do Jogo");
+                cameraPreviewItem.setSelected(game.isCameraPreview());
+                if (cameraPreviewToggle != null) {
+                    cameraPreviewItem.selectedProperty()
+                            .bindBidirectional(cameraPreviewToggle.selectedProperty());
+                }
+                cameraPreviewItem.setOnAction(e -> setCameraPreview(cameraPreviewItem.isSelected()));
+
                 view.getItems().addAll(
                     zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
-                    resetCamItem, focusSelectedItem, new SeparatorMenuItem(),
+                    resetCamItem, focusSelectedItem, frameAllItem, cameraPreviewItem, new SeparatorMenuItem(),
                     showGridItem, snapToGridItem, gridSizeMenu, new SeparatorMenuItem(),
                     showCollidersItem, showCameraBoundsItem, new SeparatorMenuItem(),
                     consoleMenuItem
@@ -4576,8 +4602,23 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // Liga/desliga o preview da camera do jogo na Scene View e sincroniza o botao
+    // da toolbar (que tambem pode ser acionado pelo menu de contexto do viewport).
+    private void setCameraPreview(boolean enabled) {
+        game.setCameraPreview(enabled);
+        if (cameraPreviewToggle != null && cameraPreviewToggle.isSelected() != enabled) {
+            cameraPreviewToggle.setSelected(enabled);
+        }
+        updateCameraLabels();
+        setStatus(enabled
+                ? "Scene View presa à câmera ativa do jogo (preview)."
+                : "Scene View livre (câmera do editor).");
+    }
+
+    // Navegacao da Scene View: sempre na camera de VISAO (camera livre do editor;
+    // ou a camera do jogo quando o preview esta ligado / durante o Play).
     private void zoomCamera(double factor) {
-        com.ignis.core.Camera cam = game.getMainCamera();
+        com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
             cam.setZoom(cam.getZoom() * factor);
             updateCameraLabels();
@@ -4585,7 +4626,7 @@ public class IgnisEditorApp extends Application {
     }
 
     private void resetCamera() {
-        com.ignis.core.Camera cam = game.getMainCamera();
+        com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
             cam.setPosition(0, 0);
             cam.setZoom(1.0);
@@ -4596,7 +4637,7 @@ public class IgnisEditorApp extends Application {
 
     private void focusCameraOnSelected() {
         GameObject sel = this.selected;
-        com.ignis.core.Camera cam = game.getMainCamera();
+        com.ignis.core.Camera cam = game.getViewCamera();
         if (sel != null && cam != null) {
             double centerX = sel.getX() + sel.getWidth() / 2.0;
             double centerY = sel.getY() + sel.getHeight() / 2.0;
@@ -4605,12 +4646,49 @@ public class IgnisEditorApp extends Application {
         }
     }
 
+    // Enquadra todos os objetos visiveis da cena na Scene View: centraliza a camera
+    // de visao no bounding box do conjunto e ajusta o zoom para caber com folga.
+    private void frameAllObjects() {
+        com.ignis.core.Camera cam = game.getViewCamera();
+        if (cam == null) return;
+        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
+        int count = 0;
+        for (GameObject go : game.getEntities()) {
+            if (go instanceof com.ignis.core.Camera || !go.isVisible()) continue;
+            minX = Math.min(minX, go.getX());
+            minY = Math.min(minY, go.getY());
+            maxX = Math.max(maxX, go.getX() + go.getWidth());
+            maxY = Math.max(maxY, go.getY() + go.getHeight());
+            count++;
+        }
+        if (count == 0) {
+            resetCamera();
+            setStatus("Cena vazia: câmera do editor redefinida para a origem.");
+            return;
+        }
+        double w = Math.max(1, maxX - minX);
+        double h = Math.max(1, maxY - minY);
+        com.ignis.core.Viewport vp = game.getViewport();
+        double vw = (vp != null && vp.getWidth() > 0) ? vp.getWidth() : 800;
+        double vh = (vp != null && vp.getHeight() > 0) ? vp.getHeight() : 600;
+        // 15% de folga nas bordas; zoom limitado a faixa da Camera (0.1..10).
+        double zoom = Math.min(vw / (w * 1.15), vh / (h * 1.15));
+        zoom = Math.max(0.1, Math.min(10.0, zoom));
+        cam.setPosition(minX + w / 2.0, minY + h / 2.0);
+        cam.setZoom(zoom);
+        updateCameraLabels();
+        setStatus(String.format("Enquadrados %d objetos (zoom %.0f%%).", count, zoom * 100));
+    }
+
     private void updateCameraLabels() {
         if (cameraPosLabel == null || cameraZoomLabel == null) return;
-        com.ignis.core.Camera cam = game.getMainCamera();
+        com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
+            boolean preview = game.isCameraPreview();
             Platform.runLater(() -> {
-                cameraPosLabel.setText(String.format("Cam Pos: (%.1f, %.1f)", cam.getX(), cam.getY()));
+                cameraPosLabel.setText(String.format("%s: (%.1f, %.1f)",
+                        preview ? "Cam Jogo" : "Cam Pos", cam.getX(), cam.getY()));
                 cameraZoomLabel.setText(String.format("Zoom: %.0f%%", cam.getZoom() * 100));
             });
         }

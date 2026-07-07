@@ -41,9 +41,20 @@ public class Game extends Canvas implements Runnable {
     
     // List of all cameras (for multi-camera support)
     private List<Camera> cameras = new java.util.concurrent.CopyOnWriteArrayList<>();
-    
+
     // Flag to indicate if we're in editor camera mode (free camera)
     private boolean editorCameraMode = true;
+
+    // Camera exclusiva da Scene View do editor: navegar (pan/zoom) no editor mexe
+    // NELA, nao na camera do jogo. Nunca entra na lista 'cameras' nem e serializada
+    // na cena — e um utensilio do editor, como em Unity/Godot.
+    private Camera editorCamera;
+
+    // Preview da camera do jogo: quando true (em EDITING), a Scene View renderiza
+    // atraves da camera ativa da cena ("ver o que a camera ve"). Quando false
+    // (padrao), usa a editorCamera livre — da para inspecionar os assets sem a
+    // visao ficar presa a camera do jogo.
+    private boolean cameraPreview = false;
     
     // Grid display settings
         private boolean showGrid = false;
@@ -121,25 +132,25 @@ public class Game extends Canvas implements Runnable {
      * At lower zoom levels, gizmos appear larger in world space to remain usable.
      */
     private int getScaledGizmoSize() {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double zoom = (cam != null) ? cam.getZoom() : 1.0;
         return (int)(BASE_GIZMO_SIZE / zoom);
     }
-    
+
     private int getScaledGizmoArrowSize() {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double zoom = (cam != null) ? cam.getZoom() : 1.0;
         return (int)(BASE_GIZMO_ARROW_SIZE / zoom);
     }
-    
+
     private int getScaledGizmoHitArea() {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double zoom = (cam != null) ? cam.getZoom() : 1.0;
         return (int)(BASE_GIZMO_HIT_AREA / zoom);
     }
-    
+
     private int getScaledRotateGizmoRadius() {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double zoom = (cam != null) ? cam.getZoom() : 1.0;
         return (int)(BASE_ROTATE_GIZMO_RADIUS / zoom);
     }
@@ -282,6 +293,9 @@ public class Game extends Canvas implements Runnable {
                     if (mainCamera != null) {
                         mainCamera.setViewport(viewport);
                     }
+                    if (editorCamera != null) {
+                        editorCamera.setViewport(viewport);
+                    }
                 }
             }
         });
@@ -298,9 +312,15 @@ public class Game extends Canvas implements Runnable {
         mainCamera = new Camera("MainCamera", this, 0, 0);
         mainCamera.setViewport(viewport);
         mainCamera.setGame(this);
-        
+
         // Add to cameras list
         cameras.add(mainCamera);
+
+        // Camera livre da Scene View — fora da lista 'cameras' de proposito:
+        // nao aparece na Hierarchy, nao e salva na cena e nao vira camera ativa.
+        editorCamera = new Camera("EditorCamera", this, 0, 0);
+        editorCamera.setViewport(viewport);
+        editorCamera.setGame(this);
     }
     
     /**
@@ -610,7 +630,7 @@ public class Game extends Canvas implements Runnable {
         isPanning = true;
         panStartX = x;
         panStartY = y;
-        Camera cam = getMainCamera();
+        Camera cam = getViewCamera();
         if (cam != null) {
             camStartX = cam.getX();
             camStartY = cam.getY();
@@ -620,8 +640,8 @@ public class Game extends Canvas implements Runnable {
     
     private void handlePanning(int x, int y) {
         if (!isPanning || gameState != GameState.EDITING) return;
-        
-        Camera cam = getMainCamera();
+
+        Camera cam = getViewCamera();
         if (cam != null) {
             double zoom = cam.getZoom();
             double dx = (x - panStartX) / zoom;
@@ -994,7 +1014,7 @@ public class Game extends Canvas implements Runnable {
         int gizmoSize = getScaledGizmoSize();
         int hitArea = getScaledGizmoHitArea();
         int rotateRadius = getScaledRotateGizmoRadius();
-        int scaledHitTolerance = (int)(25 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        int scaledHitTolerance = (int)(25 / (getViewCamera() != null ? getViewCamera().getZoom() : 1.0));
 
         switch (currentTool) {
             case MOVE:
@@ -1024,7 +1044,7 @@ public class Game extends Canvas implements Runnable {
                 break;
 
             case SCALE:
-                int squareSize = (int)(20 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+                int squareSize = (int)(20 / (getViewCamera() != null ? getViewCamera().getZoom() : 1.0));
                 // Check center square first (uniform scale precedence)
                 if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
                         mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
@@ -1077,7 +1097,7 @@ public class Game extends Canvas implements Runnable {
 
     /** Fator mundo-por-pixel da camera de edicao (1.0 sem transform de camera). */
     private double editorWorldPerPixel() {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double zoom = (cam != null && editorCameraMode) ? cam.getZoom() : 1.0;
         return (zoom > 0) ? 1.0 / zoom : 1.0;
     }
@@ -1700,7 +1720,7 @@ public class Game extends Canvas implements Runnable {
         if (world == null) return;
         int cs = world.getCellSize();
         if (cs <= 0) return;
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         double[] vis = (cam != null) ? cam.getVisibleWorldBounds() : new double[] { 0, 0, width, height };
         int c0 = world.cellCol(vis[0]) - 1, c1 = world.cellCol(vis[2]) + 1;
         int r0 = world.cellRow(vis[1]) - 1, r1 = world.cellRow(vis[3]) + 1;
@@ -1723,7 +1743,7 @@ public class Game extends Canvas implements Runnable {
         // Barreiras: so as celulas dentro do retangulo visivel (culling barato).
         if (world.getBlockedCount() > 0) {
             double[] vis = null;
-            Camera cam = getActiveCamera();
+            Camera cam = getViewCamera();
             if (cam != null) vis = cam.getVisibleWorldBounds();
             int cs = world.getCellSize();
             int c0, c1, r0, r1;
@@ -1898,14 +1918,14 @@ public class Game extends Canvas implements Runnable {
         }
 
         // ==================== CAMERA-DEPENDENT RENDERING ====================
-        // 1. Select the active camera
-        Camera activeCamera = getActiveCamera();
-        
+        // 1. Select the view camera (editor livre em EDITING; camera do jogo no Play/preview)
+        Camera activeCamera = getViewCamera();
+
         // 2. Save the original transform
         AffineTransform originalTransform = g2d.getTransform();
-        
+
         // 3. Apply camera transform when in editor camera mode OR when playing
-        boolean shouldApplyCameraTransform = activeCamera != null && 
+        boolean shouldApplyCameraTransform = activeCamera != null &&
             (editorCameraMode || gameState == GameState.PLAYING);
         
         if (shouldApplyCameraTransform) {
@@ -2055,7 +2075,7 @@ public class Game extends Canvas implements Runnable {
         g2d.setColor(Color.GRAY);
         g2d.fillRect(0, 0, width, height);
 
-        Camera activeCamera = getActiveCamera();
+        Camera activeCamera = getViewCamera();
         AffineTransform originalTransform = g2d.getTransform();
         boolean shouldApplyCameraTransform = activeCamera != null
                 && (editorCameraMode || gameState == GameState.PLAYING);
@@ -2336,7 +2356,7 @@ public class Game extends Canvas implements Runnable {
      * The grid adapts to the camera zoom level for better visibility.
      */
     private void drawGrid(Graphics2D g2d) {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         if (cam == null) return;
         
         double zoom = cam.getZoom();
@@ -2482,7 +2502,7 @@ public class Game extends Canvas implements Runnable {
         int gizmoSize = getScaledGizmoSize();
         int arrowSize = getScaledGizmoArrowSize();
 
-        double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
+        double zoom = (getViewCamera() != null) ? getViewCamera().getZoom() : 1.0;
         int centerSize = (int)(10 / zoom);
         centerSize = Math.max(4, centerSize); // Minimum visible size
 
@@ -2590,7 +2610,7 @@ public class Game extends Canvas implements Runnable {
         g2d.drawLine(centerX, centerY, indicatorX, indicatorY);
 
         // Center point
-        int centerPointSize = (int)(5 / (getActiveCamera() != null ? getActiveCamera().getZoom() : 1.0));
+        int centerPointSize = (int)(5 / (getViewCamera() != null ? getViewCamera().getZoom() : 1.0));
         centerPointSize = Math.max(3, centerPointSize);
         g2d.setColor(Color.BLACK);
         g2d.fillOval(centerX - centerPointSize - 1, centerY - centerPointSize - 1, (centerPointSize + 1) * 2, (centerPointSize + 1) * 2);
@@ -2615,7 +2635,7 @@ public class Game extends Canvas implements Runnable {
         
         // Get scaled gizmo dimensions
         int gizmoSize = getScaledGizmoSize();
-        double zoom = (getActiveCamera() != null) ? getActiveCamera().getZoom() : 1.0;
+        double zoom = (getViewCamera() != null) ? getViewCamera().getZoom() : 1.0;
         int squareSize = (int)(20 / zoom);
         squareSize = Math.max(4, squareSize);
         int centerSize = (int)(12 / zoom);
@@ -2766,6 +2786,40 @@ public class Game extends Canvas implements Runnable {
             }
         }
         return mainCamera;
+    }
+
+    /**
+     * Camera pela qual a VIEW atual e renderizada. Durante o Play (ou pausa) e a
+     * camera ativa do jogo; no modo de edicao e a camera livre do editor — a menos
+     * que o preview da camera esteja ligado ({@link #setCameraPreview}), quando a
+     * Scene View passa a mostrar exatamente o que a camera ativa do jogo ve.
+     * Todo codigo de render/pick/navegacao do viewport deve usar esta camera;
+     * {@link #getActiveCamera()} continua sendo a semantica de GAMEPLAY.
+     */
+    public Camera getViewCamera() {
+        if (gameState != GameState.EDITING || cameraPreview || editorCamera == null) {
+            return getActiveCamera();
+        }
+        return editorCamera;
+    }
+
+    /** Camera livre da Scene View do editor (nunca serializada na cena). */
+    public Camera getEditorCamera() {
+        return editorCamera;
+    }
+
+    /**
+     * Liga/desliga o preview da camera do jogo na Scene View. Ligado, a view fica
+     * presa ao enquadramento da camera ativa da cena; desligado (padrao), a view
+     * volta para a camera livre do editor, sem mexer na camera do jogo.
+     */
+    public void setCameraPreview(boolean enabled) {
+        this.cameraPreview = enabled;
+    }
+
+    /** Se a Scene View esta mostrando a visao da camera ativa do jogo. */
+    public boolean isCameraPreview() {
+        return cameraPreview;
     }
 
     /**
@@ -2920,7 +2974,7 @@ public class Game extends Canvas implements Runnable {
      * @return Screen position as Point2D.Double
      */
     public Point2D.Double worldToScreen(double worldX, double worldY) {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         if (cam != null && editorCameraMode) {
             return cam.worldToScreen(worldX, worldY);
         }
@@ -2936,7 +2990,7 @@ public class Game extends Canvas implements Runnable {
      * @return World position as Point2D.Double
      */
     public Point2D.Double screenToWorld(double screenX, double screenY) {
-        Camera cam = getActiveCamera();
+        Camera cam = getViewCamera();
         if (cam != null && editorCameraMode) {
             return cam.screenToWorld(screenX, screenY);
         }
