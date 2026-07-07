@@ -1,5 +1,7 @@
 package com.ignis.collab;
 
+import com.ignis.core.IgnisLogger;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -57,7 +59,7 @@ final class CollabServer {
                 clients.add(handler);
                 handler.start();
             } catch (Exception e) {
-                if (running) System.err.println("[Collab] accept: " + e.getMessage());
+                if (running) IgnisLogger.error("[Collab] accept: " + e.getMessage());
             }
         }
     }

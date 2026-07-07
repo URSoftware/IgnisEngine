@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ignis.core.IgnisLogger;
 import com.ignis.mcp.tools.*;
 import org.json.JSONObject;
 
@@ -35,19 +36,36 @@ public final class McpServerManager {
     private McpServerManager() {}
 
     /**
-     * Inicia o servidor MCP em uma thread de segundo plano.
+     * Inicia o servidor MCP em uma thread de segundo plano usando System.in e o
+     * System.out corrente como canal do protocolo. Prefira o overload com o stream
+     * explicito quando o chamador redireciona System.out (modo --mcp-server).
      *
      * @param projectDir Diretorio raiz do projeto ativo na engine.
      */
     public static void start(File projectDir) {
+        start(projectDir, System.out);
+    }
+
+    /**
+     * Inicia o servidor MCP em uma thread de segundo plano.
+     *
+     * @param projectDir  Diretorio raiz do projeto ativo na engine.
+     * @param protocolOut Stream onde o JSON-RPC do MCP e escrito (o stdout REAL do
+     *                    processo). Deve ser capturado ANTES de qualquer
+     *                    {@code System.setOut}; sem isso o transporte era construido
+     *                    sobre o stdout ja redirecionado para stderr e o cliente
+     *                    nunca recebia as respostas.
+     */
+    public static void start(File projectDir, java.io.OutputStream protocolOut) {
         projectFolder = projectDir;
         new Thread(() -> {
             try {
-                System.err.println("[IgnisMCP] Inicializando transporte Stdio com Jackson Mapper...");
+                IgnisLogger.info("[IgnisMCP] Inicializando transporte Stdio com Jackson Mapper...");
                 JacksonMcpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new ObjectMapper());
-                StdioServerTransportProvider transportProvider = new StdioServerTransportProvider(jsonMapper);
+                StdioServerTransportProvider transportProvider =
+                        new StdioServerTransportProvider(jsonMapper, System.in, protocolOut);
 
-                System.err.println("[IgnisMCP] Criando construtor do Sync Server...");
+                IgnisLogger.info("[IgnisMCP] Criando construtor do Sync Server...");
                 server = McpServer.sync(transportProvider)
                         .serverInfo("IgnisEngine-Server", "1.0.0")
                         .capabilities(ServerCapabilities.builder()
@@ -55,23 +73,22 @@ public final class McpServerManager {
                                 .build())
                         .build();
 
-                System.err.println("[IgnisMCP] Registrando ferramentas do motor...");
+                IgnisLogger.info("[IgnisMCP] Registrando ferramentas do motor...");
 
                 // Fonte canonica: todas as ferramentas base do IgnisToolRegistry
                 // (mesmo conjunto do bridge HTTP; sem as de cena, que exigem editor vivo).
                 IgnisToolRegistry registry = new IgnisToolRegistry(projectFolder);
                 int adapted = registerRegistryTools(server, registry);
-                System.err.println("[IgnisMCP] " + adapted + " ferramentas do registry adaptadas para STDIO.");
+                IgnisLogger.info("[IgnisMCP] " + adapted + " ferramentas do registry adaptadas para STDIO.");
 
                 // Exclusivas do STDIO (nao duplicam nada do registry):
                 // processamento WAV e edicao de imagem em camadas (estado em memoria).
                 AudioTools.register(server, projectFolder);
                 ImageTools.register(server, projectFolder);
 
-                System.err.println("[IgnisMCP] Servidor rodando com sucesso.");
+                IgnisLogger.info("[IgnisMCP] Servidor rodando com sucesso.");
             } catch (Exception e) {
-                System.err.println("[IgnisMCP] Erro fatal na inicializacao do servidor: " + e.getMessage());
-                e.printStackTrace(System.err);
+                IgnisLogger.error("[IgnisMCP] Erro fatal na inicializacao do servidor: " + e.getMessage(), e);
             }
         }, "IgnisMCP-Server-Thread").start();
     }
@@ -108,7 +125,7 @@ public final class McpServerManager {
                 }));
                 count++;
             } catch (Exception e) {
-                System.err.println("[IgnisMCP] Falha ao adaptar ferramenta '" + def.name + "': " + e.getMessage());
+                IgnisLogger.error("[IgnisMCP] Falha ao adaptar ferramenta '" + def.name + "': " + e.getMessage());
             }
         }
         return count;
@@ -121,9 +138,9 @@ public final class McpServerManager {
         if (server != null) {
             try {
                 server.close();
-                System.err.println("[IgnisMCP] Servidor encerrado com sucesso.");
+                IgnisLogger.info("[IgnisMCP] Servidor encerrado com sucesso.");
             } catch (Exception e) {
-                System.err.println("[IgnisMCP] Erro ao encerrar o servidor: " + e.getMessage());
+                IgnisLogger.error("[IgnisMCP] Erro ao encerrar o servidor: " + e.getMessage());
             }
             server = null;
         }

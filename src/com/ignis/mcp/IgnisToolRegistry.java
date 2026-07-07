@@ -1,5 +1,7 @@
 package com.ignis.mcp;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.animation.AnimationFrame;
 import com.ignis.animation.AnimationIO;
 import com.ignis.animation.Animator;
@@ -159,7 +161,7 @@ public final class IgnisToolRegistry {
         // aplica e rebroadcasta. O convidado ve o resultado pelo snapshot.
         if (FORWARD_TO_HOST.contains(name) && CollabSession.get().getRole() == CollabSession.Role.GUEST) {
             CollabBridge.sendCommand(name, safeArgs);
-            System.out.println("[Collab] '" + name + "' encaminhado ao host.");
+            IgnisLogger.info("[Collab] '" + name + "' encaminhado ao host.");
             return "[colaboracao] '" + name + "' encaminhado ao host (aplicado na cena autoritativa).";
         }
 
@@ -177,7 +179,7 @@ public final class IgnisToolRegistry {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         String argsPreview = safeArgs.isEmpty() ? "" : " " + truncate(safeArgs.toString(), 120);
         boolean isError = result != null && result.startsWith("Erro");
-        System.out.println("[MCP] " + name + argsPreview + " -> "
+        IgnisLogger.info("[MCP] " + name + argsPreview + " -> "
                 + (isError ? "ERRO" : "ok") + " (" + ms + "ms)");
         return result;
     }

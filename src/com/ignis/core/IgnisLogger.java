@@ -71,16 +71,18 @@ public final class IgnisLogger {
             }
         }
 
-        // Mantem o print no console do terminal de comando do computador
-        // para depuracao externa, mas com uma tag identificavel.
+        // Mantem o print no terminal para depuracao externa, com tag identificavel.
+        // SEMPRE em stderr: stdout fica limpo para protocolos que o usam como canal
+        // de dados (ex.: servidor MCP STDIO, onde qualquer print em stdout corrompe
+        // o JSON-RPC). Consoles de UI recebem via listener, nao por stream.
         if (level == Level.ERROR) {
             System.err.println("[IgnisEngine] ERROR: " + message);
         } else if (level == Level.WARN) {
-            System.out.println("[IgnisEngine] WARNING: " + message);
+            System.err.println("[IgnisEngine] WARNING: " + message);
         } else if (level == Level.SCRIPT) {
-            System.out.println("[IgnisEngine] SCRIPT: " + message);
+            System.err.println("[IgnisEngine] SCRIPT: " + message);
         } else {
-            System.out.println("[IgnisEngine] INFO: " + message);
+            System.err.println("[IgnisEngine] INFO: " + message);
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.ignis.core.ui;
 
+import com.ignis.core.IgnisLogger;
+
 import java.awt.*;
 import org.json.JSONObject;
 
@@ -237,7 +239,7 @@ public class UIButton extends UIComponent {
         try {
             iconImage = javax.imageio.ImageIO.read(new java.io.File(iconPath));
         } catch (Exception e) {
-            System.err.println("[UIButton] Erro ao carregar ícone: " + e.getMessage());
+            IgnisLogger.error("[UIButton] Erro ao carregar ícone: " + e.getMessage());
             iconImage = null;
         }
     }

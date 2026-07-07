@@ -634,7 +634,9 @@ public abstract class IgnisScript extends Component {
     }
 
     /**
-     * Log de debug.
+     * Log de debug. Roteado pelo IgnisLogger: alem do terminal (stderr), a mensagem
+     * aparece no console do editor FX (que escuta o logger) — antes o print ia
+     * direto ao System.out e nunca chegava ao console da UI.
      */
     protected void log(String message) {
         com.ignis.core.IgnisLogger.script("[" + scriptName + "] " + message);

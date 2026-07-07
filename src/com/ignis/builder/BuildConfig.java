@@ -1,5 +1,7 @@
 package com.ignis.builder;
 
+import com.ignis.core.IgnisLogger;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -93,7 +95,7 @@ public class BuildConfig {
                 String raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
                 return fromJSON(new JSONObject(raw));
             } catch (Exception e) {
-                System.err.println("Could not read " + BUILD_CONFIG_FILE + ": " + e.getMessage());
+                IgnisLogger.error("Could not read " + BUILD_CONFIG_FILE + ": " + e.getMessage());
             }
         }
         return new BuildConfig();

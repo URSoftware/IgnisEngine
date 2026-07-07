@@ -1,5 +1,7 @@
 package com.ignis.notes;
 
+import com.ignis.core.IgnisLogger;
+
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -510,7 +512,7 @@ public class NoteSystemFrame extends JFrame {
                     DefaultMutableTreeNode node = new DefaultMutableTreeNode(page);
                     rootNode.add(node);
                 } catch (IOException e) {
-                    System.err.println("Failed to read note file: " + file.getName());
+                    IgnisLogger.error("Failed to read note file: " + file.getName());
                 }
             }
             treeModel.reload();
@@ -535,7 +537,7 @@ public class NoteSystemFrame extends JFrame {
             HTMLEditorKit kit = (HTMLEditorKit) editorArea.getEditorKit();
             kit.insertHTML(doc, editorArea.getCaretPosition(), tag, 0, 0, ordered ? HTML.Tag.OL : HTML.Tag.UL);
         } catch (Exception ex) {
-            System.err.println("Error inserting list: " + ex.getMessage());
+            IgnisLogger.error("Error inserting list: " + ex.getMessage());
         }
     }
 

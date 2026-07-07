@@ -1,5 +1,7 @@
 package com.ignis.editor;
 
+import com.ignis.core.IgnisLogger;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -59,7 +61,7 @@ public class NvidiaProvider implements AIServiceProvider {
             return parseResponse(response.body());
         }
         String err = "API Error: " + response.statusCode() + "\n" + response.body();
-        System.err.println("[NVIDIA] " + err);
+        IgnisLogger.error("[NVIDIA] " + err);
         return err;
     }
 

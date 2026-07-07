@@ -1,5 +1,7 @@
 package com.ignis.editor;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.animation.AnimationFrame;
 import com.ignis.animation.AnimationIO;
 import com.ignis.animation.Animator;
@@ -567,7 +569,7 @@ public class AnimationEditorFrame extends JFrame {
         if (relative != null) {
             return relative;
         }
-        System.err.println("[AnimationEditor] Frame outside project, stored as absolute: " + file);
+        IgnisLogger.error("[AnimationEditor] Frame outside project, stored as absolute: " + file);
         return file.getAbsolutePath();
     }
 

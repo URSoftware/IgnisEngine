@@ -1,5 +1,7 @@
 package com.ignis.collab;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.core.AssetResolver;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -220,10 +222,10 @@ public final class CollabProjectSync implements CollabSession.Listener {
                 JSONObject man = buildManifest(mainFolder);
                 CollabSession.get().sendEventTo(CollabSession.CH_PROJECT,
                         new JSONObject().put("manifest", man), toUid);
-                System.out.println("[Collab] manifesto enviado (" +
+                IgnisLogger.info("[Collab] manifesto enviado (" +
                         man.getJSONArray("files").length() + " arquivos) para " + toUid);
             } catch (Exception e) {
-                System.err.println("[Collab] falha ao montar manifesto: " + e.getMessage());
+                IgnisLogger.error("[Collab] falha ao montar manifesto: " + e.getMessage());
             }
         });
         // O manifesto deve refletir o estado atual da cena: salvar antes.
@@ -255,7 +257,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
             String rel = relativize(mainFolder, f);
             if (rel == null || skipInSync(rel)) continue;
             if (f.length() > MAX_FILE_BYTES) {
-                System.err.println("[Collab] arquivo acima do limite, fora da sincronizacao: " + rel);
+                IgnisLogger.error("[Collab] arquivo acima do limite, fora da sincronizacao: " + rel);
                 continue;
             }
             if (rel.endsWith(".ignis") && !rel.contains("/")) ignisRel = rel;
@@ -306,7 +308,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
                 CollabSession.get().sendEventTo(CollabSession.CH_PROJECT, msg, toUid);
             }
         } catch (Exception e) {
-            System.err.println("[Collab] falha ao enviar arquivo '" + rel + "': " + e.getMessage());
+            IgnisLogger.error("[Collab] falha ao enviar arquivo '" + rel + "': " + e.getMessage());
         }
     }
 
@@ -394,7 +396,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
                 String expected = expectedHash(rel);
                 if (expected != null && !expected.isEmpty()
                         && !sha256Bytes(bytes).equals(expected) && !initialSyncDone) {
-                    System.err.println("[Collab] hash divergente em '" + rel + "', arquivo descartado.");
+                    IgnisLogger.error("[Collab] hash divergente em '" + rel + "', arquivo descartado.");
                     pendingFiles.remove(rel);
                     return;
                 }
@@ -414,10 +416,10 @@ public final class CollabProjectSync implements CollabSession.Listener {
                     // Mudanca continua vinda do watcher do host.
                     AssetResolver.clearImageCache();
                     notifyFilesChanged(List.of(rel));
-                    System.out.println("[Collab] arquivo atualizado pelo host: " + rel);
+                    IgnisLogger.info("[Collab] arquivo atualizado pelo host: " + rel);
                 }
             } catch (Exception e) {
-                System.err.println("[Collab] falha ao receber chunk: " + e.getMessage());
+                IgnisLogger.error("[Collab] falha ao receber chunk: " + e.getMessage());
             }
         });
     }
@@ -431,7 +433,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
             if (f.isFile() && f.delete()) {
                 AssetResolver.clearImageCache();
                 notifyFilesChanged(List.of(rel));
-                System.out.println("[Collab] arquivo removido pelo host: " + rel);
+                IgnisLogger.info("[Collab] arquivo removido pelo host: " + rel);
             }
         });
     }
@@ -495,9 +497,9 @@ public final class CollabProjectSync implements CollabSession.Listener {
             t.setDaemon(true);
             t.start();
             this.watcherThread = t;
-            System.out.println("[Collab] observando alteracoes em " + projectFolder);
+            IgnisLogger.info("[Collab] observando alteracoes em " + projectFolder);
         } catch (Exception e) {
-            System.err.println("[Collab] watcher indisponivel: " + e.getMessage());
+            IgnisLogger.error("[Collab] watcher indisponivel: " + e.getMessage());
         }
     }
 
@@ -573,7 +575,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
             } catch (java.nio.file.ClosedWatchServiceException e) {
                 return;
             } catch (Exception e) {
-                System.err.println("[Collab] watcher: " + e.getMessage());
+                IgnisLogger.error("[Collab] watcher: " + e.getMessage());
             }
         }
     }
@@ -604,7 +606,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
             for (File hostDir : hosts) {
                 if (lastModifiedRecursive(hostDir) < cutoff) {
                     deleteRecursive(hostDir);
-                    System.out.println("[Collab] cache de sessao antigo removido: " + hostDir.getName());
+                    IgnisLogger.info("[Collab] cache de sessao antigo removido: " + hostDir.getName());
                 }
             }
         } catch (Exception ignore) { /* limpeza e melhor-esforco */ }
@@ -713,7 +715,7 @@ public final class CollabProjectSync implements CollabSession.Listener {
     }
 
     private void fireGuestStatus(String msg) {
-        System.out.println("[Collab] " + msg);
+        IgnisLogger.info("[Collab] " + msg);
         CollabSession.get().fireStatus(msg, CollabSession.get().isActive());
     }
 

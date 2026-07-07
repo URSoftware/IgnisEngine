@@ -1,5 +1,7 @@
 package com.ignis.editor.fx;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.core.Circle;
 import com.ignis.core.Game;
 import com.ignis.core.GameObject;
@@ -420,7 +422,7 @@ public class IgnisEditorApp extends Application {
                 stage.getIcons().add(new javafx.scene.image.Image(iconFile.toURI().toString()));
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            IgnisLogger.error("[Editor] Falha ao carregar icone da janela.", ex);
         }
         stage.setScene(scene);
 
@@ -1641,10 +1643,10 @@ public class IgnisEditorApp extends Application {
             if (EditorPrefs.isMcpEnabled() && projectFolder != null && projectFolder.isDirectory()) {
                 com.ignis.mcp.McpService.start(projectFolder, EditorPrefs.isMcpExposeNetwork(),
                         EditorPrefs.getMcpPort(), EditorPrefs.getMcpToken());
-                System.out.println("[IgnisMCP] Bridge HTTP iniciado: " + com.ignis.mcp.McpService.getUrl());
+                IgnisLogger.info("[IgnisMCP] Bridge HTTP iniciado: " + com.ignis.mcp.McpService.getUrl());
             }
         } catch (Exception ex) {
-            System.err.println("[IgnisMCP] Falha ao auto-iniciar o bridge: " + ex.getMessage());
+            IgnisLogger.error("[IgnisMCP] Falha ao auto-iniciar o bridge: " + ex.getMessage());
         }
     }
 
@@ -4067,7 +4069,7 @@ public class IgnisEditorApp extends Application {
                     field.setBoolean(script, newV);
                     saveScriptVariablesToPending(script);
                 } catch (Exception ex) {
-                    System.err.println("Erro ao salvar variavel booleana: " + ex.getMessage());
+                    IgnisLogger.error("Erro ao salvar variavel booleana: " + ex.getMessage());
                 }
             });
             return cb;
@@ -4102,7 +4104,7 @@ public class IgnisEditorApp extends Application {
                         saveScriptVariablesToPending(script);
                         markProjectDirty();
                     } catch (Exception ex) {
-                        System.err.println("Erro ao definir Texture2D: " + ex.getMessage());
+                        IgnisLogger.error("Erro ao definir Texture2D: " + ex.getMessage());
                     }
                 }
             });
@@ -4117,7 +4119,7 @@ public class IgnisEditorApp extends Application {
                     saveScriptVariablesToPending(script);
                     markProjectDirty();
                 } catch (Exception ex) {
-                    System.err.println("Erro ao limpar Texture2D: " + ex.getMessage());
+                    IgnisLogger.error("Erro ao limpar Texture2D: " + ex.getMessage());
                 }
             });
             
@@ -4153,7 +4155,7 @@ public class IgnisEditorApp extends Application {
                         tf.setText(val != null ? val.toString() : "");
                     } catch (Exception ignored) {}
                 } catch (Exception ex) {
-                    System.err.println("Erro ao definir variavel: " + ex.getMessage());
+                    IgnisLogger.error("Erro ao definir variavel: " + ex.getMessage());
                 }
             };
             
@@ -4211,7 +4213,7 @@ public class IgnisEditorApp extends Application {
                 }
                 saveScriptVariablesToPending(script);
             } catch (Exception ex) {
-                System.err.println("Erro ao definir referencia: " + ex.getMessage());
+                IgnisLogger.error("Erro ao definir referencia: " + ex.getMessage());
             }
         });
 
@@ -4232,7 +4234,7 @@ public class IgnisEditorApp extends Application {
                             comboBox.setValue(clicked.getName());
                             saveScriptVariablesToPending(script);
                         } catch (Exception ex) {
-                            System.err.println("Erro ao associar objeto clicado: " + ex.getMessage());
+                            IgnisLogger.error("Erro ao associar objeto clicado: " + ex.getMessage());
                         }
                     }
                     viewportCanvas.setCursor(originalCursor);
@@ -4290,7 +4292,7 @@ public class IgnisEditorApp extends Application {
                         saveScriptVariablesToPending(script);
                         success = true;
                     } catch (Exception ex) {
-                        System.err.println("Erro ao associar drag-drop: " + ex.getMessage());
+                        IgnisLogger.error("Erro ao associar drag-drop: " + ex.getMessage());
                     }
                 }
             }
@@ -4588,30 +4590,36 @@ public class IgnisEditorApp extends Application {
         }
 
         if (mcpMode) {
+            // O stdout REAL e o canal JSON-RPC do MCP: captura-lo ANTES do redirect
+            // e obrigatorio. Sem isso, o transporte STDIO construia-se sobre o
+            // System.out ja trocado por stderr e as respostas do protocolo nunca
+            // chegavam ao cliente.
+            java.io.PrintStream protocolOut = System.out;
             // Silencia o standard output redirecionando logs para o System.err
+            // (protege contra prints residuais de terceiros corromperem o protocolo).
             System.setOut(System.err);
-            
+
             if (projectPath == null) {
-                System.err.println("Erro: Caminho do projeto nao especificado para o modo MCP.");
+                IgnisLogger.error("Erro: Caminho do projeto nao especificado para o modo MCP.");
                 System.exit(1);
             }
             File folder = new File(projectPath);
             if (!folder.exists() || !folder.isDirectory()) {
-                System.err.println("Erro: Diretorio do projeto invalido: " + projectPath);
+                IgnisLogger.error("Erro: Diretorio do projeto invalido: " + projectPath);
                 System.exit(1);
             }
 
             // Inicia o JavaFX Platform em modo Headless
             try {
                 Platform.startup(() -> {
-                    System.err.println("[IgnisMCP] Runtime JavaFX inicializado em modo headless.");
+                    com.ignis.core.IgnisLogger.info("[IgnisMCP] Runtime JavaFX inicializado em modo headless.");
                 });
             } catch (IllegalStateException e) {
                 // JavaFX runtime ja iniciado
             }
 
-            // Inicia o servidor MCP
-            com.ignis.mcp.McpServerManager.start(folder);
+            // Inicia o servidor MCP escrevendo o protocolo no stdout real.
+            com.ignis.mcp.McpServerManager.start(folder, protocolOut);
         } else {
             launch(args);
         }

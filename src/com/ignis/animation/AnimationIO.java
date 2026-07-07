@@ -1,5 +1,7 @@
 package com.ignis.animation;
 
+import com.ignis.core.IgnisLogger;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -52,7 +54,7 @@ public final class AnimationIO {
                 try {
                     result.add(load(file));
                 } catch (Exception e) {
-                    System.err.println("[AnimationIO] Failed to load " + file.getName() + ": " + e.getMessage());
+                    IgnisLogger.error("[AnimationIO] Failed to load " + file.getName() + ": " + e.getMessage());
                 }
             }
         }

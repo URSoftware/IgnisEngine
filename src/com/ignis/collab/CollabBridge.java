@@ -1,5 +1,7 @@
 package com.ignis.collab;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.core.AssetResolver;
 import com.ignis.core.Camera;
 import com.ignis.core.EntityFactory;
@@ -436,7 +438,7 @@ public final class CollabBridge implements CollabSession.Listener {
                 try {
                     if (commandExecutor != null && !tool.isEmpty()) {
                         String res = commandExecutor.execute(tool, args == null ? new JSONObject() : args);
-                        System.out.println("[Collab] comando de " + from + ": " + tool + " -> " + res);
+                        IgnisLogger.info("[Collab] comando de " + from + ": " + tool + " -> " + res);
                     }
                 } catch (Exception ignore) { /* comando invalido nao derruba o host */ }
             });
@@ -631,7 +633,7 @@ public final class CollabBridge implements CollabSession.Listener {
             Files.write(dest.toPath(), Base64.getDecoder().decode(b64));
             requestedAssets.remove(path);
             AssetResolver.clearImageCache(); // forca recarregar o sprite recem-recebido
-            System.out.println("[Collab] asset recebido do host: " + path);
+            IgnisLogger.info("[Collab] asset recebido do host: " + path);
         } catch (Exception ignore) { /* asset opcional */ }
     }
 }

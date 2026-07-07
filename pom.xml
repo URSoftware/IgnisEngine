@@ -152,9 +152,9 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Quality gate mínimo (item 1 do plano). Enforça no núcleo com.ignis.core
-                 (já migrado para IgnisLogger); amplia conforme o resto migra. Roda em
-                 'verify' (mesmo alvo do CI). -->
+            <!-- Quality gate (item 1 do plano). Desde 07/07/2026 cobre TODO o src
+                 (logging migrado para IgnisLogger em todos os pacotes); a única
+                 exceção é o próprio sink (IgnisLogger). Roda em 'verify' (CI). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
@@ -168,12 +168,13 @@
                 </dependencies>
                 <configuration>
                     <configLocation>config/checkstyle/checkstyle.xml</configLocation>
-                    <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <sourceDirectories>
                         <sourceDirectory>src</sourceDirectory>
+                        <sourceDirectory>test</sourceDirectory>
                     </sourceDirectories>
-                    <includes>com/ignis/core/*.java</includes>
-                    <excludes>com/ignis/core/IgnisLogger.java,com/ignis/core/IgnisScript.java</excludes>
+                    <includes>com/ignis/**/*.java</includes>
+                    <excludes>com/ignis/core/IgnisLogger.java</excludes>
                     <consoleOutput>true</consoleOutput>
                     <failOnViolation>true</failOnViolation>
                     <violationSeverity>error</violationSeverity>

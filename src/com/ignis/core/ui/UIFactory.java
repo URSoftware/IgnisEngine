@@ -1,5 +1,7 @@
 package com.ignis.core.ui;
 
+import com.ignis.core.IgnisLogger;
+
 import org.json.JSONObject;
 import org.json.JSONArray;
 
@@ -51,7 +53,7 @@ public class UIFactory {
                 component = UICheckbox.fromJSON(json);
                 break;
             default:
-                System.err.println("[UIFactory] Tipo de componente desconhecido: " + type);
+                IgnisLogger.error("[UIFactory] Tipo de componente desconhecido: " + type);
                 return null;
         }
         

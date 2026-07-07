@@ -249,7 +249,7 @@ public class FxCodeEditor extends Stage {
                 getIcons().add(new javafx.scene.image.Image(iconFile.toURI().toString()));
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            com.ignis.core.IgnisLogger.error("[FxCodeEditor] Falha ao carregar icone da janela.", ex);
         }
 
         setupUI();
@@ -930,7 +930,7 @@ public class FxCodeEditor extends Stage {
                     method.setAccessible(true);
                     method.invoke(editor);
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    com.ignis.core.IgnisLogger.error("[FxCodeEditor] Falha ao invocar acao do editor.", ex);
                 }
             }
         } else {
@@ -1125,7 +1125,7 @@ public class FxCodeEditor extends Stage {
                 String encoded = java.net.URLEncoder.encode(css, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
                 scene.getStylesheets().add("data:text/css," + encoded);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                com.ignis.core.IgnisLogger.error("[FxCodeEditor] Falha ao aplicar tema CSS.", ex);
             }
         }
 

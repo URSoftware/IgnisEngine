@@ -1,5 +1,7 @@
 package com.ignis.editor;
 
+import com.ignis.core.IgnisLogger;
+
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -160,8 +162,7 @@ public class AIIntegration {
                     context.append("## ").append(docFile).append("\n\n");
                     context.append(content).append("\n\n---\n\n");
                 } catch (IOException e) {
-                    System.err.println("Error reading documentation file: " + docFile);
-                    e.printStackTrace();
+                    IgnisLogger.error("Error reading documentation file: " + docFile, e);
                 }
             }
         }
@@ -243,7 +244,7 @@ public class AIIntegration {
         // Security check
         try {
             if (!file.getCanonicalPath().startsWith(projectRoot.getCanonicalPath())) {
-                System.err.println("Security error: Attempted to write outside project directory");
+                IgnisLogger.error("Security error: Attempted to write outside project directory");
                 return false;
             }
         } catch (IOException e) {
@@ -257,8 +258,7 @@ public class AIIntegration {
             Files.write(file.toPath(), content.getBytes(StandardCharsets.UTF_8));
             return true;
         } catch (IOException e) {
-            System.err.println("Error writing file: " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("Error writing file: " + e.getMessage(), e);
             return false;
         }
     }
@@ -363,7 +363,7 @@ public class AIIntegration {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error loading AI settings: " + e.getMessage());
+            IgnisLogger.error("Error loading AI settings: " + e.getMessage());
         }
     }
     
@@ -396,7 +396,7 @@ public class AIIntegration {
                 projectSettingsFile.delete();
             }
         } catch (Exception e) {
-            System.err.println("Error saving AI settings: " + e.getMessage());
+            IgnisLogger.error("Error saving AI settings: " + e.getMessage());
         }
     }
 }

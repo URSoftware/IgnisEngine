@@ -220,7 +220,7 @@ public class GameRuntime {
 
     private static void fail(String message, Exception cause) {
         if (cause != null) {
-            cause.printStackTrace();
+            com.ignis.core.IgnisLogger.error(message, cause);
         }
         try {
             JOptionPane.showMessageDialog(null, message, "Ignis Runtime", JOptionPane.ERROR_MESSAGE);

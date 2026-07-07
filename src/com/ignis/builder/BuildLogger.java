@@ -17,12 +17,12 @@ public interface BuildLogger {
     BuildLogger CONSOLE = new BuildLogger() {
         @Override
         public void log(String message) {
-            System.out.println("[Builder] " + message);
+            com.ignis.core.IgnisLogger.info("[Builder] " + message);
         }
 
         @Override
         public void error(String message) {
-            System.err.println("[Builder] " + message);
+            com.ignis.core.IgnisLogger.error("[Builder] " + message);
         }
     };
 }

@@ -1,5 +1,7 @@
 package com.ignis.core.ui;
 
+import com.ignis.core.IgnisLogger;
+
 import javax.swing.Icon;
 import java.awt.Component;
 import java.awt.Graphics;
@@ -261,7 +263,7 @@ public class VectorIcon implements Icon {
                 }
             }
         } catch (Exception ex) {
-            System.err.println("[VectorIcon] Error rendering icon " + type + ": " + ex.getMessage());
+            IgnisLogger.error("[VectorIcon] Error rendering icon " + type + ": " + ex.getMessage());
             // Safe fallback rendering: red square with a warning cross / question mark look
             g2d.setColor(Color.RED);
             g2d.drawRect(1, 1, 14, 14);

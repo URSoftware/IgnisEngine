@@ -10,8 +10,8 @@
     - printStackTrace() (usar IgnisLogger.error(msg, throwable))
     - blocos catch vazios (salvo variável nomeada ignore/ignored/expected)
   O escopo dos arquivos verificados é definido no maven-checkstyle-plugin (pom.xml);
-  hoje cobre o pacote com.ignis.core (núcleo), a ser ampliado conforme a migração de
-  logging avança para os demais pacotes.
+  desde 07/07/2026 cobre TODOS os pacotes de src/ e test/ (migração de logging
+  concluída), com exceção única do próprio sink (IgnisLogger.java).
 -->
 <module name="Checker">
     <property name="severity" value="error"/>

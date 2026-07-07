@@ -1,5 +1,7 @@
 package com.ignis.mcp;
 
+import com.ignis.core.IgnisLogger;
+
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.json.JSONArray;
@@ -68,7 +70,7 @@ public final class McpHttpBridge {
         stop();
         instance = new McpHttpBridge(registry, host, port, token);
         instance.server.start();
-        System.err.println("[IgnisMCP-Http] Bridge ativo em " + instance.getUrl());
+        IgnisLogger.error("[IgnisMCP-Http] Bridge ativo em " + instance.getUrl());
         return instance;
     }
 
@@ -76,7 +78,7 @@ public final class McpHttpBridge {
     public static synchronized void stop() {
         if (instance != null) {
             instance.server.stop(0);
-            System.err.println("[IgnisMCP-Http] Bridge encerrado.");
+            IgnisLogger.error("[IgnisMCP-Http] Bridge encerrado.");
             instance = null;
         }
     }

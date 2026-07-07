@@ -1,5 +1,7 @@
 package com.ignis.editor.fx;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.editor.AIIntegration;
 import com.ignis.editor.fx.FxTheme;
 import javafx.application.Platform;
@@ -337,7 +339,7 @@ public class FxNotesWindow extends Stage {
                     TreeItem<Object> node = new TreeItem<>(page);
                     rootNode.getChildren().add(node);
                 } catch (Exception e) {
-                    System.err.println("Failed to read note file: " + file.getName());
+                    IgnisLogger.error("Failed to read note file: " + file.getName());
                 }
             }
         }

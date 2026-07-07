@@ -1,5 +1,7 @@
 package com.ignis.editor;
 
+import com.ignis.core.IgnisLogger;
+
 /**
  * Concrete implementation of AIServiceProvider for Google's Gemini API
  * (using gemini-2.5-flash model).
@@ -44,7 +46,7 @@ public class GeminiProvider implements AIServiceProvider {
             } else {
                 String errorMsg = "API Error: " + response.statusCode() + "\n";
                 errorMsg += response.body();
-                System.err.println("API Error Response: " + errorMsg);
+                IgnisLogger.error("API Error Response: " + errorMsg);
                 return errorMsg;
             }
         } catch (NoClassDefFoundError | Exception e) {
@@ -89,32 +91,31 @@ public class GeminiProvider implements AIServiceProvider {
                 // Ignore error reading error stream
             }
             String errMsg = "API Error: " + status + "\n" + errorResponse.toString();
-            System.err.println(errMsg);
+            IgnisLogger.error(errMsg);
             return errMsg;
         }
     }
 
     private String parseGeminiResponse(String jsonResponse) {
         try {
-            System.out.println("[API RESPONSE] Received " + jsonResponse.length() + " bytes");
+            IgnisLogger.info("[API RESPONSE] Received " + jsonResponse.length() + " bytes");
             
             // Check if it's an error response
             if (jsonResponse.contains("\"error\"")) {
-                System.err.println("[API ERROR] Error response: " + jsonResponse);
+                IgnisLogger.error("[API ERROR] Error response: " + jsonResponse);
                 return "API Error: " + jsonResponse;
             }
             
             String text = extractJsonField(jsonResponse, "\"text\"");
             if (text != null && !text.isEmpty()) {
-                System.out.println("[PARSED] Successfully extracted " + text.length() + " chars");
+                IgnisLogger.info("[PARSED] Successfully extracted " + text.length() + " chars");
                 return text;
             }
             
-            System.err.println("[PARSE ERROR] Could not extract text field from: " + jsonResponse);
+            IgnisLogger.error("[PARSE ERROR] Could not extract text field from: " + jsonResponse);
             return "Unexpected response format:\n\n" + jsonResponse;
         } catch (Exception e) {
-            System.err.println("[PARSE EXCEPTION] " + e.getMessage());
-            e.printStackTrace();
+            IgnisLogger.error("[PARSE EXCEPTION] " + e.getMessage(), e);
             return "Error parsing response: " + e.getMessage();
         }
     }

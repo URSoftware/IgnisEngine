@@ -1,5 +1,7 @@
 package com.ignis.builder;
 
+import com.ignis.core.IgnisLogger;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -96,7 +98,7 @@ public class Builder {
      */
     public static void main(String[] args) {
         if (args.length == 0) {
-            System.err.println("Usage: Builder <project.ignis> [targets...]");
+            IgnisLogger.error("Usage: Builder <project.ignis> [targets...]");
             System.exit(2);
         }
         File ignisFile = new File(args[0]);
@@ -114,7 +116,7 @@ public class Builder {
         List<BuildResult> results = new Builder().build(ignisFile, config, BuildLogger.CONSOLE);
         boolean allOk = results.stream().allMatch(BuildResult::isSuccess);
         for (BuildResult result : results) {
-            System.out.println(result);
+            IgnisLogger.info(String.valueOf(result));
         }
         System.exit(allOk ? 0 : 1);
     }

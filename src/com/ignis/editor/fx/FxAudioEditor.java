@@ -1,5 +1,7 @@
 package com.ignis.editor.fx;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.audioeditor.WavAudioProcessor;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
@@ -1012,7 +1014,7 @@ public class FxAudioEditor extends Stage {
                 line.open(standardFormat, 8192);
                 line.start();
             } catch (LineUnavailableException ex) {
-                System.err.println("Line unavailable: " + ex.getMessage());
+                IgnisLogger.error("Line unavailable: " + ex.getMessage());
                 isPlaying = false;
                 return;
             }

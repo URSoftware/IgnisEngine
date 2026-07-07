@@ -1,5 +1,7 @@
 package com.ignis.core.ui;
 
+import com.ignis.core.IgnisLogger;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -122,7 +124,7 @@ public class UIImage extends UIComponent {
                 }
             }
         } catch (Exception e) {
-            System.err.println("[UIImage] Erro ao carregar imagem: " + e.getMessage());
+            IgnisLogger.error("[UIImage] Erro ao carregar imagem: " + e.getMessage());
             image = null;
         }
     }

@@ -1,5 +1,7 @@
 package com.ignis.audioeditor;
 
+import com.ignis.core.IgnisLogger;
+
 import com.ignis.core.ui.VectorIcon;
 
 import javax.sound.sampled.*;
@@ -1219,7 +1221,7 @@ public class AudioEditorFrame extends JFrame {
                 line.open(standardFormat, 8192); // 8KB buffer size
                 line.start();
             } catch (LineUnavailableException ex) {
-                System.err.println("Line unavailable: " + ex.getMessage());
+                IgnisLogger.error("Line unavailable: " + ex.getMessage());
                 isPlaying = false;
                 return;
             }
