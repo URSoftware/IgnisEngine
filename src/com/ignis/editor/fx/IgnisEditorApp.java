@@ -674,6 +674,16 @@ public class IgnisEditorApp extends Application {
         MenuItem criarCamera = new MenuItem("Criar Câmera");
         criarCamera.setOnAction(e -> createEntity("Camera"));
 
+        // Entidades de conteudo (Fase C do motor grafico).
+        Menu criarConteudo = new Menu("Criar Conteúdo");
+        MenuItem criarFundo = new MenuItem("Camada de Fundo (Parallax)");
+        criarFundo.setOnAction(e -> createEntity("BackgroundLayer"));
+        MenuItem criarParticulas = new MenuItem("Emissor de Partículas");
+        criarParticulas.setOnAction(e -> createEntity("ParticleEmitter"));
+        MenuItem criarTilemap = new MenuItem("Tilemap");
+        criarTilemap.setOnAction(e -> createEntity("TilemapObject"));
+        criarConteudo.getItems().addAll(criarFundo, criarParticulas, criarTilemap);
+
         MenuItem dup = new MenuItem("Duplicar selecionado");
         dup.setOnAction(e -> duplicateSelected());
         MenuItem ren = new MenuItem("Renomear selecionado…");
@@ -693,7 +703,7 @@ public class IgnisEditorApp extends Application {
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
         scene.getItems().addAll(gerenciarCenarios, novaCena, new SeparatorMenuItem(),
-                criarObjeto, criarCamera, new SeparatorMenuItem(), dup, ren, del,
+                criarObjeto, criarCamera, criarConteudo, new SeparatorMenuItem(), dup, ren, del,
                 new SeparatorMenuItem(), up, down, top, bottom,
                 new SeparatorMenuItem(), savePrefab, instPrefab);
         return scene;
@@ -1432,6 +1442,32 @@ public class IgnisEditorApp extends Application {
         return primaryStage;
     }
 
+    /**
+     * Snapshot da janela inteira do editor como BufferedImage, para a ferramenta
+     * MCP {@code capture_editor_window} (executada na FX thread pelo registry).
+     * Converte WritableImage -&gt; BufferedImage via PixelReader — o projeto nao
+     * usa o modulo javafx-swing de proposito (ver FxImageBridge).
+     */
+    private java.awt.image.BufferedImage snapshotEditorWindow() {
+        if (primaryStage == null || primaryStage.getScene() == null) return null;
+        javafx.scene.Scene scene = primaryStage.getScene();
+        javafx.scene.image.WritableImage snap =
+                scene.getRoot().snapshot(new javafx.scene.SnapshotParameters(), null);
+        int w = (int) snap.getWidth();
+        int h = (int) snap.getHeight();
+        if (w <= 0 || h <= 0) return null;
+        java.awt.image.BufferedImage img =
+                new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        javafx.scene.image.PixelReader reader = snap.getPixelReader();
+        int[] row = new int[w];
+        for (int y = 0; y < h; y++) {
+            reader.getPixels(0, y, w, 1,
+                    javafx.scene.image.PixelFormat.getIntArgbInstance(), row, 0, w);
+            img.setRGB(0, y, w, 1, row, 0, w);
+        }
+        return img;
+    }
+
     // ---------------- Persistencia de layout (Fase F4-B) ----------------
 
     // Salva tamanho/posicao da janela e posicoes dos divisores (best-effort).
@@ -1640,6 +1676,10 @@ public class IgnisEditorApp extends Application {
             // Configuracoes tambem se beneficia).
             com.ignis.mcp.McpService.setEditorContext(game,
                     this::playWorld, this::stopWorld, this::refreshHierarchy, this::saveProjectSilently);
+            // Captura da janela inteira para a ferramenta MCP capture_editor_window
+            // (validacao visual da GUI por agentes). O snapshot FX vive aqui; o
+            // registry so conhece o Supplier<BufferedImage>.
+            com.ignis.mcp.McpService.setWindowCaptureSupplier(this::snapshotEditorWindow);
             if (EditorPrefs.isMcpEnabled() && projectFolder != null && projectFolder.isDirectory()) {
                 com.ignis.mcp.McpService.start(projectFolder, EditorPrefs.isMcpExposeNetwork(),
                         EditorPrefs.getMcpPort(), EditorPrefs.getMcpToken());
@@ -2103,8 +2143,15 @@ public class IgnisEditorApp extends Application {
             obj.setGame(game);
             obj.setX(-25);
             obj.setY(-25);
-            obj.setWidth(50);
-            obj.setHeight(50);
+            // Entidades de conteudo (Fase C) nascem com tamanho proprio e significativo
+            // (tile do fundo, grade do tilemap); nao sobrescrever com o 50x50 padrao.
+            boolean tamanhoProprio = obj instanceof com.ignis.core.BackgroundLayer
+                    || obj instanceof com.ignis.core.ParticleEmitter
+                    || obj instanceof com.ignis.core.TilemapObject;
+            if (!tamanhoProprio) {
+                obj.setWidth(50);
+                obj.setHeight(50);
+            }
             addEntityTracked(obj);
             refreshHierarchy();
             selectEntity(obj);
@@ -3257,6 +3304,20 @@ public class IgnisEditorApp extends Application {
             if (go instanceof com.ignis.core.Camera) {
                 inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
             }
+            // Entidades da Fase C: cada uma expoe suas proprias propriedades.
+            if (go instanceof com.ignis.core.BackgroundLayer) {
+                inspectorExtras.getChildren().add(
+                        buildBackgroundLayerSection((com.ignis.core.BackgroundLayer) go));
+            } else if (go instanceof com.ignis.core.ParticleEmitter) {
+                inspectorExtras.getChildren().add(
+                        buildParticleEmitterSection((com.ignis.core.ParticleEmitter) go));
+            } else if (go instanceof com.ignis.core.TilemapObject) {
+                inspectorExtras.getChildren().add(
+                        buildTilemapSection((com.ignis.core.TilemapObject) go));
+            }
+            if (go.getParent() != null) {
+                inspectorExtras.getChildren().add(buildHierarchySection(go));
+            }
             inspectorExtras.getChildren().add(buildTagsLayersSection(go));
             inspectorExtras.getChildren().add(buildScriptsSection(go));
         }
@@ -3641,6 +3702,132 @@ public class IgnisEditorApp extends Application {
         active.selectedProperty().addListener((o, a, b) -> { cam.setActive(b); markProjectDirty(); });
 
         sec.getChildren().addAll(labeledInspectorRow("Zoom", zoom), active);
+        return sec;
+    }
+
+    // ---- Helpers de campo do Inspector (commit no Enter e ao perder o foco) ----
+    // Evitam repetir o boilerplate TextField + parse + markProjectDirty em cada
+    // propriedade das secoes da Fase C (fundo, particulas, tilemap).
+
+    private HBox doubleRow(String label, java.util.function.DoubleSupplier get,
+                           java.util.function.DoubleConsumer set) {
+        TextField tf = new TextField(String.valueOf(get.getAsDouble()));
+        Runnable apply = () -> { set.accept(parseD(tf.getText(), get.getAsDouble())); markProjectDirty(); };
+        tf.setOnAction(e -> apply.run());
+        tf.focusedProperty().addListener((o, a, focused) -> { if (!focused) apply.run(); });
+        return labeledInspectorRow(label, tf);
+    }
+
+    private HBox intRow(String label, java.util.function.IntSupplier get,
+                        java.util.function.IntConsumer set) {
+        TextField tf = new TextField(String.valueOf(get.getAsInt()));
+        Runnable apply = () -> { set.accept(parseI(tf.getText(), get.getAsInt())); markProjectDirty(); };
+        tf.setOnAction(e -> apply.run());
+        tf.focusedProperty().addListener((o, a, focused) -> { if (!focused) apply.run(); });
+        return labeledInspectorRow(label, tf);
+    }
+
+    private CheckBox checkRow(String label, boolean initial, java.util.function.Consumer<Boolean> set) {
+        CheckBox cb = new CheckBox(label);
+        cb.setSelected(initial);
+        cb.selectedProperty().addListener((o, a, b) -> { set.accept(b); markProjectDirty(); });
+        return cb;
+    }
+
+    /** Secao do Inspector para camadas de fundo com parallax (Fase C). */
+    private javafx.scene.Node buildBackgroundLayerSection(com.ignis.core.BackgroundLayer bg) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Camada de Fundo (Parallax)"));
+
+        TextField path = new TextField(bg.getImagePath() != null ? bg.getImagePath() : "");
+        path.setPromptText("assets/sprites/ceu.png");
+        Runnable applyPath = () -> { bg.setImagePath(path.getText().trim()); markProjectDirty(); };
+        path.setOnAction(e -> applyPath.run());
+        path.focusedProperty().addListener((o, a, f) -> { if (!f) applyPath.run(); });
+
+        sec.getChildren().addAll(
+                labeledInspectorRow("Sprite", path),
+                doubleRow("Parallax X", bg::getParallaxX, bg::setParallaxX),
+                doubleRow("Parallax Y", bg::getParallaxY, bg::setParallaxY),
+                checkRow("Repetir em X", bg.isRepeatX(), bg::setRepeatX),
+                checkRow("Repetir em Y", bg.isRepeatY(), bg::setRepeatY));
+        Label dica = new Label("0 = fixo no mundo · 1 = preso à câmera");
+        dica.getStyleClass().add("toolbar-label");
+        sec.getChildren().add(dica);
+        return sec;
+    }
+
+    /** Secao do Inspector para emissores de particulas (Fase C). */
+    private javafx.scene.Node buildParticleEmitterSection(com.ignis.core.ParticleEmitter pe) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Emissor de Partículas"));
+
+        Button burst = new Button("Disparar rajada (50)");
+        burst.setOnAction(e -> pe.burst(50));
+
+        sec.getChildren().addAll(
+                checkRow("Emitindo", pe.isEmitting(), pe::setEmitting),
+                doubleRow("Taxa (part/s)", pe::getEmissionRate, pe::setEmissionRate),
+                intRow("Máx. partículas", pe::getMaxParticles, pe::setMaxParticles),
+                doubleRow("Vida (s)", pe::getLifetime, pe::setLifetime),
+                doubleRow("Velocidade X", pe::getVelX, pe::setVelX),
+                doubleRow("Velocidade Y", pe::getVelY, pe::setVelY),
+                doubleRow("Gravidade Y", pe::getGravityY, pe::setGravityY),
+                doubleRow("Tamanho inicial", pe::getSizeStart, pe::setSizeStart),
+                doubleRow("Tamanho final", pe::getSizeEnd, pe::setSizeEnd),
+                burst);
+        return sec;
+    }
+
+    /** Secao do Inspector para tilemaps (Fase C). Pintura fica no viewport/MCP. */
+    private javafx.scene.Node buildTilemapSection(com.ignis.core.TilemapObject tm) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Tilemap"));
+
+        Label info = new Label(String.format("%d x %d células de %dx%d px · %d camada(s)",
+                tm.getCols(), tm.getRows(), tm.getTileW(), tm.getTileH(), tm.getLayerCount()));
+        info.getStyleClass().add("toolbar-label");
+
+        TextField tileset = new TextField(tm.getTilesetPath() != null ? tm.getTilesetPath() : "");
+        tileset.setPromptText("assets/tilesets/dungeon.png");
+        Runnable applyTs = () -> { tm.setTilesetPath(tileset.getText().trim()); markProjectDirty(); };
+        tileset.setOnAction(e -> applyTs.run());
+        tileset.focusedProperty().addListener((o, a, f) -> { if (!f) applyTs.run(); });
+
+        Button addLayer = new Button("Adicionar camada");
+        addLayer.setOnAction(e -> {
+            tm.addLayer();
+            markProjectDirty();
+            rebuildInspectorExtras(selected);
+        });
+        Button clearLayer = new Button("Limpar camada 0");
+        clearLayer.setOnAction(e -> {
+            tm.fillTiles(0, 0, 0, tm.getCols() - 1, tm.getRows() - 1, com.ignis.core.TilemapObject.EMPTY);
+            markProjectDirty();
+        });
+
+        sec.getChildren().addAll(labeledInspectorRow("Tileset", tileset), info,
+                new HBox(6, addLayer, clearLayer));
+        return sec;
+    }
+
+    /** Secao do Inspector com o vinculo pai-filho do objeto (Fase C). */
+    private javafx.scene.Node buildHierarchySection(GameObject go) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Hierarquia"));
+        GameObject parent = go.getParent();
+        Label info = new Label(parent != null ? "Pai: " + parent.getName() : "Sem pai (raiz)");
+        info.getStyleClass().add("toolbar-label");
+        sec.getChildren().add(info);
+        if (parent != null) {
+            Button clear = new Button("Remover pai");
+            clear.setOnAction(e -> {
+                go.clearParent();
+                markProjectDirty();
+                rebuildInspectorExtras(go);
+            });
+            sec.getChildren().add(clear);
+        }
         return sec;
     }
 
