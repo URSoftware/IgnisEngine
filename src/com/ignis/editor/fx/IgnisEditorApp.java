@@ -1773,8 +1773,13 @@ public class IgnisEditorApp extends Application {
             if (worldPaint) {
                 game.setWorldPaintErase(e.isControlDown());
             }
+            // Pincel de tiles: Ctrl define modo apagar (igual ao pincel de barreiras).
+            boolean tilePaint = game.getCurrentTool() == com.ignis.core.Game.ToolType.TILE_PAINT;
+            if (tilePaint) {
+                game.setTilePaintErase(e.isControlDown());
+            }
             // Multi-selecao via Ctrl+Click esquerdo no viewport (so em edicao, nao em Play).
-            if (!worldPaint && e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isControlDown() && !playing) {
+            if (!worldPaint && !tilePaint && e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isControlDown() && !playing) {
                 GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
                 if (clicked != null) {
                     if (clicked == selected) {
@@ -2663,6 +2668,9 @@ public class IgnisEditorApp extends Application {
                 before = null; w = null;
             }
         });
+
+        // Pintura de tiles (TILE_PAINT): marca o projeto sujo ao fim de cada traco.
+        game.setTilePaintDirtyHook(this::markProjectDirty);
 
         projectAutoSaveTimer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(
                 javafx.util.Duration.seconds(EditorPrefs.getAutoSaveIntervalSeconds()), e -> {
@@ -3806,8 +3814,31 @@ public class IgnisEditorApp extends Application {
             markProjectDirty();
         });
 
+        // Pintura no viewport: escolhe o indice do tile e a camada, e ativa a
+        // ferramenta TILE_PAINT sobre ESTE tilemap. Ctrl+clique/arraste apaga.
+        TextField tileIdx = new TextField("0");
+        TextField layerIdx = new TextField("0");
+        ToggleButton paint = new ToggleButton("Pintar Tiles");
+        paint.setTooltip(new Tooltip("Clique/arraste no viewport para pintar; Ctrl apaga"));
+        paint.selectedProperty().addListener((o, a, on) -> {
+            if (on) {
+                game.setActiveTilemap(tm);
+                game.setActiveTileIndex(parseI(tileIdx.getText(), 0));
+                game.setActiveTileLayer(parseI(layerIdx.getText(), 0));
+                game.setCurrentTool(com.ignis.core.Game.ToolType.TILE_PAINT);
+                setStatus("Pintando tiles em " + tm.getName() + " — Ctrl apaga. Escolha 'Mover' para sair.");
+            } else if (game.getCurrentTool() == com.ignis.core.Game.ToolType.TILE_PAINT) {
+                game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE);
+            }
+        });
+        tileIdx.textProperty().addListener((o, a, b) -> game.setActiveTileIndex(parseI(b, 0)));
+        layerIdx.textProperty().addListener((o, a, b) -> game.setActiveTileLayer(parseI(b, 0)));
+
         sec.getChildren().addAll(labeledInspectorRow("Tileset", tileset), info,
-                new HBox(6, addLayer, clearLayer));
+                new HBox(6, addLayer, clearLayer),
+                labeledInspectorRow("Tile a pintar", tileIdx),
+                labeledInspectorRow("Camada de pintura", layerIdx),
+                paint);
         return sec;
     }
 
@@ -4693,6 +4724,7 @@ public class IgnisEditorApp extends Application {
         AnimationTimer timer = new AnimationTimer() {
             private BufferedImage buffer;
             private WritableImage fxImage;
+            private long lastPreviewNanos = 0;
 
             @Override
             public void handle(long now) {
@@ -4707,6 +4739,15 @@ public class IgnisEditorApp extends Application {
                     if (game.getViewport() != null) {
                         game.getViewport().resize(w, h);
                     }
+                }
+
+                // Preview de particulas no editor: avanca os emissores com o delta real
+                // desta frame (a simulacao de Play so roda no tick a 60 Hz). No-op fora
+                // do modo de edicao ou sem emissores.
+                double dt = (lastPreviewNanos > 0) ? (now - lastPreviewNanos) / 1_000_000_000.0 : 0;
+                lastPreviewNanos = now;
+                if (dt > 0 && dt < 0.25) {
+                    game.previewEditorParticles(dt);
                 }
 
                 Graphics2D g2d = buffer.createGraphics();

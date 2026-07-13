@@ -87,6 +87,20 @@ public class TilemapObject extends GameObject {
         layers.get(layer)[row * cols + col] = tileIndex;
     }
 
+    /** Coluna da celula sob a coordenada de mundo X (pode cair fora de [0,cols)). */
+    public int cellColAtWorld(double worldX) {
+        return (int) Math.floor((worldX - x) / tileW);
+    }
+
+    /**
+     * Linha da celula sob a coordenada de mundo Y. O mundo tem Y para cima e as
+     * linhas crescem para baixo a partir da origem (y = topo), entao
+     * row = (y - worldY) / tileH — inverso do mapeamento usado no render.
+     */
+    public int cellRowAtWorld(double worldY) {
+        return (int) Math.floor((y - worldY) / tileH);
+    }
+
     /** Le o tile de uma celula, ou {@link #EMPTY} se fora dos limites. */
     public int getTile(int layer, int col, int row) {
         if (layer < 0 || layer >= layers.size() || !inBounds(col, row)) return EMPTY;

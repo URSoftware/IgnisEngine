@@ -24,10 +24,11 @@ Recursos de conteúdo do plano do motor gráfico (parallax, atlas, partículas, 
 - `createEntity` sobrescrevia o tamanho das entidades de conteúdo com 50x50, ignorando o tamanho próprio (tile do fundo, grade do tilemap).
 
 - **Follow de hierarquia no editor:** ao mover um objeto no editor (gizmo, campos X/Y/Rotação do Inspector ou a ferramenta MCP `set_object_transform`), o objeto fica onde foi solto — recapturando o offset local se tiver pai — e os filhos acompanham ao vivo, sem precisar do Play (`Game.syncHierarchyAfterEditorMove`).
+- **Pintura de tilemap no viewport:** ferramenta `TILE_PAINT` (espelha o pincel de barreiras): com um tilemap selecionado, o Inspector expõe "Tile a pintar"/"Camada de pintura" e um toggle "Pintar Tiles"; clicar/arrastar no viewport pinta a célula, Ctrl apaga.
+- **Preview de partículas no editor:** os emissores animam no modo de edição (`Game.previewEditorParticles`), para autorar o efeito sem entrar em Play.
 
 ### Notas
-- Pendentes: ferramenta de pintura de tilemap no viewport e preview de partículas em modo de edição.
-- Cobertura: 85 testes JUnit (32 novos), 0 violações de Checkstyle.
+- **Fase C concluída.** Cobertura: 86 testes JUnit (33 novos), 0 violações de Checkstyle.
 
 ## [1.8.0] - 2026-07-03
 

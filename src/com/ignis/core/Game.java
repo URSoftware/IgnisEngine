@@ -125,7 +125,8 @@ public class Game extends Canvas implements Runnable {
         MOVE, // Move objects
         ROTATE, // Rotate objects
         SCALE, // Scale objects
-        WORLD_PAINT // Pinta/apaga barreiras na grade do World (mundo da cena)
+        WORLD_PAINT, // Pinta/apaga barreiras na grade do World (mundo da cena)
+        TILE_PAINT // Pinta/apaga tiles na grade de um TilemapObject (Fase C)
     }
 
     private ToolType currentTool = ToolType.MOVE;
@@ -184,6 +185,21 @@ public class Game extends Canvas implements Runnable {
     private int hoveredColliderHandle = -1;  // alca sob o cursor no hover (feedback de cursor)
     private boolean draggingCollider = false;
     private double colStartMinX, colStartMinY, colStartW, colStartH; // bounds no inicio do arraste
+
+    // ---- Pintura de tiles (ferramenta TILE_PAINT, Fase C) ----
+    private TilemapObject activeTilemap = null;   // alvo da pintura de tiles
+    private int activeTileIndex = 0;              // indice do tile a pintar
+    private int activeTileLayer = 0;              // camada alvo
+    private boolean tilePaintErase = false;       // stroke atual apaga (Ctrl)
+    private boolean paintingTiles = false;        // stroke em andamento
+    private Runnable tilePaintDirtyHook = null;   // marca o projeto sujo ao pintar
+
+    public void setActiveTilemap(TilemapObject tm) { this.activeTilemap = tm; }
+    public TilemapObject getActiveTilemap() { return activeTilemap; }
+    public void setActiveTileIndex(int idx) { this.activeTileIndex = idx; }
+    public void setActiveTileLayer(int layer) { this.activeTileLayer = Math.max(0, layer); }
+    public void setTilePaintErase(boolean erase) { this.tilePaintErase = erase; }
+    public void setTilePaintDirtyHook(Runnable hook) { this.tilePaintDirtyHook = hook; }
 
     // ---- Pintura de barreiras do World (ferramenta WORLD_PAINT) ----
     private boolean paintingWorld = false;   // arraste de pincel em andamento
@@ -685,6 +701,16 @@ public class Game extends Canvas implements Runnable {
             return;
         }
 
+        // Ferramenta de pintura de tiles: clique/arraste pinta (ou apaga com Ctrl) a
+        // celula do tilemap ativo. Nao seleciona nem move objetos.
+        if (currentTool == ToolType.TILE_PAINT) {
+            if (activeTilemap != null) {
+                paintingTiles = true;
+                paintTileAt(mouseX, mouseY);
+            }
+            return;
+        }
+
         // Gizmo de collider (item 8b): alcas da hitbox tem precedencia sobre o gizmo
         // de transform quando o modo de edicao de collider esta ativo.
         int ch = getColliderHandleAt(mouseX, mouseY);
@@ -774,6 +800,12 @@ public class Game extends Canvas implements Runnable {
             if (worldPaintListener != null) worldPaintListener.onPaintStrokeEnd();
             return;
         }
+        // Fim do traco de pintura de tiles (TILE_PAINT).
+        if (paintingTiles) {
+            paintingTiles = false;
+            if (tilePaintDirtyHook != null) tilePaintDirtyHook.run();
+            return;
+        }
         // Fim do arraste de collider (item 8b): marca o projeto sujo via o mesmo
         // listener (o transform do objeto nao mudou, entao nenhum comando de undo e
         // gerado; apenas dispara markProjectDirty no editor).
@@ -806,6 +838,11 @@ public class Game extends Canvas implements Runnable {
         // Arraste do pincel de barreiras (WORLD_PAINT).
         if (paintingWorld) {
             paintCellAt(mouseX, mouseY);
+            return;
+        }
+        // Arraste do pincel de tiles (TILE_PAINT).
+        if (paintingTiles) {
+            paintTileAt(mouseX, mouseY);
             return;
         }
         // Arraste de alca de collider (item 8b) — independente do gizmo de transform.
@@ -1105,6 +1142,17 @@ public class Game extends Canvas implements Runnable {
         } else {
             world.blockCell(col, row);
         }
+        repaint();
+    }
+
+    /** Pinta (ou apaga, se tilePaintErase) o tile do tilemap ativo sob o ponto de tela. */
+    private void paintTileAt(int screenX, int screenY) {
+        if (activeTilemap == null) return;
+        Point2D.Double wp = screenToWorld(screenX, screenY);
+        int col = activeTilemap.cellColAtWorld(wp.x);
+        int row = activeTilemap.cellRowAtWorld(wp.y);
+        int value = tilePaintErase ? TilemapObject.EMPTY : activeTileIndex;
+        activeTilemap.setTile(activeTileLayer, col, row, value);
         repaint();
     }
 
@@ -1700,6 +1748,23 @@ public class Game extends Canvas implements Runnable {
             moved.setParent(moved.getParent()); // recomputa o offset a partir do mundo atual
         }
         syncHierarchy();
+    }
+
+    /**
+     * Avanca a simulacao dos {@link ParticleEmitter} no MODO DE EDICAO, para que o
+     * criador veja o efeito enquanto ajusta os parametros (no Play isso ja roda no
+     * tick a 60 Hz). Chamado pelo AnimationTimer do editor com o delta real da frame.
+     * No-op fora do EDITING ou sem emissores. So mexe em estado de runtime (pool),
+     * nunca no que e serializado.
+     */
+    public synchronized void previewEditorParticles(double dt) {
+        if (gameState != GameState.EDITING) return;
+        for (int i = 0; i < entities.size(); i++) {
+            GameObject e = entities.get(i);
+            if (e instanceof ParticleEmitter) {
+                ((ParticleEmitter) e).step(dt);
+            }
+        }
     }
 
     public synchronized void syncHierarchy() {

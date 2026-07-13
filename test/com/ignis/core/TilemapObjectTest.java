@@ -87,6 +87,27 @@ class TilemapObjectTest {
     }
 
     @Test
+    void mapeamentoMundoParaCelula() {
+        // Nucleo da ferramenta de pintura: converter coordenada de mundo em (col,row).
+        // Origem (x,y) e o canto superior-esquerdo; linhas crescem para baixo (Y do
+        // mundo para cima), entao row = (y - worldY)/tileH.
+        TilemapObject tm = new TilemapObject();
+        tm.configure("assets/tilesets/t.png", 32, 32, 8, 8);
+        tm.setX(100);
+        tm.setY(200);
+        // Coluna: (worldX - 100)/32.
+        assertEquals(0, tm.cellColAtWorld(100));
+        assertEquals(0, tm.cellColAtWorld(131));
+        assertEquals(1, tm.cellColAtWorld(132));
+        assertEquals(3, tm.cellColAtWorld(100 + 3 * 32 + 5));
+        // Linha: (200 - worldY)/32. worldY=200 -> row 0; worldY logo abaixo -> row 1.
+        assertEquals(0, tm.cellRowAtWorld(200));
+        assertEquals(0, tm.cellRowAtWorld(169));  // 200-169=31 -> row 0
+        assertEquals(1, tm.cellRowAtWorld(168));  // 200-168=32 -> row 1
+        assertEquals(2, tm.cellRowAtWorld(200 - 2 * 32 - 5));
+    }
+
+    @Test
     void tilemapNaoECullablePorAabb() {
         assertFalse(new TilemapObject().isCullable(),
                 "tilemap faz culling proprio por tile — nao deve ser cortado pelo AABB");
