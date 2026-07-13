@@ -3048,11 +3048,11 @@ public class IgnisEditorApp extends Application {
             if (idx >= 0 && idx < hierarchyRoot.getChildren().size())
                 hierarchyRoot.getChildren().get(idx).setValue(b);
         }));
-        xField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setX(parseD(b, selected.getX()))));
-        yField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setY(parseD(b, selected.getY()))));
+        xField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> { selected.setX(parseD(b, selected.getX())); game.syncHierarchyAfterEditorMove(selected); }));
+        yField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> { selected.setY(parseD(b, selected.getY())); game.syncHierarchyAfterEditorMove(selected); }));
         wField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setWidth(parseI(b, selected.getWidth()))));
         hField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setHeight(parseI(b, selected.getHeight()))));
-        rotField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> selected.setRotation(parseD(b, selected.getRotation()))));
+        rotField.textProperty().addListener((o, a, b) -> applyIfEditing(() -> { selected.setRotation(parseD(b, selected.getRotation())); game.syncHierarchyAfterEditorMove(selected); }));
 
         // Desfazer/Refazer da edicao por digitacao: captura o valor no foco e registra
         // um comando no commit (Enter ou foco perdido) quando o valor mudou. Os listeners

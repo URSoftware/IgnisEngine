@@ -1105,6 +1105,9 @@ public final class IgnisToolRegistry {
                 if (args.has("width")) go.setWidth(args.optInt("width"));
                 if (args.has("height")) go.setHeight(args.optInt("height"));
                 if (args.has("rotation")) go.setRotation(args.optDouble("rotation"));
+                // Hierarquia (Fase C): o objeto fica onde foi posto (recaptura o offset
+                // se tiver pai) e os filhos acompanham — como no editor.
+                if (liveGame != null) liveGame.syncHierarchyAfterEditorMove(go);
                 if (refreshHook != null) refreshHook.run();
                 return "Transform atualizado: " + go.getName();
             });

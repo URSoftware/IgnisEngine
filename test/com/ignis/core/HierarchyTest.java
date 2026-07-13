@@ -109,6 +109,28 @@ class HierarchyTest {
     }
 
     @Test
+    void moverFilhoNoEditorRecapturaOffsetENaoVoltaAoSincronizar() {
+        // Reproduz o que Game.syncHierarchyAfterEditorMove faz: ao mover um filho no
+        // editor, recaptura o offset local; um sync seguinte nao pode faze-lo saltar.
+        GameObject pai = go("Pai", 0, 0);
+        GameObject filho = go("Filho", 30, 0);
+        filho.setParent(pai);
+        // Usuario arrasta o filho para uma nova posicao.
+        filho.setX(80);
+        filho.setY(20);
+        // Editor recaptura o offset a partir do mundo atual.
+        filho.setParent(filho.getParent());
+        // Sync subsequente mantem a posicao arrastada.
+        filho.syncToParent();
+        assertEquals(80, filho.getX(), 0.001);
+        assertEquals(20, filho.getY(), 0.001);
+        // E o novo offset passa a valer: mover o pai leva o filho junto.
+        pai.setX(100);
+        filho.syncToParent();
+        assertEquals(180, filho.getX(), 0.001);
+    }
+
+    @Test
     void vinculoSobreviveAoRoundTrip() {
         Scene scene = new Scene("H");
         GameObject pai = go("Pai", 0, 0);

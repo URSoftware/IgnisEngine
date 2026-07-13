@@ -943,6 +943,10 @@ public class Game extends Canvas implements Runnable {
                         break;
                 }
 
+        // Hierarquia (Fase C): o objeto arrastado mantem a posicao (recaptura o
+        // offset se tiver pai) e seus descendentes acompanham ao vivo no editor.
+        syncHierarchyAfterEditorMove(selectedObject);
+
         // Don't notify listeners during drag - prevents Inspector from updating
         // constantly
         // Visual changes are already visible, listeners will be notified on mouse
@@ -1682,6 +1686,22 @@ public class Game extends Canvas implements Runnable {
      * (avo -&gt; pai -&gt; filho). Objetos-raiz (sem pai) sao no-op. Chamado a cada
      * tick durante o Play; pode ser chamado pelo editor apos mover um pai.
      */
+    /**
+     * Aplica a hierarquia apos um movimento feito NO EDITOR (gizmo ou campos do
+     * Inspector), fora do Play. O objeto movido fica onde foi solto: se tem pai,
+     * seu offset local e RECAPTURADO a partir da posicao de mundo atual (assim ele
+     * nao "salta" de volta); em seguida, os descendentes acompanham via
+     * {@link #syncHierarchy()}. No Play o sync ja roda no tick — este metodo cobre
+     * o modo de edicao. No-op se o objeto nao participa de nenhuma hierarquia.
+     */
+    public synchronized void syncHierarchyAfterEditorMove(GameObject moved) {
+        if (moved == null) return;
+        if (moved.getParent() != null) {
+            moved.setParent(moved.getParent()); // recomputa o offset a partir do mundo atual
+        }
+        syncHierarchy();
+    }
+
     public synchronized void syncHierarchy() {
         boolean anyParented = false;
         for (int i = 0; i < entities.size(); i++) {

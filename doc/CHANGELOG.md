@@ -23,9 +23,11 @@ Recursos de conteúdo do plano do motor gráfico (parallax, atlas, partículas, 
 - Logs informativos do bridge HTTP ("Bridge ativo"/"Bridge encerrado") apareciam como ERRO no console do editor (resquício da migração de logging) — reclassificados como INFO.
 - `createEntity` sobrescrevia o tamanho das entidades de conteúdo com 50x50, ignorando o tamanho próprio (tile do fundo, grade do tilemap).
 
+- **Follow de hierarquia no editor:** ao mover um objeto no editor (gizmo, campos X/Y/Rotação do Inspector ou a ferramenta MCP `set_object_transform`), o objeto fica onde foi solto — recapturando o offset local se tiver pai — e os filhos acompanham ao vivo, sem precisar do Play (`Game.syncHierarchyAfterEditorMove`).
+
 ### Notas
-- Pendentes: follow de hierarquia ao vivo no editor (fora do Play), ferramenta de pintura de tilemap no viewport e preview de partículas em modo de edição.
-- Cobertura: 84 testes JUnit (31 novos), 0 violações de Checkstyle.
+- Pendentes: ferramenta de pintura de tilemap no viewport e preview de partículas em modo de edição.
+- Cobertura: 85 testes JUnit (32 novos), 0 violações de Checkstyle.
 
 ## [1.8.0] - 2026-07-03
 
