@@ -4,6 +4,29 @@
 > O formato é baseado no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e este projeto segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ---
 
+## [1.9.0] - 2026-07-07
+
+### Fase C do Motor Gráfico — conteúdo de cena
+Recursos de conteúdo do plano do motor gráfico (parallax, atlas, partículas, tilemap) mais a hierarquia pai-filho. Todas as novas entidades round-trip no `.ignis` e têm ferramentas MCP (paridade HTTP + STDIO).
+
+### Adicionado
+- **Parallax (`BackgroundLayer`):** camada de fundo com fatores de parallax por eixo (0 = fixo no mundo, 1 = preso à câmera), tiling opcional e cor sólida. Renderiza atrás das entidades (zIndex -1000) e cobre a tela via culling opt-out. MCP: `create_background_layer`, `set_parallax_factor`.
+- **Spritesheet/atlas:** o `spritePath` aceita região embutida — `sheet.png#x,y,w,h` (retângulo) e `sheet.png@col,row,tw,th` (célula de grade). `AssetResolver.loadImageRegion` recorta e cacheia sub-imagens compartilhando a decodificação do arquivo-base. Round-trip grátis (a região viaja no path). MCP: `set_sprite_region`.
+- **Partículas (`ParticleEmitter`):** emissor com pool pré-alocado (sem alocação por frame), emissão por taxa contínua e rajada (`burst`), integração velocidade+gravidade, interpolação de cor/tamanho/alpha início→fim. MCP: `create_particle_emitter`, `particle_burst`, `set_particle_emitting`.
+- **Tilemap (`TilemapObject`):** grade de tiles multi-camada a partir de um tileset, com culling por tile (reaproveita o recorte de atlas). MCP: `create_tilemap`, `add_tilemap_layer`, `set_tile`, `paint_tiles`, `clear_tilemap_layer`.
+- **Hierarquia pai-filho:** `GameObject.setParent/clearParent` com offset local; filhos seguem translação e rotação do pai no Play (`Game.syncHierarchy`, ordem pai-antes-filho); rejeita ciclos e auto-parent; vínculo serializado por id. MCP: `set_parent`, `clear_parent`, `list_children`.
+- **Fundação:** `GameObject.isCullable()` (opt-out de culling por câmera) e serialização de propriedades de entidade no `Scene.toJSON` (subclasses persistem seus campos; efeito colateral: `Camera.zoom` passa a round-trip pela cena).
+- **Teste de GUI por agentes:** ferramentas MCP `capture_viewport` (render da Scene View em PNG), `capture_editor_window` (snapshot da janela inteira, via `Supplier<BufferedImage>` injetado pelo editor — o registry segue sem dependência de JavaFX) e `select_object` (seleciona por nome, atualizando Hierarchy/Inspector/gizmos). Salvam em `%TEMP%/ignis-captures/` e retornam o caminho; permitem que um agente valide visualmente a cena e a UI. A Fase C foi validada em GUI real por esse mecanismo.
+- **Inspector das entidades novas:** seções "Camada de Fundo (Parallax)" (sprite, parallax X/Y, repetir X/Y), "Emissor de Partículas" (taxa, pool, vida, velocidade, gravidade, tamanhos, botão de rajada) e "Tilemap" (tileset, dimensões, adicionar/limpar camada), mais uma seção "Hierarquia" com o pai e botão de remover. Novo menu **Cena > Criar Conteúdo** para criá-las pela UI.
+
+### Corrigido
+- Logs informativos do bridge HTTP ("Bridge ativo"/"Bridge encerrado") apareciam como ERRO no console do editor (resquício da migração de logging) — reclassificados como INFO.
+- `createEntity` sobrescrevia o tamanho das entidades de conteúdo com 50x50, ignorando o tamanho próprio (tile do fundo, grade do tilemap).
+
+### Notas
+- Pendentes: follow de hierarquia ao vivo no editor (fora do Play), ferramenta de pintura de tilemap no viewport e preview de partículas em modo de edição.
+- Cobertura: 84 testes JUnit (31 novos), 0 violações de Checkstyle.
+
 ## [1.8.0] - 2026-07-03
 
 ### Adicionado
