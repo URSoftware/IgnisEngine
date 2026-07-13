@@ -18,6 +18,9 @@ public class EntityFactory {
         }
         return switch (type) {
             case "Camera" -> new Camera();
+            case "BackgroundLayer" -> new BackgroundLayer();
+            case "ParticleEmitter" -> new ParticleEmitter();
+            case "TilemapObject" -> new TilemapObject();
             // Para todos os outros tipos (primitivos antigos e GameObject novo),
             // criamos uma entidade genérica GameObject.
             // O desserializador Scene.fromJSON cuidará da migração automática.
@@ -27,24 +30,30 @@ public class EntityFactory {
 
     /**
      * Verifica se um tipo de entidade é suportado.
-     * 
+     *
      * @param type Nome do tipo
      * @return true se o tipo é suportado
      */
     public static boolean isSupported(String type) {
         if (type == null) return false;
-        return type.equals("GameObject") || type.equals("Camera");
+        return switch (type) {
+            case "GameObject", "Camera", "BackgroundLayer", "ParticleEmitter", "TilemapObject" -> true;
+            default -> false;
+        };
     }
 
     /**
      * Retorna todos os tipos de entidades suportados para criação.
-     * 
+     *
      * @return Array com os nomes dos tipos suportados
      */
     public static String[] getSupportedTypes() {
         return new String[] {
             "GameObject",
-            "Camera"
+            "Camera",
+            "BackgroundLayer",
+            "ParticleEmitter",
+            "TilemapObject"
         };
     }
 }

@@ -127,6 +127,25 @@ public class Scene {
             entityJson.put("tag", entity.getTag());
             entityJson.put("layer", entity.getLayer());
 
+            // Hierarquia pai-filho: guarda o pai por id + o offset local (Fase C).
+            // O vinculo e religado num segundo passo do fromJSON, apos todas as
+            // entidades existirem.
+            if (entity.getParentId() != null) {
+                entityJson.put("parentId", entity.getParentId());
+                entityJson.put("localOffsetX", entity.getLocalOffsetX());
+                entityJson.put("localOffsetY", entity.getLocalOffsetY());
+                entityJson.put("localRotationOffset", entity.getLocalRotationOffset());
+            }
+
+            // Propriedades especificas de subclasse (Camera zoom, BackgroundLayer
+            // parallax, TilemapObject, ParticleEmitter, etc.) via saveProperties()
+            // generico. Omitido para GameObject puro (retorna vazio) para manter o
+            // .ignis limpo. Restaurado por entity.loadProperties() no fromJSON.
+            JSONObject entityProps = entity.saveProperties();
+            if (entityProps != null && entityProps.length() > 0) {
+                entityJson.put("properties", entityProps);
+            }
+
             // Serializar todos os componentes anexados
             JSONArray componentsArray = new JSONArray();
             java.util.Set<String> serializedScripts = new java.util.HashSet<>();
@@ -312,12 +331,29 @@ public class Scene {
             }
 
             scene.addEntity(entity);
-            
+
             // Se for Camera, registra no jogo
             if (entity instanceof Camera && game != null) {
                 Camera cam = (Camera) entity;
                 cam.setViewport(game.getViewport());
                 game.addCamera(cam);
+            }
+        }
+
+        // Segundo passo: religa a hierarquia pai-filho por id (agora que todas as
+        // entidades existem). Restaura o offset local salvo, sem recomputa-lo.
+        for (int i = 0; i < entitiesArray.length(); i++) {
+            JSONObject entityJson = entitiesArray.getJSONObject(i);
+            if (!entityJson.has("parentId")) {
+                continue;
+            }
+            GameObject child = scene.getEntityById(entityJson.getString("id"));
+            GameObject parent = scene.getEntityById(entityJson.getString("parentId"));
+            if (child != null && parent != null) {
+                child.restoreParentLink(parent,
+                        entityJson.optDouble("localOffsetX", 0.0),
+                        entityJson.optDouble("localOffsetY", 0.0),
+                        entityJson.optDouble("localRotationOffset", 0.0));
             }
         }
 

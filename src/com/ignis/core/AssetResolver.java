@@ -74,6 +74,11 @@ public final class AssetResolver {
 
     private static final Map<String, CachedImage> IMAGE_CACHE = new ConcurrentHashMap<>();
 
+    // Cache de sub-imagens (regioes de spritesheet/atlas), chaveado por
+    // caminho-absoluto + regiao, validado pelo lastModified do arquivo-base.
+    // Compartilha a decodificacao do arquivo com o IMAGE_CACHE (loadImage).
+    private static final Map<String, CachedImage> REGION_CACHE = new ConcurrentHashMap<>();
+
     /**
      * Loads a sprite image for an asset path, sharing one decoded instance
      * across all entities that reference the same file. The cache is keyed by
@@ -114,9 +119,43 @@ public final class AssetResolver {
         }
     }
 
-    /** Clears the shared image cache (e.g. when switching projects). */
+    /**
+     * Loads a rectangular region (sub-image) of a spritesheet/atlas, sharing the
+     * decoded base image with {@link #loadImage} and caching the sub-image itself.
+     * The region is clamped to the image bounds. Used by {@link Texture2D} when a
+     * sprite path carries a region suffix (spritesheet/atlas support, Fase C).
+     *
+     * @return the sub-image, or null if the base image is missing/unreadable.
+     */
+    public static BufferedImage loadImageRegion(String basePath, int rx, int ry, int rw, int rh) {
+        BufferedImage base = loadImage(basePath);
+        if (base == null) {
+            return null;
+        }
+        int x = Math.max(0, Math.min(rx, base.getWidth() - 1));
+        int y = Math.max(0, Math.min(ry, base.getHeight() - 1));
+        int w = Math.max(1, Math.min(rw, base.getWidth() - x));
+        int h = Math.max(1, Math.min(rh, base.getHeight() - y));
+
+        File file = resolve(basePath);
+        if (file == null) {
+            return base.getSubimage(x, y, w, h);
+        }
+        String key = file.getAbsolutePath() + "#" + x + "," + y + "," + w + "," + h;
+        long modified = file.lastModified();
+        CachedImage cached = REGION_CACHE.get(key);
+        if (cached != null && cached.lastModified == modified) {
+            return cached.image;
+        }
+        BufferedImage sub = base.getSubimage(x, y, w, h);
+        REGION_CACHE.put(key, new CachedImage(modified, sub));
+        return sub;
+    }
+
+    /** Clears the shared image caches (e.g. when switching projects). */
     public static void clearImageCache() {
         IMAGE_CACHE.clear();
+        REGION_CACHE.clear();
     }
 
     /**

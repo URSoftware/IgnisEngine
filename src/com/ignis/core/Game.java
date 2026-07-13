@@ -1589,6 +1589,11 @@ public class Game extends Canvas implements Runnable {
                 }
             }
 
+            // Filhos seguem os pais: recomputa o mundo dos objetos parenteados a
+            // partir do pai + offset local, em ordem pai-antes-filho. Feito ANTES
+            // da colisao para que os filhos ja estejam na posicao final do frame.
+            syncHierarchy();
+
             // Run collision detection using the advanced collision system
             if (collisionManager != null) {
                 collisionManager.update();
@@ -1668,6 +1673,31 @@ public class Game extends Canvas implements Runnable {
         // Sort estavel (TimSort): empates de zIndex mantem a ordem da hierarquia.
         renderOrder.sort(java.util.Comparator.comparingInt(GameObject::getZIndex));
         return renderOrder;
+    }
+
+    /**
+     * Recomputa a posicao/rotacao de mundo de todos os objetos parenteados a partir
+     * dos pais (hierarquia pai-filho, Fase C). Processa em ordem crescente de
+     * profundidade, garantindo que cada pai ja esteja atualizado antes dos filhos
+     * (avo -&gt; pai -&gt; filho). Objetos-raiz (sem pai) sao no-op. Chamado a cada
+     * tick durante o Play; pode ser chamado pelo editor apos mover um pai.
+     */
+    public synchronized void syncHierarchy() {
+        boolean anyParented = false;
+        for (int i = 0; i < entities.size(); i++) {
+            if (entities.get(i).getParent() != null) {
+                anyParented = true;
+                break;
+            }
+        }
+        if (!anyParented) {
+            return; // caminho rapido: nenhuma hierarquia na cena
+        }
+        java.util.List<GameObject> ordered = new java.util.ArrayList<>(entities);
+        ordered.sort(java.util.Comparator.comparingInt(GameObject::hierarchyDepth));
+        for (GameObject go : ordered) {
+            go.syncToParent();
+        }
     }
 
     // Aplica interpolacao de posicao + flip/escala visual (em torno do centro) ao
@@ -1791,7 +1821,7 @@ public class Game extends Canvas implements Runnable {
     }
 
     private boolean isCulled(Camera cam, GameObject e) {
-        if (cam == null) return false;
+        if (cam == null || !e.isCullable()) return false;
         double[] b = cam.getVisibleWorldBounds(); // [minX, minY, maxX, maxY]
         if (b == null || b.length < 4) return false;
         double cx = e.getX() + e.getWidth() / 2.0;

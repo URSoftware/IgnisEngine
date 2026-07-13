@@ -42,6 +42,18 @@ public class GameObject {
     // nomeada para agrupamento/filtragem. Serializados na Scene.
     protected String tag = "";
     protected String layer = "Default";
+
+    // Hierarquia pai-filho (Fase C do plano do motor grafico). x/y/rotation
+    // continuam sempre em coordenadas de MUNDO (render/colisao/gizmos leem assim);
+    // o vinculo com o pai e mantido por um OFFSET LOCAL relativo ao pai. Quando o
+    // pai se move (no Play), Game.syncHierarchy() recomputa o mundo dos filhos a
+    // partir do mundo do pai + offset (rotacionado pela rotacao do pai). O pai e
+    // referenciado por id para serializar; a referencia viva e transiente.
+    protected String parentId = null;
+    protected transient GameObject parent = null;
+    protected double localOffsetX = 0.0;
+    protected double localOffsetY = 0.0;
+    protected double localRotationOffset = 0.0;
     
     // Color for the object name in hierarchy (default white)
     protected Color nameColor = Color.WHITE;
@@ -249,9 +261,19 @@ public class GameObject {
     public boolean isVisible() {
         return visible;
     }
-    
+
     public void setVisible(boolean visible) {
         this.visible = visible;
+    }
+
+    /**
+     * Se o objeto pode ser descartado pelo culling por camera. Objetos que
+     * preenchem a tela inteira independentemente de posicao/tamanho (fundos de
+     * parallax, tilemaps) sobrescrevem para {@code false} e cuidam do proprio
+     * recorte no {@code render()}. Ver Fase C do plano do motor grafico.
+     */
+    public boolean isCullable() {
+        return true;
     }
     
     public Color getNameColor() {
@@ -285,6 +307,107 @@ public class GameObject {
 
     public void setLayer(String layer) {
         this.layer = (layer != null && !layer.isEmpty()) ? layer : "Default";
+    }
+
+    // ==================== HIERARQUIA PAI-FILHO ====================
+
+    /** Referencia viva do pai (transiente; resolvida por id ao carregar a cena). */
+    public GameObject getParent() {
+        return parent;
+    }
+
+    /** Id do pai (serializado), ou null se este objeto e raiz. */
+    public String getParentId() {
+        return parentId;
+    }
+
+    public double getLocalOffsetX() { return localOffsetX; }
+    public double getLocalOffsetY() { return localOffsetY; }
+    public double getLocalRotationOffset() { return localRotationOffset; }
+
+    /**
+     * Define (ou remove, com {@code null}) o pai deste objeto, capturando o offset
+     * local a partir das posicoes de MUNDO atuais — de modo que o objeto nao "salta"
+     * ao ser parenteado. Rejeita auto-parent e ciclos (um filho nao pode virar pai de
+     * um ancestral). Para religar na desserializacao sem recomputar o offset, use
+     * {@link #restoreParentLink}.
+     */
+    public void setParent(GameObject newParent) {
+        if (newParent == this) {
+            return;
+        }
+        if (newParent != null && wouldCreateCycle(newParent)) {
+            return;
+        }
+        this.parent = newParent;
+        this.parentId = (newParent != null) ? newParent.getId() : null;
+        if (newParent != null) {
+            double pr = Math.toRadians(newParent.getRotation());
+            double cos = Math.cos(pr), sin = Math.sin(pr);
+            // Offset de mundo do filho em relacao ao pai, levado ao espaco local do
+            // pai (rotacao inversa) para que a composicao no sync seja consistente.
+            double dx = x - newParent.getX();
+            double dy = y - newParent.getY();
+            this.localOffsetX = dx * cos + dy * sin;
+            this.localOffsetY = -dx * sin + dy * cos;
+            this.localRotationOffset = rotation - newParent.getRotation();
+        }
+    }
+
+    /** Remove o vinculo com o pai; o objeto permanece onde esta no mundo. */
+    public void clearParent() {
+        this.parent = null;
+        this.parentId = null;
+    }
+
+    /**
+     * Religa o pai por referencia mantendo os offsets locais ja armazenados (usado
+     * pela desserializacao da cena, que restaura os offsets a parte).
+     */
+    public void restoreParentLink(GameObject parent, double offX, double offY, double offRot) {
+        this.parent = parent;
+        this.parentId = (parent != null) ? parent.getId() : null;
+        this.localOffsetX = offX;
+        this.localOffsetY = offY;
+        this.localRotationOffset = offRot;
+    }
+
+    /** True se parentear em {@code candidate} formaria um ciclo (candidate e descendente). */
+    private boolean wouldCreateCycle(GameObject candidate) {
+        for (GameObject p = candidate; p != null; p = p.parent) {
+            if (p == this) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Recomputa a posicao/rotacao de MUNDO deste objeto a partir do pai + offset
+     * local (o offset local, capturado no {@link #setParent}, e rotacionado pela
+     * rotacao atual do pai). No-op se nao ha pai. Chamado por
+     * {@link Game#syncHierarchy()} em ordem pai-antes-filho.
+     */
+    public void syncToParent() {
+        if (parent == null) {
+            return;
+        }
+        double pr = Math.toRadians(parent.getRotation());
+        double cos = Math.cos(pr), sin = Math.sin(pr);
+        double rx = localOffsetX * cos - localOffsetY * sin;
+        double ry = localOffsetX * sin + localOffsetY * cos;
+        setX(parent.getX() + rx);
+        setY(parent.getY() + ry);
+        setRotation(parent.getRotation() + localRotationOffset);
+    }
+
+    /** Profundidade na arvore (raiz = 0), usada para ordenar o sync pai-antes-filho. */
+    public int hierarchyDepth() {
+        int depth = 0;
+        for (GameObject p = parent; p != null && depth < 1024; p = p.parent) {
+            depth++;
+        }
+        return depth;
     }
     
     // ==================== SISTEMA DE ÁUDIO ====================
