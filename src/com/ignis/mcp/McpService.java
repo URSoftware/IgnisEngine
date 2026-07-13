@@ -23,7 +23,20 @@ public final class McpService {
     private static Game editorGame;
     private static Runnable editorPlay, editorStop, editorRefresh, editorSave;
 
+    // Capturador da janela do editor (snapshot JavaFX -> BufferedImage), injetado
+    // pelo IgnisEditorApp. Propagado a cada registry novo criado no start().
+    private static java.util.function.Supplier<java.awt.image.BufferedImage> windowCaptureSupplier;
+
     private McpService() {}
+
+    /** Registra o capturador da janela do editor para a ferramenta capture_editor_window. */
+    public static synchronized void setWindowCaptureSupplier(
+            java.util.function.Supplier<java.awt.image.BufferedImage> supplier) {
+        windowCaptureSupplier = supplier;
+        if (registry != null) {
+            registry.setWindowCaptureSupplier(supplier);
+        }
+    }
 
     /**
      * Registra o editor vivo (chamado pelo IgnisEditorApp ao abrir um projeto),
@@ -60,6 +73,9 @@ public final class McpService {
         registry = new IgnisToolRegistry(projectFolder);
         if (editorGame != null) {
             registry.attachLiveEditor(editorGame, editorPlay, editorStop, editorRefresh, editorSave);
+        }
+        if (windowCaptureSupplier != null) {
+            registry.setWindowCaptureSupplier(windowCaptureSupplier);
         }
         String host = exposeNetwork ? "0.0.0.0" : "127.0.0.1";
         McpHttpBridge bridge = McpHttpBridge.start(registry, host, port, token);

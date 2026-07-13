@@ -70,7 +70,7 @@ public final class McpHttpBridge {
         stop();
         instance = new McpHttpBridge(registry, host, port, token);
         instance.server.start();
-        IgnisLogger.error("[IgnisMCP-Http] Bridge ativo em " + instance.getUrl());
+        IgnisLogger.info("[IgnisMCP-Http] Bridge ativo em " + instance.getUrl());
         return instance;
     }
 
@@ -78,7 +78,7 @@ public final class McpHttpBridge {
     public static synchronized void stop() {
         if (instance != null) {
             instance.server.stop(0);
-            IgnisLogger.error("[IgnisMCP-Http] Bridge encerrado.");
+            IgnisLogger.info("[IgnisMCP-Http] Bridge encerrado.");
             instance = null;
         }
     }

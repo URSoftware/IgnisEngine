@@ -95,6 +95,7 @@ public final class IgnisToolRegistry {
     // demais (list_/get_/read_, audio, coordenacao, scripts) rodam localmente.
     private static final java.util.Set<String> FORWARD_TO_HOST = java.util.Set.of(
             "create_object", "delete_object", "set_object_transform", "set_object_sprite",
+            "set_sprite_region",
             "set_object_visual", "set_object_visible", "set_object_name_color", "reorder_object_z",
             "attach_script", "remove_script_from_object", "set_object_collider",
             "set_object_world_collision", "clear_scene", "instantiate_prefab",
@@ -103,12 +104,26 @@ public final class IgnisToolRegistry {
             "set_camera_follow", "stop_camera_follow", "camera_shake", "set_camera_bounds",
             "clear_camera_bounds", "set_active_camera", "create_camera", "set_camera_transform",
             "set_world_bounds", "clear_world_bounds", "set_world_grid", "block_rect", "unblock_rect",
-            "block_cell", "unblock_cell", "clear_barriers", "set_world_property");
+            "block_cell", "unblock_cell", "clear_barriers", "set_world_property",
+            "create_background_layer", "set_parallax_factor",
+            "create_particle_emitter", "particle_burst", "set_particle_emitting",
+            "create_tilemap", "add_tilemap_layer", "set_tile", "paint_tiles", "clear_tilemap_layer",
+            "set_parent", "clear_parent");
 
     // Contexto vivo do editor (opcional): presente quando o bridge roda dentro do
     // editor JavaFX, habilitando ferramentas de cena e de Play. Nulo no modo headless.
     private Game liveGame;
     private Runnable playHook, stopHook, refreshHook, saveHook;
+
+    // Captura da janela inteira do editor, injetada pelo IgnisEditorApp (inversao de
+    // dependencia: o registry nao conhece JavaFX — o snapshot FX vive no editor).
+    // Executada na FX thread (call() ja roda todo handler la). Nula no headless.
+    private java.util.function.Supplier<java.awt.image.BufferedImage> windowCaptureSupplier;
+
+    /** Injeta o capturador da janela do editor (snapshot JavaFX -> BufferedImage). */
+    public void setWindowCaptureSupplier(java.util.function.Supplier<java.awt.image.BufferedImage> supplier) {
+        this.windowCaptureSupplier = supplier;
+    }
 
     public IgnisToolRegistry(File projectFolder) {
         this.projectFolder = projectFolder;
@@ -1111,6 +1126,42 @@ public final class IgnisToolRegistry {
                 return "Sprite definido para " + go.getName() + ": " + path;
             });
 
+        // set_sprite_region (spritesheet/atlas)
+        Map<String, String> regionProps = new LinkedHashMap<>();
+        regionProps.put("name", "Nome do objeto");
+        regionProps.put("path", "Caminho da spritesheet (relativo ao projeto)");
+        regionProps.put("x", "X do recorte em pixels (modo retangulo)");
+        regionProps.put("y", "Y do recorte em pixels (modo retangulo)");
+        regionProps.put("w", "Largura do recorte em pixels (modo retangulo)");
+        regionProps.put("h", "Altura do recorte em pixels (modo retangulo)");
+        regionProps.put("col", "Coluna da celula (modo grade; requer 'row', 'tileW', 'tileH')");
+        regionProps.put("row", "Linha da celula (modo grade)");
+        regionProps.put("tileW", "Largura do tile (modo grade)");
+        regionProps.put("tileH", "Altura do tile (modo grade)");
+        add("set_sprite_region",
+            "Aponta o sprite de um objeto para uma REGIAO de uma spritesheet/atlas, por "
+            + "retangulo (x,y,w,h) ou por celula de grade (col,row,tileW,tileH).",
+            schemaWith(regionProps, List.of("name", "path")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                String path = args.optString("path", "");
+                if (resolveInProject(path) == null) return "Erro: path invalido (fora do projeto): " + path;
+                String composed;
+                if (args.has("col") && args.has("row") && args.has("tileW") && args.has("tileH")) {
+                    composed = path + "@" + args.optInt("col") + "," + args.optInt("row")
+                            + "," + args.optInt("tileW") + "," + args.optInt("tileH");
+                } else if (args.has("x") && args.has("y") && args.has("w") && args.has("h")) {
+                    composed = path + "#" + args.optInt("x") + "," + args.optInt("y")
+                            + "," + args.optInt("w") + "," + args.optInt("h");
+                } else {
+                    return "Erro: informe (x,y,w,h) para retangulo OU (col,row,tileW,tileH) para grade.";
+                }
+                go.setSpritePath(composed);
+                if (refreshHook != null) refreshHook.run();
+                return "Regiao de sprite definida para " + go.getName() + ": " + composed;
+            });
+
         // attach_script
         Map<String, String> attachProps = new LinkedHashMap<>();
         attachProps.put("objectName", "Nome do objeto alvo");
@@ -1193,6 +1244,454 @@ public final class IgnisToolRegistry {
         registerGameObjectExtraTools();
         registerSceneInfoTools();
         registerWorldTools();
+        registerBackgroundTools();
+        registerParticleTools();
+        registerTilemapTools();
+        registerHierarchyTools();
+        registerCaptureTools();
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de captura visual (validacao de GUI por agentes)
+    // ----------------------------------------------------------------------
+
+    /** Salva a imagem como PNG em ignis-captures/ (temp do sistema) e retorna o caminho. */
+    private static String saveCapture(java.awt.image.BufferedImage img, String label) throws Exception {
+        File outDir = new File(System.getProperty("java.io.tmpdir"), "ignis-captures");
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new IllegalStateException("Nao foi possivel criar " + outDir);
+        }
+        File out = new File(outDir, label + "-" + System.currentTimeMillis() + ".png");
+        javax.imageio.ImageIO.write(img, "png", out);
+        return out.getAbsolutePath();
+    }
+
+    private void registerCaptureTools() {
+        // select_object — seleciona um objeto na cena (Hierarchy + Inspector + gizmos
+        // acompanham via selectionListener). Util para agentes inspecionarem/editarem
+        // e para validar a UI do Inspector por captura.
+        add("select_object",
+            "Seleciona um objeto da cena pelo nome (atualiza Hierarchy, Inspector e gizmos). "
+            + "Use name vazio para limpar a selecao.",
+            schemaWith(Map.of("name", "Nome do objeto (vazio limpa a selecao)"), List.of()),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) {
+                    liveGame.setSelectedObject(null);
+                    return "Selecao limpa.";
+                }
+                GameObject go = findObject(name);
+                if (go == null) return "Erro: objeto nao encontrado: " + name;
+                liveGame.setSelectedObject(go);
+                return "Selecionado: " + go.getName() + " (" + go.getType() + ")";
+            });
+
+        // capture_viewport — renderiza a cena (renderWorldTo) num PNG. Permite a um
+        // agente VER o que o motor desenha: validar tilemap/parallax/particulas,
+        // conferir orientacao de sprites, comparar antes/depois de uma edicao.
+        Map<String, String> vpProps = new LinkedHashMap<>();
+        vpProps.put("width", "Largura do frame em px (padrao: viewport atual ou 1280)");
+        vpProps.put("height", "Altura do frame em px (padrao: viewport atual ou 720)");
+        add("capture_viewport",
+            "Captura a Scene View (render do mundo pela camera de visao) num arquivo PNG "
+            + "e retorna o caminho absoluto. Use para validar visualmente a cena.",
+            schemaWith(vpProps, List.of()),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                int defW = (liveGame.getViewport() != null && liveGame.getViewport().getWidth() > 0)
+                        ? liveGame.getViewport().getWidth() : 1280;
+                int defH = (liveGame.getViewport() != null && liveGame.getViewport().getHeight() > 0)
+                        ? liveGame.getViewport().getHeight() : 720;
+                int w = Math.max(16, Math.min(4096, args.optInt("width", defW)));
+                int h = Math.max(16, Math.min(4096, args.optInt("height", defH)));
+                java.awt.image.BufferedImage img =
+                        new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D g2d = img.createGraphics();
+                try {
+                    liveGame.renderWorldTo(g2d, w, h, liveGame.getSelectedObject());
+                } finally {
+                    g2d.dispose();
+                }
+                String path = saveCapture(img, "viewport");
+                return "Viewport capturado (" + w + "x" + h + "): " + path;
+            });
+
+        // capture_editor_window — snapshot da janela inteira do editor (menus, toolbar,
+        // Hierarchy, Inspector). Depende do supplier injetado pelo IgnisEditorApp.
+        add("capture_editor_window",
+            "Captura a janela INTEIRA do editor (toolbar, Hierarchy, Inspector, viewport) "
+            + "num arquivo PNG e retorna o caminho absoluto. Use para validar a UI do editor.",
+            objectSchema(),
+            args -> {
+                if (windowCaptureSupplier == null) {
+                    return "Erro: captura de janela indisponivel (editor sem GUI ou supplier nao registrado).";
+                }
+                java.awt.image.BufferedImage img = windowCaptureSupplier.get();
+                if (img == null) return "Erro: snapshot da janela retornou vazio.";
+                String path = saveCapture(img, "editor");
+                return "Janela do editor capturada (" + img.getWidth() + "x" + img.getHeight() + "): " + path;
+            });
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de hierarquia pai-filho (GameObject.parent)
+    // ----------------------------------------------------------------------
+
+    private void registerHierarchyTools() {
+        // set_parent
+        Map<String, String> parentProps = new LinkedHashMap<>();
+        parentProps.put("child", "Nome do objeto filho");
+        parentProps.put("parent", "Nome do objeto pai");
+        add("set_parent",
+            "Torna um objeto filho de outro: ao mover/rotacionar o pai (no Play), o "
+            + "filho acompanha mantendo o deslocamento atual. Rejeita ciclos e auto-parent.",
+            schemaWith(parentProps, List.of("child", "parent")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                GameObject child = findObject(args.optString("child", ""));
+                GameObject parent = findObject(args.optString("parent", ""));
+                if (child == null) return "Erro: filho nao encontrado: " + args.optString("child", "");
+                if (parent == null) return "Erro: pai nao encontrado: " + args.optString("parent", "");
+                if (child == parent) return "Erro: um objeto nao pode ser pai de si mesmo.";
+                child.setParent(parent);
+                if (child.getParent() != parent) {
+                    return "Erro: parentear criaria um ciclo (o pai e descendente do filho).";
+                }
+                if (refreshHook != null) refreshHook.run();
+                return child.getName() + " agora e filho de " + parent.getName();
+            });
+
+        // clear_parent
+        add("clear_parent",
+            "Remove o vinculo de um objeto com o pai (ele permanece onde esta no mundo).",
+            schemaWith(Map.of("name", "Nome do objeto"), List.of("name")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                go.clearParent();
+                if (refreshHook != null) refreshHook.run();
+                return go.getName() + " nao tem mais pai.";
+            });
+
+        // list_children
+        add("list_children",
+            "Lista os filhos diretos de um objeto na hierarquia da cena.",
+            schemaWith(Map.of("name", "Nome do objeto pai"), List.of("name")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                GameObject parent = findObject(args.optString("name", ""));
+                if (parent == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                StringBuilder sb = new StringBuilder();
+                for (GameObject go : liveGame.getEntities()) {
+                    if (go.getParent() == parent) sb.append(go.getName()).append('\n');
+                }
+                return sb.length() == 0 ? "(sem filhos)" : sb.toString();
+            });
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de tilemap (com.ignis.core.TilemapObject)
+    // ----------------------------------------------------------------------
+
+    private void registerTilemapTools() {
+        // create_tilemap
+        Map<String, String> tmProps = new LinkedHashMap<>();
+        tmProps.put("name", "Nome unico do tilemap");
+        tmProps.put("tileset", "Caminho da imagem do tileset, relativo ao projeto");
+        tmProps.put("tileW", "Largura de cada tile em px (padrao 32)");
+        tmProps.put("tileH", "Altura de cada tile em px (padrao 32)");
+        tmProps.put("cols", "Numero de colunas da grade (padrao 20)");
+        tmProps.put("rows", "Numero de linhas da grade (padrao 15)");
+        tmProps.put("x", "Posicao X do canto superior-esquerdo (padrao 0)");
+        tmProps.put("y", "Posicao Y do canto superior-esquerdo (padrao 0)");
+        add("create_tilemap",
+            "Cria um tilemap (grade de tiles a partir de um tileset) e o adiciona a cena.",
+            schemaWith(tmProps, List.of("name", "tileset")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
+                String tileset = args.optString("tileset", "");
+                if (resolveInProject(tileset) == null) return "Erro: tileset fora do projeto: " + tileset;
+                com.ignis.core.TilemapObject tm = new com.ignis.core.TilemapObject();
+                tm.setName(name);
+                tm.setGame(liveGame);
+                tm.configure(tileset,
+                        args.optInt("tileW", 32), args.optInt("tileH", 32),
+                        args.optInt("cols", 20), args.optInt("rows", 15));
+                tm.setX(args.optDouble("x", 0));
+                tm.setY(args.optDouble("y", 0));
+                liveGame.addEntity(tm);
+                if (refreshHook != null) refreshHook.run();
+                return "Tilemap criado: " + name + " (" + tm.getCols() + "x" + tm.getRows()
+                        + " tiles de " + tm.getTileW() + "x" + tm.getTileH() + ")";
+            });
+
+        // add_tilemap_layer
+        add("add_tilemap_layer",
+            "Adiciona uma nova camada vazia a um tilemap e retorna o indice dela.",
+            schemaWith(Map.of("name", "Nome do tilemap"), List.of("name")),
+            args -> {
+                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
+                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
+                int idx = tm.addLayer();
+                if (refreshHook != null) refreshHook.run();
+                return "Camada adicionada ao tilemap " + tm.getName() + ": indice " + idx;
+            });
+
+        // set_tile
+        Map<String, String> setTileProps = new LinkedHashMap<>();
+        setTileProps.put("name", "Nome do tilemap");
+        setTileProps.put("col", "Coluna da celula");
+        setTileProps.put("row", "Linha da celula");
+        setTileProps.put("tile", "Indice do tile no tileset (-1 = vazio)");
+        setTileProps.put("layer", "Indice da camada (padrao 0)");
+        add("set_tile",
+            "Define o tile de uma celula de um tilemap (indice do tileset; -1 apaga).",
+            schemaWith(setTileProps, List.of("name", "col", "row", "tile")),
+            args -> {
+                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
+                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
+                tm.setTile(args.optInt("layer", 0), args.optInt("col"), args.optInt("row"), args.optInt("tile"));
+                if (refreshHook != null) refreshHook.run();
+                return "Tile (" + args.optInt("col") + "," + args.optInt("row") + ") = " + args.optInt("tile")
+                        + " no tilemap " + tm.getName();
+            });
+
+        // paint_tiles
+        Map<String, String> paintProps = new LinkedHashMap<>();
+        paintProps.put("name", "Nome do tilemap");
+        paintProps.put("col0", "Coluna inicial do retangulo");
+        paintProps.put("row0", "Linha inicial do retangulo");
+        paintProps.put("col1", "Coluna final do retangulo");
+        paintProps.put("row1", "Linha final do retangulo");
+        paintProps.put("tile", "Indice do tile a pintar (-1 = apagar)");
+        paintProps.put("layer", "Indice da camada (padrao 0)");
+        add("paint_tiles",
+            "Pinta um retangulo de celulas [col0..col1]x[row0..row1] com um tile.",
+            schemaWith(paintProps, List.of("name", "col0", "row0", "col1", "row1", "tile")),
+            args -> {
+                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
+                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
+                tm.fillTiles(args.optInt("layer", 0),
+                        args.optInt("col0"), args.optInt("row0"),
+                        args.optInt("col1"), args.optInt("row1"), args.optInt("tile"));
+                if (refreshHook != null) refreshHook.run();
+                return "Retangulo pintado no tilemap " + tm.getName();
+            });
+
+        // clear_tilemap_layer
+        Map<String, String> clearProps = new LinkedHashMap<>();
+        clearProps.put("name", "Nome do tilemap");
+        clearProps.put("layer", "Indice da camada a limpar (padrao 0)");
+        add("clear_tilemap_layer",
+            "Apaga todos os tiles de uma camada de um tilemap.",
+            schemaWith(clearProps, List.of("name")),
+            args -> {
+                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
+                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
+                int layer = args.optInt("layer", 0);
+                tm.fillTiles(layer, 0, 0, tm.getCols() - 1, tm.getRows() - 1, com.ignis.core.TilemapObject.EMPTY);
+                if (refreshHook != null) refreshHook.run();
+                return "Camada " + layer + " do tilemap " + tm.getName() + " limpa";
+            });
+    }
+
+    /** Localiza um TilemapObject por nome na cena viva, ou null. */
+    private com.ignis.core.TilemapObject findTilemap(String name) {
+        GameObject go = findObject(name);
+        return (go instanceof com.ignis.core.TilemapObject) ? (com.ignis.core.TilemapObject) go : null;
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de particulas (com.ignis.core.ParticleEmitter)
+    // ----------------------------------------------------------------------
+
+    private void registerParticleTools() {
+        // create_particle_emitter
+        Map<String, String> peProps = new LinkedHashMap<>();
+        peProps.put("name", "Nome unico do emissor");
+        peProps.put("x", "Posicao X (padrao 0)");
+        peProps.put("y", "Posicao Y (padrao 0)");
+        peProps.put("rate", "Particulas por segundo (padrao 40)");
+        peProps.put("maxParticles", "Tamanho do pool (padrao 200)");
+        peProps.put("lifetime", "Vida base da particula em segundos (padrao 1.2)");
+        peProps.put("velX", "Velocidade inicial media X px/s (padrao 0)");
+        peProps.put("velY", "Velocidade inicial media Y px/s (padrao 80)");
+        peProps.put("gravityY", "Aceleracao vertical px/s^2 (padrao -120)");
+        peProps.put("sizeStart", "Diametro inicial px (padrao 10)");
+        peProps.put("sizeEnd", "Diametro final px (padrao 2)");
+        peProps.put("colorStart", "Cor inicial 0xAARRGGBB/#RRGGBB (opcional)");
+        peProps.put("colorEnd", "Cor final 0xAARRGGBB/#RRGGBB (opcional)");
+        peProps.put("sprite", "Sprite opcional da particula (relativo ao projeto)");
+        add("create_particle_emitter",
+            "Cria um emissor de particulas (poeira/fogo/explosao) e o adiciona a cena.",
+            schemaWith(peProps, List.of("name")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
+                com.ignis.core.ParticleEmitter pe = new com.ignis.core.ParticleEmitter();
+                pe.setName(name);
+                pe.setGame(liveGame);
+                pe.setX(args.optDouble("x", 0));
+                pe.setY(args.optDouble("y", 0));
+                if (args.has("rate")) pe.setEmissionRate(args.optDouble("rate"));
+                if (args.has("maxParticles")) pe.setMaxParticles(args.optInt("maxParticles"));
+                if (args.has("lifetime")) pe.setLifetime(args.optDouble("lifetime"));
+                if (args.has("velX")) pe.setVelX(args.optDouble("velX"));
+                if (args.has("velY")) pe.setVelY(args.optDouble("velY"));
+                if (args.has("gravityY")) pe.setGravityY(args.optDouble("gravityY"));
+                if (args.has("sizeStart")) pe.setSizeStart(args.optDouble("sizeStart"));
+                if (args.has("sizeEnd")) pe.setSizeEnd(args.optDouble("sizeEnd"));
+                java.awt.Color cs = parseColor(args.optString("colorStart", ""));
+                if (cs != null) pe.setColorStart(cs);
+                java.awt.Color ce = parseColor(args.optString("colorEnd", ""));
+                if (ce != null) pe.setColorEnd(ce);
+                String sprite = args.optString("sprite", "");
+                if (!sprite.isEmpty()) {
+                    if (resolveInProject(sprite) == null) return "Erro: sprite fora do projeto: " + sprite;
+                    pe.setParticleSprite(sprite);
+                }
+                liveGame.addEntity(pe);
+                if (refreshHook != null) refreshHook.run();
+                return "Emissor de particulas criado: " + name + " (rate=" + pe.getEmissionRate()
+                        + ", pool=" + pe.getMaxParticles() + ")";
+            });
+
+        // particle_burst
+        Map<String, String> burstProps = new LinkedHashMap<>();
+        burstProps.put("name", "Nome do emissor");
+        burstProps.put("count", "Quantidade de particulas a emitir de uma vez");
+        add("particle_burst",
+            "Emite uma rajada instantanea de particulas de um emissor (explosao).",
+            schemaWith(burstProps, List.of("name", "count")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (!(go instanceof com.ignis.core.ParticleEmitter)) {
+                    return "Erro: emissor nao encontrado: " + args.optString("name", "");
+                }
+                int count = args.optInt("count", 0);
+                if (count <= 0) return "Erro: 'count' deve ser > 0.";
+                ((com.ignis.core.ParticleEmitter) go).burst(count);
+                if (refreshHook != null) refreshHook.run();
+                return "Rajada de " + count + " particulas em " + go.getName();
+            });
+
+        // set_particle_emitting
+        Map<String, String> emitProps = new LinkedHashMap<>();
+        emitProps.put("name", "Nome do emissor");
+        emitProps.put("emitting", "true para emitir continuamente, false para pausar");
+        add("set_particle_emitting",
+            "Liga/desliga a emissao continua de um emissor de particulas.",
+            schemaWith(emitProps, List.of("name", "emitting")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (!(go instanceof com.ignis.core.ParticleEmitter)) {
+                    return "Erro: emissor nao encontrado: " + args.optString("name", "");
+                }
+                ((com.ignis.core.ParticleEmitter) go).setEmitting(args.optBoolean("emitting", true));
+                if (refreshHook != null) refreshHook.run();
+                return "Emissao de " + go.getName() + ": " + args.optBoolean("emitting", true);
+            });
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de fundo com parallax (com.ignis.core.BackgroundLayer)
+    // ----------------------------------------------------------------------
+
+    private void registerBackgroundTools() {
+        // create_background_layer
+        Map<String, String> bgProps = new LinkedHashMap<>();
+        bgProps.put("name", "Nome unico da camada de fundo");
+        bgProps.put("path", "Caminho do sprite de fundo, relativo ao projeto (opcional; sem ele use 'color')");
+        bgProps.put("color", "Cor solida de fundo em hex 0xAARRGGBB ou #RRGGBB (opcional)");
+        bgProps.put("parallax", "Fator de parallax 0..1 nos dois eixos (0=fixo no mundo, 1=preso a camera). Padrao 0.5");
+        bgProps.put("zIndex", "Ordem de render (padrao -1000, atras de tudo). Menor = mais ao fundo");
+        bgProps.put("repeat", "true para repetir o sprite cobrindo a tela (padrao true)");
+        add("create_background_layer",
+            "Cria uma camada de fundo com parallax e a adiciona a cena ativa.",
+            schemaWith(bgProps, List.of("name")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
+                com.ignis.core.BackgroundLayer bg = new com.ignis.core.BackgroundLayer();
+                bg.setName(name);
+                bg.setGame(liveGame);
+                String path = args.optString("path", "");
+                if (!path.isEmpty()) {
+                    if (resolveInProject(path) == null) return "Erro: path invalido (fora do projeto): " + path;
+                    bg.setImagePath(path);
+                }
+                java.awt.Color c = parseColor(args.optString("color", ""));
+                if (c != null) bg.setColor(c);
+                if (path.isEmpty() && c == null) {
+                    return "Erro: informe 'path' (sprite) ou 'color' (fundo solido).";
+                }
+                bg.setParallax(clamp01(args.optDouble("parallax", 0.5)));
+                bg.setZIndex(args.optInt("zIndex", -1000));
+                boolean repeat = args.optBoolean("repeat", true);
+                bg.setRepeatX(repeat);
+                bg.setRepeatY(repeat);
+                liveGame.addEntity(bg);
+                if (refreshHook != null) refreshHook.run();
+                return "Camada de fundo criada: " + name + " (parallax=" + bg.getParallaxX() + ", zIndex=" + bg.getZIndex() + ")";
+            });
+
+        // set_parallax_factor
+        Map<String, String> pfProps = new LinkedHashMap<>();
+        pfProps.put("name", "Nome da camada de fundo");
+        pfProps.put("parallax", "Fator 0..1 aplicado aos dois eixos (opcional)");
+        pfProps.put("parallaxX", "Fator do eixo X (opcional, sobrescreve 'parallax')");
+        pfProps.put("parallaxY", "Fator do eixo Y (opcional, sobrescreve 'parallax')");
+        add("set_parallax_factor",
+            "Ajusta o fator de parallax de uma camada de fundo existente.",
+            schemaWith(pfProps, List.of("name")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (!(go instanceof com.ignis.core.BackgroundLayer)) {
+                    return "Erro: camada de fundo nao encontrada: " + args.optString("name", "");
+                }
+                com.ignis.core.BackgroundLayer bg = (com.ignis.core.BackgroundLayer) go;
+                if (args.has("parallax")) bg.setParallax(clamp01(args.optDouble("parallax")));
+                if (args.has("parallaxX")) bg.setParallaxX(clamp01(args.optDouble("parallaxX")));
+                if (args.has("parallaxY")) bg.setParallaxY(clamp01(args.optDouble("parallaxY")));
+                if (refreshHook != null) refreshHook.run();
+                return "Parallax de " + bg.getName() + ": X=" + bg.getParallaxX() + " Y=" + bg.getParallaxY();
+            });
+    }
+
+    /** Limita um valor ao intervalo [0,1]. */
+    private static double clamp01(double v) {
+        return Math.max(0.0, Math.min(1.0, v));
+    }
+
+    /**
+     * Interpreta uma cor de texto: {@code #RRGGBB}, {@code #AARRGGBB}, {@code 0x...}
+     * ou um inteiro decimal. Retorna null se vazio/invalido.
+     */
+    private static java.awt.Color parseColor(String s) {
+        if (s == null) return null;
+        s = s.trim();
+        if (s.isEmpty()) return null;
+        try {
+            String hex = s;
+            if (hex.startsWith("#")) hex = hex.substring(1);
+            else if (hex.startsWith("0x") || hex.startsWith("0X")) hex = hex.substring(2);
+            if (hex.matches("[0-9a-fA-F]+")) {
+                long v = Long.parseLong(hex, 16);
+                boolean hasAlpha = hex.length() > 6;
+                return new java.awt.Color((int) v, hasAlpha);
+            }
+            return new java.awt.Color(Integer.parseInt(s));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ----------------------------------------------------------------------
