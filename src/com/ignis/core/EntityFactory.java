@@ -21,6 +21,8 @@ public class EntityFactory {
             case "BackgroundLayer" -> new BackgroundLayer();
             case "ParticleEmitter" -> new ParticleEmitter();
             case "TilemapObject" -> new TilemapObject();
+            case "TextObject" -> new TextObject();
+            case "LightObject" -> new LightObject();
             // Para todos os outros tipos (primitivos antigos e GameObject novo),
             // criamos uma entidade genérica GameObject.
             // O desserializador Scene.fromJSON cuidará da migração automática.
@@ -37,7 +39,7 @@ public class EntityFactory {
     public static boolean isSupported(String type) {
         if (type == null) return false;
         return switch (type) {
-            case "GameObject", "Camera", "BackgroundLayer", "ParticleEmitter", "TilemapObject" -> true;
+            case "GameObject", "Camera", "BackgroundLayer", "ParticleEmitter", "TilemapObject", "TextObject", "LightObject" -> true;
             default -> false;
         };
     }
@@ -53,7 +55,9 @@ public class EntityFactory {
             "Camera",
             "BackgroundLayer",
             "ParticleEmitter",
-            "TilemapObject"
+            "TilemapObject",
+            "TextObject",
+            "LightObject"
         };
     }
 }

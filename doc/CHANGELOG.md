@@ -4,6 +4,20 @@
 > O formato é baseado no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e este projeto segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ---
 
+## [1.10.0] - 2026-07-13
+
+### Fase D do Motor Gráfico — polimento (texto no mundo, nine-slice, luz 2D)
+Fase D completa. Antes da implementação, o plano da fase passou por uma análise de viabilidade contra a arquitetura real: itens sem aderência foram descartados (ver Notas).
+
+### Adicionado
+- **Texto no mundo (`TextObject`) [3.9]:** entidade de cena com texto multi-linha (`\n`), família/tamanho de fonte, cor (com alpha), negrito/itálico e alinhamento horizontal (`LEFT|CENTER|RIGHT`). Renderiza no espaço do mundo com compensação do eixo Y invertido (mesmo idioma `translate + scale(1,-1)` das formas e do tilemap), rotaciona em torno do centro como as primitivas e dimensiona a própria caixa pelas `FontMetrics` (culling e seleção corretos). zIndex default 100. Round-trip `.ignis`. MCP: `create_text_object`, `set_text`. Inspector "Texto no Mundo" + menu **Cena > Criar Conteúdo > Texto no Mundo**.
+- **Nine-slice na UI (`UIImage.ScaleMode.NINE_SLICE`) [3.10]:** composição 3×3 — cantos em tamanho fixo, bordas esticadas num eixo, miolo nos dois — para skins de painel/botão sem distorcer os cantos. Margens `sliceLeft/Right/Top/Bottom` serializadas; guard proporcional quando o destino é menor que a soma dos cantos e clamp das margens ao tamanho da imagem (garante ≥1px de miolo). MCP: `ui_create_image`, `ui_set_nine_slice`.
+- **Iluminação 2D (`LightObject` + luz ambiente de cena) [3.11]:** iluminação por máscara de escuridão em Java2D puro (sem OpenGL). A cena tem `ambientLight` (o alpha é a intensidade da escuridão, serializado por cena); cada `LightObject` (cor, raio, intensidade) abre um degradê radial na escuridão via `AlphaComposite.DstOut` e tinge a área com um brilho colorido. Passe em screen-space logo antes da UI, nos dois pipelines (editor FX + player AWT), com buffer de máscara reaproveitado entre frames. Gizmo de raio no editor. MCP: `create_light_object`, `set_light_properties`, `set_scene_ambient_light`. Inspector "Luz 2D" + "Luz Ambiente da Cena" + menu **Cena > Criar Conteúdo > Luz 2D**.
+
+### Notas
+- **Fase D concluída.** Cobertura: 101 testes JUnit (+15: `TextObjectTest`, `NineSliceTest`, `LightingTest`, incluindo testes de saída de render que validam o flip Y do texto e o recorte DstOut da luz por pixels), 0 violações de Checkstyle.
+- **Descartado do plano por não aderir à arquitetura:** `pulse` (oscilação) da luz; nine-slice no nível de `UIComponent` (fica só em `UIImage`); Inspector FX de nine-slice (a UI in-game é autorada por MCP, não inspecionada no editor FX); alinhamento vertical do texto (`VAlignment`) e seletor de fontes do SO (mantidos como futuros). A alegação de "aceleração por hardware" do design foi corrigida — o motor é Java2D em CPU.
+
 ## [1.9.0] - 2026-07-07
 
 ### Fase C do Motor Gráfico — conteúdo de cena

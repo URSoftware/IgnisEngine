@@ -20,6 +20,7 @@ import com.ignis.collab.CollabSession;
 import com.ignis.core.ui.UIButton;
 import com.ignis.core.ui.UICanvas;
 import com.ignis.core.ui.UIComponent;
+import com.ignis.core.ui.UIImage;
 import com.ignis.core.ui.UILabel;
 import com.ignis.core.ui.UIPanel;
 import com.ignis.core.ui.UIProgressBar;
@@ -108,6 +109,8 @@ public final class IgnisToolRegistry {
             "create_background_layer", "set_parallax_factor",
             "create_particle_emitter", "particle_burst", "set_particle_emitting",
             "create_tilemap", "add_tilemap_layer", "set_tile", "paint_tiles", "clear_tilemap_layer",
+            "create_text_object", "set_text",
+            "create_light_object", "set_light_properties", "set_scene_ambient_light",
             "set_parent", "clear_parent");
 
     // Contexto vivo do editor (opcional): presente quando o bridge roda dentro do
@@ -1250,6 +1253,8 @@ public final class IgnisToolRegistry {
         registerBackgroundTools();
         registerParticleTools();
         registerTilemapTools();
+        registerTextTools();
+        registerLightTools();
         registerHierarchyTools();
         registerCaptureTools();
     }
@@ -1506,6 +1511,179 @@ public final class IgnisToolRegistry {
     private com.ignis.core.TilemapObject findTilemap(String name) {
         GameObject go = findObject(name);
         return (go instanceof com.ignis.core.TilemapObject) ? (com.ignis.core.TilemapObject) go : null;
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de texto no mundo (com.ignis.core.TextObject) — Fase D 3.9
+    // ----------------------------------------------------------------------
+
+    private void registerTextTools() {
+        // create_text_object
+        Map<String, String> txtProps = new LinkedHashMap<>();
+        txtProps.put("name", "Nome unico do objeto de texto");
+        txtProps.put("text", "Conteudo do texto (use \\n para varias linhas)");
+        txtProps.put("x", "Posicao X do canto (padrao 0)");
+        txtProps.put("y", "Posicao Y do canto (padrao 0)");
+        txtProps.put("fontSize", "Tamanho da fonte em px (padrao 24)");
+        txtProps.put("fontFamily", "Familia da fonte (padrao SansSerif)");
+        txtProps.put("color", "Cor do texto 0xAARRGGBB/#RRGGBB (padrao branco)");
+        txtProps.put("bold", "Negrito (padrao false)");
+        txtProps.put("italic", "Italico (padrao false)");
+        txtProps.put("align", "Alinhamento: LEFT|CENTER|RIGHT (padrao LEFT)");
+        txtProps.put("zIndex", "Ordem de render (padrao 100, na frente das entidades)");
+        add("create_text_object",
+            "Cria um texto no espaco do mundo (placa/rotulo/dano flutuante) e o adiciona a cena.",
+            schemaWith(txtProps, List.of("name", "text")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
+                com.ignis.core.TextObject txt = new com.ignis.core.TextObject();
+                txt.setName(name);
+                txt.setGame(liveGame);
+                txt.setText(args.optString("text", "Texto"));
+                txt.setX(args.optDouble("x", 0));
+                txt.setY(args.optDouble("y", 0));
+                txt.setFontSize(args.optInt("fontSize", 24));
+                if (args.has("fontFamily")) txt.setFontFamily(args.optString("fontFamily"));
+                java.awt.Color c = parseColor(args.optString("color", ""));
+                if (c != null) txt.setColor(c);
+                txt.setBold(args.optBoolean("bold", false));
+                txt.setItalic(args.optBoolean("italic", false));
+                txt.setAlign(parseAlign(args.optString("align", "")));
+                txt.setZIndex(args.optInt("zIndex", 100));
+                liveGame.addEntity(txt);
+                if (refreshHook != null) refreshHook.run();
+                return "Texto criado: " + name + " (\"" + txt.getText().replace("\n", "\\n") + "\", "
+                        + txt.getFontSize() + "px)";
+            });
+
+        // set_text — edita conteudo/estilo de um TextObject existente
+        Map<String, String> setTxtProps = new LinkedHashMap<>();
+        setTxtProps.put("name", "Nome do objeto de texto");
+        setTxtProps.put("text", "Novo conteudo (opcional)");
+        setTxtProps.put("fontSize", "Novo tamanho em px (opcional)");
+        setTxtProps.put("fontFamily", "Nova familia de fonte (opcional)");
+        setTxtProps.put("color", "Nova cor 0xAARRGGBB/#RRGGBB (opcional)");
+        setTxtProps.put("bold", "Negrito (opcional)");
+        setTxtProps.put("italic", "Italico (opcional)");
+        setTxtProps.put("align", "Alinhamento LEFT|CENTER|RIGHT (opcional)");
+        add("set_text",
+            "Edita o conteudo e/ou o estilo de um objeto de texto existente.",
+            schemaWith(setTxtProps, List.of("name")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (!(go instanceof com.ignis.core.TextObject)) {
+                    return "Erro: objeto de texto nao encontrado: " + args.optString("name", "");
+                }
+                com.ignis.core.TextObject txt = (com.ignis.core.TextObject) go;
+                if (args.has("text")) txt.setText(args.optString("text"));
+                if (args.has("fontSize")) txt.setFontSize(args.optInt("fontSize"));
+                if (args.has("fontFamily")) txt.setFontFamily(args.optString("fontFamily"));
+                if (args.has("color")) {
+                    java.awt.Color c = parseColor(args.optString("color", ""));
+                    if (c != null) txt.setColor(c);
+                }
+                if (args.has("bold")) txt.setBold(args.optBoolean("bold"));
+                if (args.has("italic")) txt.setItalic(args.optBoolean("italic"));
+                if (args.has("align")) txt.setAlign(parseAlign(args.optString("align", "")));
+                if (refreshHook != null) refreshHook.run();
+                return "Texto atualizado: " + txt.getName();
+            });
+    }
+
+    // ----------------------------------------------------------------------
+    // Ferramentas de iluminacao 2D (com.ignis.core.LightObject) — Fase D 3.11
+    // ----------------------------------------------------------------------
+
+    private void registerLightTools() {
+        // create_light_object
+        Map<String, String> lightProps = new LinkedHashMap<>();
+        lightProps.put("name", "Nome unico da luz");
+        lightProps.put("x", "Posicao X do centro (padrao 0)");
+        lightProps.put("y", "Posicao Y do centro (padrao 0)");
+        lightProps.put("color", "Cor da luz 0xAARRGGBB/#RRGGBB (padrao quente)");
+        lightProps.put("radius", "Raio de alcance em px (padrao 160)");
+        lightProps.put("intensity", "Intensidade 0..1 no centro (padrao 1)");
+        add("create_light_object",
+            "Cria um ponto de luz 2D. So ilumina se a cena tiver luz ambiente (set_scene_ambient_light).",
+            schemaWith(lightProps, List.of("name")),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String name = args.optString("name", "").trim();
+                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
+                com.ignis.core.LightObject light = new com.ignis.core.LightObject();
+                light.setName(name);
+                light.setGame(liveGame);
+                light.setX(args.optDouble("x", 0));
+                light.setY(args.optDouble("y", 0));
+                java.awt.Color c = parseColor(args.optString("color", ""));
+                if (c != null) light.setLightColor(c);
+                light.setRadius(args.optDouble("radius", 160));
+                light.setIntensity(args.optDouble("intensity", 1.0));
+                liveGame.addEntity(light);
+                if (refreshHook != null) refreshHook.run();
+                return "Luz criada: " + name + " (raio=" + (int) light.getRadius()
+                        + ", intensidade=" + light.getIntensity() + ")";
+            });
+
+        // set_light_properties
+        Map<String, String> setLightProps = new LinkedHashMap<>();
+        setLightProps.put("name", "Nome da luz");
+        setLightProps.put("color", "Nova cor (opcional)");
+        setLightProps.put("radius", "Novo raio em px (opcional)");
+        setLightProps.put("intensity", "Nova intensidade 0..1 (opcional)");
+        add("set_light_properties",
+            "Ajusta cor, raio e/ou intensidade de uma luz existente.",
+            schemaWith(setLightProps, List.of("name")),
+            args -> {
+                GameObject go = findObject(args.optString("name", ""));
+                if (!(go instanceof com.ignis.core.LightObject)) {
+                    return "Erro: luz nao encontrada: " + args.optString("name", "");
+                }
+                com.ignis.core.LightObject light = (com.ignis.core.LightObject) go;
+                if (args.has("color")) {
+                    java.awt.Color c = parseColor(args.optString("color", ""));
+                    if (c != null) light.setLightColor(c);
+                }
+                if (args.has("radius")) light.setRadius(args.optDouble("radius"));
+                if (args.has("intensity")) light.setIntensity(args.optDouble("intensity"));
+                if (refreshHook != null) refreshHook.run();
+                return "Luz atualizada: " + light.getName();
+            });
+
+        // set_scene_ambient_light
+        Map<String, String> ambProps = new LinkedHashMap<>();
+        ambProps.put("color", "Cor/escuridao ambiente 0xAARRGGBB (o alpha e a intensidade da escuridao), ex: 0xE0050510. Vazio/none desliga.");
+        add("set_scene_ambient_light",
+            "Define a luz ambiente (escuridao) da cena ativa. Sem ela, as luzes nao tem efeito. Passe 'none' para desligar.",
+            schemaWith(ambProps, List.of()),
+            args -> {
+                if (liveGame == null) return "Erro: editor nao disponivel.";
+                String raw = args.optString("color", "").trim();
+                if (raw.isEmpty() || raw.equalsIgnoreCase("none")) {
+                    liveGame.setAmbientLight(null);
+                    if (refreshHook != null) refreshHook.run();
+                    return "Luz ambiente desligada (cena totalmente visivel).";
+                }
+                java.awt.Color c = parseColor(raw);
+                if (c == null) return "Erro: cor invalida: " + raw;
+                liveGame.setAmbientLight(c);
+                if (refreshHook != null) refreshHook.run();
+                return "Luz ambiente definida (alpha/escuridao=" + c.getAlpha() + ").";
+            });
+    }
+
+    /** Interpreta o alinhamento textual; default LEFT para vazio/invalido. */
+    private static com.ignis.core.TextObject.TextAlign parseAlign(String s) {
+        if (s == null) return com.ignis.core.TextObject.TextAlign.LEFT;
+        try {
+            return com.ignis.core.TextObject.TextAlign.valueOf(s.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return com.ignis.core.TextObject.TextAlign.LEFT;
+        }
     }
 
     // ----------------------------------------------------------------------
@@ -2242,6 +2420,65 @@ public final class IgnisToolRegistry {
                 float max = args.has("maxValue") ? (float) args.optDouble("maxValue") : bar.getMaxValue();
                 bar.setValue(value, max);
                 return "Valor atualizado: " + value + "/" + max;
+            });
+
+        // ui_create_image
+        Map<String, String> uiImgProps = new LinkedHashMap<>();
+        uiImgProps.put("name", "Nome unico do elemento");
+        uiImgProps.put("path", "Caminho da imagem, relativo ao projeto");
+        uiImgProps.put("x", "Posicao X (padrao 20)");
+        uiImgProps.put("y", "Posicao Y (padrao 20)");
+        uiImgProps.put("width", "Largura em px (padrao 200)");
+        uiImgProps.put("height", "Altura em px (padrao 200)");
+        uiImgProps.put("scaleMode", "STRETCH|FIT|FILL|NONE|TILE|NINE_SLICE (padrao FIT)");
+        add("ui_create_image",
+            "Cria uma imagem na UI in-game (skin de painel/botao, icone). Requer Play para aparecer.",
+            schemaWith(uiImgProps, List.of("name", "path")),
+            args -> {
+                UICanvas canvas = ensureUiCanvas();
+                if (canvas == null) return "Erro: editor nao disponivel.";
+                if (canvas.findByName(args.optString("name", "")) != null) return "Erro: ja existe elemento com esse nome.";
+                String path = args.optString("path", "");
+                File resolved = resolveInProject(path);
+                if (resolved == null) return "Erro: imagem fora do projeto: " + path;
+                UIImage img = new UIImage(resolved.getAbsolutePath(),
+                        args.optDouble("x", 20), args.optDouble("y", 20),
+                        args.optDouble("width", 200), args.optDouble("height", 200));
+                img.setName(args.optString("name", ""));
+                try {
+                    img.setScaleMode(UIImage.ScaleMode.valueOf(
+                            args.optString("scaleMode", "FIT").trim().toUpperCase(java.util.Locale.ROOT)));
+                } catch (IllegalArgumentException iae) {
+                    return "Erro: scaleMode invalido (STRETCH|FIT|FILL|NONE|TILE|NINE_SLICE).";
+                }
+                canvas.addChild(img);
+                return "Imagem de UI criada: " + args.optString("name", "");
+            });
+
+        // ui_set_nine_slice
+        Map<String, String> nsProps = new LinkedHashMap<>();
+        nsProps.put("name", "Nome de uma UIImage ja criada");
+        nsProps.put("left", "Margem esquerda em px da imagem original");
+        nsProps.put("right", "Margem direita em px");
+        nsProps.put("top", "Margem superior em px");
+        nsProps.put("bottom", "Margem inferior em px");
+        add("ui_set_nine_slice",
+            "Ativa o modo nine-slice numa UIImage e define as quatro margens (cantos fixos, bordas/miolo esticam).",
+            schemaWith(nsProps, List.of("name", "left", "right", "top", "bottom")),
+            args -> {
+                UICanvas canvas = ensureUiCanvas();
+                if (canvas == null) return "Erro: editor nao disponivel.";
+                UIComponent el = canvas.findByName(args.optString("name", ""));
+                if (!(el instanceof UIImage)) {
+                    return "Erro: UIImage nao encontrada: " + args.optString("name", "");
+                }
+                UIImage img = (UIImage) el;
+                img.setScaleMode(UIImage.ScaleMode.NINE_SLICE);
+                img.setSlices(args.optInt("left"), args.optInt("right"),
+                        args.optInt("top"), args.optInt("bottom"));
+                return "Nine-slice aplicado em " + img.getName() + " ("
+                        + img.getSliceLeft() + "," + img.getSliceRight() + ","
+                        + img.getSliceTop() + "," + img.getSliceBottom() + ")";
             });
 
         // ui_remove_element

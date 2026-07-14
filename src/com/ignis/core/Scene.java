@@ -28,6 +28,13 @@ public class Scene {
 
     public World getWorld() { return world; }
     public void setWorld(World world) { this.world = world; }
+
+    // Luz ambiente da cena (Fase D 3.11): o alpha e a intensidade da escuridao.
+    // Null = sem iluminacao (cena totalmente visivel, sem custo do passe de luz).
+    private java.awt.Color ambientLight = null;
+
+    public java.awt.Color getAmbientLight() { return ambientLight; }
+    public void setAmbientLight(java.awt.Color c) { this.ambientLight = c; }
     
     // Stores pending script variables to be applied when scripts are instantiated
     // Key: entity ID + ":" + scriptName, Value: variable values JSON
@@ -182,6 +189,11 @@ public class Scene {
         // Mundo da cena (limites + barreiras), se houver.
         if (world != null) {
             json.put("world", world.toJSON());
+        }
+
+        // Luz ambiente da cena (Fase D 3.11), se definida.
+        if (ambientLight != null) {
+            json.put("ambientLight", ambientLight.getRGB());
         }
 
         return json;
@@ -360,6 +372,17 @@ public class Scene {
         // Mundo da cena (limites + barreiras), se serializado.
         if (json.has("world")) {
             scene.setWorld(World.fromJSON(json.getJSONObject("world")));
+        }
+
+        // Luz ambiente da cena (Fase D 3.11): restaura e aplica ao runtime.
+        if (json.has("ambientLight")) {
+            java.awt.Color amb = new java.awt.Color(json.getInt("ambientLight"), true);
+            scene.setAmbientLight(amb);
+            if (game != null) {
+                game.setAmbientLight(amb);
+            }
+        } else if (game != null) {
+            game.setAmbientLight(null); // cena sem luz ambiente limpa o runtime
         }
 
         return scene;

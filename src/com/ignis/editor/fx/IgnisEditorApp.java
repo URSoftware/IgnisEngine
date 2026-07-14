@@ -682,7 +682,11 @@ public class IgnisEditorApp extends Application {
         criarParticulas.setOnAction(e -> createEntity("ParticleEmitter"));
         MenuItem criarTilemap = new MenuItem("Tilemap");
         criarTilemap.setOnAction(e -> createEntity("TilemapObject"));
-        criarConteudo.getItems().addAll(criarFundo, criarParticulas, criarTilemap);
+        MenuItem criarTexto = new MenuItem("Texto no Mundo");
+        criarTexto.setOnAction(e -> createEntity("TextObject"));
+        MenuItem criarLuz = new MenuItem("Luz 2D");
+        criarLuz.setOnAction(e -> createEntity("LightObject"));
+        criarConteudo.getItems().addAll(criarFundo, criarParticulas, criarTilemap, criarTexto, criarLuz);
 
         MenuItem dup = new MenuItem("Duplicar selecionado");
         dup.setOnAction(e -> duplicateSelected());
@@ -1005,6 +1009,8 @@ public class IgnisEditorApp extends Application {
         for (GameObject e : game.getEntities()) scene.addEntity(e);
         // Sincroniza o mundo vivo (limites/barreiras) para persistir no .ignis.
         scene.setWorld(game.getWorld());
+        // Luz ambiente da cena (Fase D 3.11) para persistir no .ignis.
+        scene.setAmbientLight(game.getAmbientLight());
     }
 
     // ==================== ORGANIZADOR DE CENÁRIOS ====================
@@ -2152,7 +2158,9 @@ public class IgnisEditorApp extends Application {
             // (tile do fundo, grade do tilemap); nao sobrescrever com o 50x50 padrao.
             boolean tamanhoProprio = obj instanceof com.ignis.core.BackgroundLayer
                     || obj instanceof com.ignis.core.ParticleEmitter
-                    || obj instanceof com.ignis.core.TilemapObject;
+                    || obj instanceof com.ignis.core.TilemapObject
+                    || obj instanceof com.ignis.core.TextObject
+                    || obj instanceof com.ignis.core.LightObject;
             if (!tamanhoProprio) {
                 obj.setWidth(50);
                 obj.setHeight(50);
@@ -3322,6 +3330,12 @@ public class IgnisEditorApp extends Application {
             } else if (go instanceof com.ignis.core.TilemapObject) {
                 inspectorExtras.getChildren().add(
                         buildTilemapSection((com.ignis.core.TilemapObject) go));
+            } else if (go instanceof com.ignis.core.TextObject) {
+                inspectorExtras.getChildren().add(
+                        buildTextObjectSection((com.ignis.core.TextObject) go));
+            } else if (go instanceof com.ignis.core.LightObject) {
+                inspectorExtras.getChildren().add(
+                        buildLightObjectSection((com.ignis.core.LightObject) go));
             }
             if (go.getParent() != null) {
                 inspectorExtras.getChildren().add(buildHierarchySection(go));
@@ -3839,6 +3853,69 @@ public class IgnisEditorApp extends Application {
                 labeledInspectorRow("Tile a pintar", tileIdx),
                 labeledInspectorRow("Camada de pintura", layerIdx),
                 paint);
+        return sec;
+    }
+
+    /** Secao do Inspector para texto no mundo (Fase D, item 3.9). */
+    private javafx.scene.Node buildTextObjectSection(com.ignis.core.TextObject txt) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Texto no Mundo"));
+
+        // Conteudo multilinha (\n cria varias linhas). Aplica ao perder foco/Enter+Ctrl.
+        javafx.scene.control.TextArea content = new javafx.scene.control.TextArea(txt.getText());
+        content.setPrefRowCount(2);
+        content.setWrapText(true);
+        Runnable applyText = () -> { txt.setText(content.getText()); markProjectDirty(); };
+        content.focusedProperty().addListener((o, a, f) -> { if (!f) applyText.run(); });
+
+        ColorPicker colorPicker = new ColorPicker(awtToFx(txt.getColor()));
+        colorPicker.setOnAction(e -> { txt.setColor(fxToAwt(colorPicker.getValue())); markProjectDirty(); });
+
+        ComboBox<com.ignis.core.TextObject.TextAlign> align = new ComboBox<>();
+        align.getItems().setAll(com.ignis.core.TextObject.TextAlign.values());
+        align.setValue(txt.getAlign());
+        align.setOnAction(e -> { txt.setAlign(align.getValue()); markProjectDirty(); });
+
+        sec.getChildren().addAll(
+                labeledInspectorRow("Texto", content),
+                intRow("Tamanho (px)", txt::getFontSize, txt::setFontSize),
+                labeledInspectorRow("Cor", colorPicker),
+                labeledInspectorRow("Alinhamento", align),
+                checkRow("Negrito", txt.isBold(), txt::setBold),
+                checkRow("Itálico", txt.isItalic(), txt::setItalic));
+
+        TextField family = new TextField(txt.getFontFamily());
+        family.setPromptText("SansSerif / Serif / Monospaced");
+        Runnable applyFamily = () -> { txt.setFontFamily(family.getText().trim()); markProjectDirty(); };
+        family.setOnAction(e -> applyFamily.run());
+        family.focusedProperty().addListener((o, a, f) -> { if (!f) applyFamily.run(); });
+        sec.getChildren().add(labeledInspectorRow("Fonte", family));
+        return sec;
+    }
+
+    /** Secao do Inspector para luzes 2D (Fase D, item 3.11). */
+    private javafx.scene.Node buildLightObjectSection(com.ignis.core.LightObject light) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("Luz 2D"));
+
+        ColorPicker colorPicker = new ColorPicker(awtToFx(light.getLightColor()));
+        colorPicker.setOnAction(e -> { light.setLightColor(fxToAwt(colorPicker.getValue())); markProjectDirty(); });
+
+        sec.getChildren().addAll(
+                labeledInspectorRow("Cor", colorPicker),
+                doubleRow("Raio (px)", light::getRadius, light::setRadius),
+                doubleRow("Intensidade (0-1)", light::getIntensity, light::setIntensity));
+
+        // Luz ambiente da cena (global): sem ela as luzes nao tem efeito visivel.
+        sec.getChildren().add(sectionTitle("Luz Ambiente da Cena"));
+        java.awt.Color amb = game.getAmbientLight();
+        ColorPicker ambPicker = new ColorPicker(amb != null ? awtToFx(amb) : javafx.scene.paint.Color.rgb(5, 5, 16, 0.88));
+        ambPicker.setOnAction(e -> { game.setAmbientLight(fxToAwt(ambPicker.getValue())); markProjectDirty(); });
+        Button ambOff = new Button("Desligar luz ambiente");
+        ambOff.setOnAction(e -> { game.setAmbientLight(null); markProjectDirty(); });
+        Label dica = new Label("O alpha da cor ambiente = intensidade da escuridão.");
+        dica.getStyleClass().add("toolbar-label");
+        sec.getChildren().addAll(labeledInspectorRow("Ambiente", ambPicker), ambOff, dica);
         return sec;
     }
 

@@ -85,7 +85,17 @@ public class Game extends Canvas implements Runnable {
     // ==================== UI SYSTEM ====================
     // Canvas de interface do usuário
     private UICanvas uiCanvas;
-    
+
+    // ==================== ILUMINACAO 2D (Fase D 3.11) ====================
+    // Luz ambiente da cena ativa (alpha = intensidade da escuridao). Null = sem
+    // iluminacao (passe de luz nao roda, custo zero). Espelha Scene.ambientLight.
+    private Color ambientLight = null;
+    // Buffer da mascara de luz, reaproveitado entre frames (realoca so ao mudar de tamanho).
+    private transient java.awt.image.BufferedImage lightMaskBuffer = null;
+
+    public Color getAmbientLight() { return ambientLight; }
+    public void setAmbientLight(Color c) { this.ambientLight = c; }
+
     // Reference to the editor for displaying alerts
     private Object editorReference = null;
  
@@ -2147,6 +2157,12 @@ public class Game extends Canvas implements Runnable {
             g2d.setTransform(temp);
         }
         
+        // ==================== ILUMINACAO 2D (Fase D 3.11) ====================
+        // Passe de luz em screen-space, antes da UI (jogo exportado / player AWT).
+        g2d.setTransform(originalTransform);
+        renderLightingPass(g2d, getWidth(), getHeight(), activeCamera, shouldApplyCameraTransform);
+        g2d.setTransform(originalTransform);
+
         // ==================== UI RENDERING ====================
         // Render UI Canvas on top of everything (in SCREEN_SPACE_OVERLAY mode)
         if (uiCanvas != null && uiCanvas.isVisible()) {
@@ -2175,6 +2191,76 @@ public class Game extends Canvas implements Runnable {
 
         g.dispose();
         bs.show();
+    }
+
+    /**
+     * Passe de iluminacao 2D (Fase D 3.11), desenhado em screen-space logo antes
+     * da UI. No-op quando nao ha {@link #ambientLight}. Compoe uma mascara de
+     * escuridao com buracos suaves nas luzes (ver {@link LightObject#composeMask})
+     * e a sobrepoe a cena; depois aplica um brilho colorido translucido por luz.
+     *
+     * @param g2d          alvo, ja no transform de tela (identidade de dispositivo)
+     * @param width,height dimensoes em pixels do alvo
+     * @param cam          camera ativa (para mapear mundo->tela), ou null
+     * @param cameraApplied se a transform de camera estava aplicada as entidades
+     */
+    private void renderLightingPass(Graphics2D g2d, int width, int height,
+                                    Camera cam, boolean cameraApplied) {
+        if (ambientLight == null || ambientLight.getAlpha() == 0) return;
+
+        java.util.List<LightObject> lights = new java.util.ArrayList<>();
+        for (GameObject e : getEntities()) {
+            if (e instanceof LightObject && e.isVisible()) {
+                lights.add((LightObject) e);
+            }
+        }
+
+        // Transform mundo->dispositivo: captura a mesma que a camera aplicou as
+        // entidades (base do g2d = identidade nos dois pipelines). Null = mundo==tela.
+        AffineTransform worldToDevice = null;
+        if (cameraApplied && cam != null) {
+            Graphics2D probe = (Graphics2D) g2d.create();
+            cam.applyTransform(probe);
+            worldToDevice = probe.getTransform();
+            probe.dispose();
+        }
+
+        lightMaskBuffer = LightObject.composeMask(lightMaskBuffer, width, height,
+                ambientLight, lights, worldToDevice);
+        if (lightMaskBuffer != null) {
+            g2d.drawImage(lightMaskBuffer, 0, 0, null);
+        }
+
+        // Brilho colorido por luz (tinge a area iluminada), no espaco do mundo.
+        if (!lights.isEmpty()) {
+            Graphics2D gg = (Graphics2D) g2d.create();
+            try {
+                gg.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                if (worldToDevice != null) gg.transform(worldToDevice);
+                for (LightObject light : lights) {
+                    Color c = light.getLightColor();
+                    if (c == null) continue;
+                    double r = Math.max(1, light.getRadius());
+                    float inten = (float) Math.max(0, Math.min(1, light.getIntensity()));
+                    if (inten <= 0) continue;
+                    double cx = light.getX();
+                    double cy = light.getY();
+                    int a0 = (int) (130 * inten); // forca do brilho no centro
+                    java.awt.RadialGradientPaint glow = new java.awt.RadialGradientPaint(
+                            new java.awt.geom.Point2D.Double(cx, cy), (float) r,
+                            new float[] {0f, 1f},
+                            new Color[] {
+                                new Color(c.getRed(), c.getGreen(), c.getBlue(), a0),
+                                new Color(c.getRed(), c.getGreen(), c.getBlue(), 0)
+                            });
+                    gg.setPaint(glow);
+                    gg.fill(new java.awt.geom.Ellipse2D.Double(cx - r, cy - r, r * 2, r * 2));
+                }
+            } finally {
+                gg.dispose();
+            }
+        }
     }
 
     /**
@@ -2352,6 +2438,11 @@ public class Game extends Canvas implements Runnable {
             g2d.setTransform(gizmoTransform);
         }
 
+        g2d.setTransform(originalTransform);
+
+        // ==================== ILUMINACAO 2D (Fase D 3.11) ====================
+        // Antes da UI (que fica imune a luz) e depois de toda a cena/overlays.
+        renderLightingPass(g2d, width, height, activeCamera, shouldApplyCameraTransform);
         g2d.setTransform(originalTransform);
 
         // ==================== UI RENDERING (espaco de tela) ====================
