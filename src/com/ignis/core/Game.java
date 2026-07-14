@@ -1686,7 +1686,27 @@ public class Game extends Canvas implements Runnable {
     // Simulacao fixa em 60 Hz; o editor JavaFX renderiza na taxa do monitor
     // (75/120/144 Hz). Sem interpolacao, o movimento continuo apresenta judder.
     private volatile long lastTickNanos = 0L;
-    private static final double NS_PER_TICK = 1_000_000_000.0 / 60.0;
+    /** Passos de simulacao por segundo (fixo — nao confundir com o FPS do render). */
+    public static final double TICKS_PER_SECOND = 60.0;
+    private static final double NS_PER_TICK = 1_000_000_000.0 / TICKS_PER_SECOND;
+
+    // ---- Ritmo do render (Fase E, item 3.13) ----
+    // O render e desacoplado da simulacao: roda ate 'fpsCap' quadros por segundo,
+    // interpolando entre ticks via getRenderAlpha(). 0 = sem limite (usa a CPU
+    // livremente). Default 60 = comportamento historico.
+    private volatile int fpsCap = 60;
+    // Teto de ticks de recuperacao por iteracao do loop (evita a espiral da morte).
+    private static final int MAX_CATCHUP_TICKS = 5;
+
+    /** Limite de quadros por segundo do render (0 = sem limite). */
+    public int getFpsCap() {
+        return fpsCap;
+    }
+
+    /** Define o limite de FPS do render; 0 remove o limite. A simulacao segue a 60 Hz. */
+    public void setFpsCap(int fps) {
+        this.fpsCap = Math.max(0, fps);
+    }
     // Distancia^2 (em px) acima da qual NAO interpolamos — trata teleporte
     // (setPosition com salto grande) como corte seco em vez de deslize na tela.
     private static final double INTERP_SNAP_SQ = 256.0 * 256.0;
@@ -2013,6 +2033,21 @@ public class Game extends Canvas implements Runnable {
         render();
     }
 
+    /**
+     * Renderiza o jogo no Canvas AWT (BufferStrategy) — pipeline do player
+     * standalone/exportado. O DESENHO DA CENA e delegado a {@link #renderWorldTo},
+     * fonte unica do pipeline grafico (Fase E, item 3.14). Antes, este metodo
+     * duplicava toda a logica de cena (camera, culling, entidades, luz, UI), o que
+     * obrigava a manter dois caminhos em sincronia a cada recurso novo — o passe de
+     * iluminacao da Fase D, por exemplo, precisou ser inserido nos dois. Aqui ficam
+     * apenas as partes especificas deste pipeline: BufferStrategy, ajuste de
+     * viewport e os alertas por cima.
+     *
+     * <p>No editor JavaFX este metodo retorna cedo ({@code isDisplayable()} e false —
+     * o Game nao vive numa janela AWT la); quem desenha e o AnimationTimer chamando
+     * {@code renderWorldTo} diretamente. Ou seja, este caminho so pinta de fato no
+     * jogo exportado, onde {@code gameState} e sempre PLAYING.</p>
+     */
     public synchronized void render() {
         if (!this.isDisplayable()) {
             return;
@@ -2035,162 +2070,27 @@ public class Game extends Canvas implements Runnable {
             // Buffer strategy was not fully validated/created
             return;
         }
-
         if (g == null) {
             return;
         }
 
         Graphics2D g2d = (Graphics2D) g;
-
-        // Clear background
-        g.setColor(Color.GRAY);
-        g.fillRect(0, 0, this.getWidth(), this.getHeight());
-
-        // Enable anti-aliasing for smoother rendering
-        g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
-                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-
-        // Update viewport size if changed
-        if (viewport != null && (viewport.getWidth() != getWidth() || viewport.getHeight() != getHeight())) {
-            viewport.resize(getWidth(), getHeight());
-        }
-
-        // ==================== CAMERA-DEPENDENT RENDERING ====================
-        // 1. Select the view camera (editor livre em EDITING; camera do jogo no Play/preview)
-        Camera activeCamera = getViewCamera();
-
-        // 2. Save the original transform
-        AffineTransform originalTransform = g2d.getTransform();
-
-        // 3. Apply camera transform when in editor camera mode OR when playing
-        boolean shouldApplyCameraTransform = activeCamera != null &&
-            (editorCameraMode || gameState == GameState.PLAYING);
-        
-        if (shouldApplyCameraTransform) {
-            activeCamera.applyTransform(g2d);
-        }
-        
-        // 3.5 Draw grid in editor mode (before entities, so it appears behind)
-        if (gameState == GameState.EDITING && showGrid && shouldApplyCameraTransform) {
-            drawGrid(g2d);
-        }
-
-        // 4. Render all entities (ordenadas por zIndex; empate = ordem da lista)
-        Camera cullCamera = shouldApplyCameraTransform ? activeCamera : null;
-        double renderAlpha = getRenderAlpha();
-        for (GameObject entity : entitiesInRenderOrder()) {
-            // Skip invisible entities
-            if (!entity.isVisible()) continue;
-
-            // Skip camera entities from regular rendering (cameras are special)
-            if (entity instanceof Camera) continue;
-
-            // Culling: pula entidades totalmente fora do retangulo visivel.
-            if (isCulled(cullCamera, entity)) continue;
-
-            // Save entity transform + composite
-            AffineTransform entityTransform = g2d.getTransform();
-            java.awt.Composite oldComposite = g2d.getComposite();
-
-            // Interpolacao de posicao + flip/escala visual (NAO rotaciona aqui:
-            // cada forma ja aplica a propria rotacao dentro de render()).
-            applyEntityVisual(g2d, entity, renderAlpha);
-            if (entity.getOpacity() < 1.0) {
-                g2d.setComposite(java.awt.AlphaComposite.getInstance(
-                        java.awt.AlphaComposite.SRC_OVER, (float) entity.getOpacity()));
+        try {
+            // Mantem o viewport coerente com a janela (resize do player standalone).
+            if (viewport != null
+                    && (viewport.getWidth() != getWidth() || viewport.getHeight() != getHeight())) {
+                viewport.resize(getWidth(), getHeight());
             }
 
-            // Render entity
-            entity.render(g);
+            // Cena completa (fundo, camera, entidades, iluminacao, UI): fonte unica.
+            renderWorldTo(g2d, getWidth(), getHeight(), selectedObject);
 
-            // Restore entity transform + composite
-            g2d.setTransform(entityTransform);
-            g2d.setComposite(oldComposite);
+            // Alertas por cima de tudo (especifico deste pipeline).
+            renderAlerts(g2d);
+        } finally {
+            g.dispose();
+            bs.show();
         }
-
-        // 5. Restore original transform for UI and editor overlays
-        g2d.setTransform(originalTransform);
-
-        // Draw camera gizmos in editor mode (without camera transform applied)
-        if (gameState == GameState.EDITING) {
-            // If editor camera mode, apply it for gizmos
-            if (editorCameraMode && activeCamera != null) {
-                AffineTransform editorTransform = g2d.getTransform();
-                activeCamera.applyTransform(g2d);
-                
-                // Render camera indicators
-                for (Camera cam : cameras) {
-                    if (cam.isVisible()) {
-                        cam.render(g);
-                    }
-                }
-                
-                g2d.setTransform(editorTransform);
-            }
-        }
-
-        // Draw selection and gizmo only in EDITING mode
-        if (gameState == GameState.EDITING && selectedObject != null) {
-            // Apply camera transform for selection/gizmo if in editor camera mode
-            if (shouldApplyCameraTransform) {
-                activeCamera.applyTransform(g2d);
-            }
-            
-            renderSelection(g2d);
-            renderGizmo(g2d);
-            
-            // Restore transform
-            g2d.setTransform(originalTransform);
-        }
-
-        // Draw world origin indicator in editing mode
-        if (gameState == GameState.EDITING && shouldApplyCameraTransform) {
-            AffineTransform temp = g2d.getTransform();
-            activeCamera.applyTransform(g2d);
-            drawWorldOrigin(g2d);
-            
-            // Draw collider debug visualization if enabled
-            if (showColliders && collisionManager != null) {
-                collisionManager.debugRender(g2d);
-            }
-            
-            g2d.setTransform(temp);
-        }
-        
-        // ==================== ILUMINACAO 2D (Fase D 3.11) ====================
-        // Passe de luz em screen-space, antes da UI (jogo exportado / player AWT).
-        g2d.setTransform(originalTransform);
-        renderLightingPass(g2d, getWidth(), getHeight(), activeCamera, shouldApplyCameraTransform);
-        g2d.setTransform(originalTransform);
-
-        // ==================== UI RENDERING ====================
-        // Render UI Canvas on top of everything (in SCREEN_SPACE_OVERLAY mode)
-        if (uiCanvas != null && uiCanvas.isVisible()) {
-            // Ensure canvas has correct screen dimensions
-            uiCanvas.updateScreenSize(getWidth(), getHeight());
-
-            // Reset transform for screen-space rendering
-            g2d.setTransform(originalTransform);
-
-            // Render UI hierarchy
-            uiCanvas.renderAll(g2d);
-        }
-
-        // CanvasComponents das entidades (UI persistente por objeto), por cima
-        // do canvas global, ordenados por sortingOrder.
-        for (CanvasComponent cc : getCanvasComponents()) {
-            g2d.setTransform(originalTransform);
-            cc.render(g2d, getWidth(), getHeight());
-        }
-        g2d.setTransform(originalTransform);
-        
-        // ==================== ALERTS RENDERING ====================
-        // Render alerts on top of everything
-        g2d.setTransform(originalTransform);
-        renderAlerts(g2d);
-
-        g.dispose();
-        bs.show();
     }
 
     /**
@@ -2539,36 +2439,6 @@ public class Game extends Canvas implements Runnable {
         g2d.drawString(text, 0, 0);
         g2d.setTransform(oldTransform);
     }
-
-    /**
-     * Draws the world origin (0,0) indicator
-     */
-    private void drawWorldOrigin(Graphics2D g2d) {
-        if (!showGrid) {
-            return;
-        }
-        int crossSize = 20;
-        
-        // Save current stroke
-        java.awt.Stroke oldStroke = g2d.getStroke();
-        
-        // Draw main crosshair at world origin (gray, dashed/semi-transparent)
-        g2d.setColor(new Color(100, 100, 100, 100));
-        float[] dashPattern = {4.0f, 4.0f};
-        BasicStroke dashedStroke = new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dashPattern, 0.0f);
-        g2d.setStroke(dashedStroke);
-        
-        g2d.drawLine(-crossSize, 0, crossSize, 0);
-        g2d.drawLine(0, -crossSize, 0, crossSize);
-        
-        // Restore stroke
-        g2d.setStroke(oldStroke);
-        
-        // Origin label
-        g2d.setColor(new Color(100, 100, 100, 150));
-        g2d.setFont(new Font("Arial", Font.BOLD, 10));
-        drawWorldText(g2d, "(0,0)", 6, 6);
-    }
     
     /**
      * Draws the editor grid in world space.
@@ -2640,55 +2510,6 @@ public class Game extends Canvas implements Runnable {
             g2d.drawLine(startX, y, endX, y);
         }
     }
-
-    /**
-     * Renders the selection border around the selected object
-     */
-    private void renderSelection(Graphics2D g2d) {
-        if (selectedObject == null)
-            return;
-
-        int x = (int) selectedObject.getX();
-        int y = (int) selectedObject.getY();
-        int w = selectedObject.getWidth();
-        int h = selectedObject.getHeight();
-        double rotation = selectedObject.getRotation();
-
-        // Save original transform
-        java.awt.geom.AffineTransform originalTransform = g2d.getTransform();
-
-        // Apply rotation if necessary
-        if (rotation != 0) {
-            double centerX = x + w / 2.0;
-            double centerY = y + h / 2.0;
-            g2d.rotate(Math.toRadians(rotation), centerX, centerY);
-        }
-
-        // Selection border
-        g2d.setColor(selectedObject.getNameColor() != null ? selectedObject.getNameColor() : new Color(0, 150, 255));
-        g2d.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
-                1.0f, new float[] { 5.0f, 5.0f }, 0.0f));
-        g2d.drawRect(x - 2, y - 2, w + 4, h + 4);
-
-        // Corner handles
-        g2d.setStroke(new BasicStroke(1));
-        g2d.setColor(Color.WHITE);
-        int handleSize = 6;
-        g2d.fillRect(x - handleSize / 2 - 2, y - handleSize / 2 - 2, handleSize, handleSize);
-        g2d.fillRect(x + w - handleSize / 2 + 2, y - handleSize / 2 - 2, handleSize, handleSize);
-        g2d.fillRect(x - handleSize / 2 - 2, y + h - handleSize / 2 + 2, handleSize, handleSize);
-        g2d.fillRect(x + w - handleSize / 2 + 2, y + h - handleSize / 2 + 2, handleSize, handleSize);
-
-        g2d.setColor(new Color(0, 150, 255));
-        g2d.drawRect(x - handleSize / 2 - 2, y - handleSize / 2 - 2, handleSize, handleSize);
-        g2d.drawRect(x + w - handleSize / 2 + 2, y - handleSize / 2 - 2, handleSize, handleSize);
-        g2d.drawRect(x - handleSize / 2 - 2, y + h - handleSize / 2 + 2, handleSize, handleSize);
-        g2d.drawRect(x + w - handleSize / 2 + 2, y + h - handleSize / 2 + 2, handleSize, handleSize);
-
-        // Restaurar transformação original
-        g2d.setTransform(originalTransform);
-    }
-
     /**
      * Renders the appropriate gizmo based on current tool
      */
@@ -3238,12 +3059,24 @@ public class Game extends Canvas implements Runnable {
         }
     }
 
+    /**
+     * Loop do jogo (thread propria). A <b>simulacao</b> roda em passos fixos de
+     * 60 Hz; o <b>render</b> e desacoplado dela e roda ate {@link #getFpsCap()}
+     * quadros por segundo (Fase E, item 3.13).
+     *
+     * <p>Antes, {@code tick()} e {@code render()} eram chamados juntos — o render
+     * ficava travado nos mesmos 60 Hz da simulacao, e a interpolacao anti-judder
+     * da Fase A ({@link #getRenderAlpha()}) nunca beneficiava o jogo exportado (so
+     * o editor, cujo AnimationTimer roda na taxa do monitor). Com os dois
+     * separados, subir o {@code fpsCap} (ex.: 144) faz o player standalone
+     * interpolar entre ticks e ficar suave em monitores de alta taxa.</p>
+     */
     @Override
     public void run() {
         long lastTime = System.nanoTime();
-        double amountOfTicks = 60.0;
-        double ns = 1000000000 / amountOfTicks;
+        final double ns = 1_000_000_000.0 / TICKS_PER_SECOND;
         double delta = 0;
+        long lastRenderNanos = 0L;
 
         while (isRunning) {
             try {
@@ -3251,19 +3084,33 @@ public class Game extends Canvas implements Runnable {
                 delta += (now - lastTime) / ns;
                 lastTime = now;
 
-                if (delta >= 1) {
+                // Simulacao: passos fixos, com teto de recuperacao para nao entrar
+                // na "espiral da morte" (se um frame demora muito, o jogo desacelera
+                // em vez de acumular ticks infinitamente).
+                int ticks = 0;
+                while (delta >= 1 && ticks < MAX_CATCHUP_TICKS) {
                     tick();
-                    render();
                     delta--;
-                } else {
-                    // Yield between frames instead of busy-spinning a full core
-                    try {
-                        Thread.sleep(1);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    ticks++;
                 }
+                if (delta > MAX_CATCHUP_TICKS) {
+                    delta = 0; // atraso grande demais: descarta em vez de acumular
+                }
+
+                // Render: independente do tick, limitado pelo fpsCap (0 = sem limite).
+                int cap = fpsCap;
+                boolean renderDue = cap <= 0
+                        || (now - lastRenderNanos) >= (1_000_000_000L / cap);
+                if (renderDue) {
+                    render();
+                    lastRenderNanos = now;
+                } else {
+                    // Cede a CPU ate o proximo quadro/tick em vez de girar em vazio.
+                    Thread.sleep(1);
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
             } catch (Throwable t) {
                 IgnisLogger.error("Erro na thread do loop do jogo: " + t.getMessage());
                 // Avoid fast spinning if there's a persistent error

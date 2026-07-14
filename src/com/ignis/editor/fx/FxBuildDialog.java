@@ -48,6 +48,8 @@ public class FxBuildDialog extends Stage {
     private final Spinner<Integer> widthSpinner;
     private final Spinner<Integer> heightSpinner;
     private final CheckBox fullscreenCheck;
+    private final CheckBox resizableCheck;
+    private final Spinner<Integer> fpsCapSpinner;
     private final Map<BuildTarget, CheckBox> targetChecks = new EnumMap<>(BuildTarget.class);
     private final TextArea logArea = new TextArea();
     private final Button buildButton = new Button("Build");
@@ -76,12 +78,20 @@ public class FxBuildDialog extends Stage {
         heightSpinner.setEditable(true);
         fullscreenCheck = new CheckBox();
         fullscreenCheck.setSelected(config.isFullscreen());
+        resizableCheck = new CheckBox();
+        resizableCheck.setSelected(config.isResizable());
+        // 0 = sem limite. A simulacao segue fixa em 60 Hz; acima de 60 o render
+        // interpola entre ticks (suave em monitores de alta taxa).
+        fpsCapSpinner = new Spinner<>(0, 480, config.getFpsCap(), 10);
+        fpsCapSpinner.setEditable(true);
         int r = 0;
         settings.addRow(r++, new Label("Nome do jogo:"), nameField);
         settings.addRow(r++, new Label("Versao:"), versionField);
         settings.addRow(r++, new Label("Largura:"), widthSpinner);
         settings.addRow(r++, new Label("Altura:"), heightSpinner);
         settings.addRow(r++, new Label("Tela cheia:"), fullscreenCheck);
+        settings.addRow(r++, new Label("Redimensionável:"), resizableCheck);
+        settings.addRow(r++, new Label("Limite de FPS (0 = sem limite):"), fpsCapSpinner);
         TitledPane settingsPane = new TitledPane("Configuracoes do jogo", settings);
         settingsPane.setCollapsible(false);
 
@@ -143,6 +153,8 @@ public class FxBuildDialog extends Stage {
         config.setWidth(widthSpinner.getValue());
         config.setHeight(heightSpinner.getValue());
         config.setFullscreen(fullscreenCheck.isSelected());
+        config.setResizable(resizableCheck.isSelected());
+        config.setFpsCap(fpsCapSpinner.getValue());
         List<BuildTarget> selected = new ArrayList<>();
         for (Map.Entry<BuildTarget, CheckBox> e : targetChecks.entrySet()) {
             if (e.getValue().isSelected()) selected.add(e.getKey());

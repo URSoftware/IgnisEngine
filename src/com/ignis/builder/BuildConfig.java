@@ -29,6 +29,14 @@ public class BuildConfig {
     private int width = 1280;
     private int height = 720;
     private boolean fullscreen = false;
+    /** Janela do player pode ser redimensionada pelo jogador. */
+    private boolean resizable = true;
+    /**
+     * Limite de FPS do render no jogo exportado (0 = sem limite). A simulacao segue
+     * fixa em 60 Hz; subir isto (ex.: 144) faz o player interpolar entre ticks e
+     * ficar suave em monitores de alta taxa. Ver Fase E 3.13.
+     */
+    private int fpsCap = 60;
     private List<BuildTarget> targets = new ArrayList<>();
     private String outputDirName = "build";
 
@@ -42,6 +50,8 @@ public class BuildConfig {
         json.put("width", width);
         json.put("height", height);
         json.put("fullscreen", fullscreen);
+        json.put("resizable", resizable);
+        json.put("fpsCap", fpsCap);
         json.put("outputDir", outputDirName);
 
         JSONArray targetArray = new JSONArray();
@@ -65,6 +75,8 @@ public class BuildConfig {
         config.width = json.optInt("width", config.width);
         config.height = json.optInt("height", config.height);
         config.fullscreen = json.optBoolean("fullscreen", config.fullscreen);
+        config.resizable = json.optBoolean("resizable", config.resizable);
+        config.fpsCap = Math.max(0, json.optInt("fpsCap", config.fpsCap));
         config.outputDirName = json.optString("outputDir", config.outputDirName);
 
         JSONArray targetArray = json.optJSONArray("targets");
@@ -155,6 +167,23 @@ public class BuildConfig {
 
     public void setFullscreen(boolean fullscreen) {
         this.fullscreen = fullscreen;
+    }
+
+    public boolean isResizable() {
+        return resizable;
+    }
+
+    public void setResizable(boolean resizable) {
+        this.resizable = resizable;
+    }
+
+    /** Limite de FPS do render no jogo exportado (0 = sem limite). */
+    public int getFpsCap() {
+        return fpsCap;
+    }
+
+    public void setFpsCap(int fpsCap) {
+        this.fpsCap = Math.max(0, fpsCap);
     }
 
     public List<BuildTarget> getTargets() {

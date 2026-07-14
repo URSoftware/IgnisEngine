@@ -4,6 +4,26 @@
 > O formato é baseado no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e este projeto segue o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ---
 
+## [1.11.0] - 2026-07-14
+
+### Fase E do Motor Gráfico — plataforma (FPS/janela do jogo exportado, pipeline único)
+Uma análise de viabilidade contra a arquitetura real corrigiu o plano em três pontos (ver Notas). Gamepad (3.12) foi adiado por decisão explícita.
+
+### Adicionado
+- **Render desacoplado do tick no jogo exportado [3.13]:** `Game.run()` agora avança a simulação em passos fixos de 60 Hz e renderiza **separadamente**, limitado por `fpsCap` (0 = sem limite, default 60 = comportamento histórico). Antes `tick()` e `render()` eram chamados juntos, travando o render em 60 fps — a interpolação anti-judder da Fase A (`getRenderAlpha`) **nunca beneficiava o player standalone**, só o editor (cujo `AnimationTimer` roda na taxa do monitor). Subir o `fpsCap` (ex.: 144) faz o jogo exportado interpolar entre ticks. Teto de ticks de recuperação evita a "espiral da morte".
+- **Opções de janela no build:** `fpsCap` e `resizable` em `BuildConfig` → `runtime.json` → `GameRuntime`, expostos no diálogo de build do editor. (Resolução e tela cheia já funcionavam.)
+
+### Alterado
+- **Pipeline de render único [3.14]:** `render()` (AWT/BufferStrategy — o pipeline do jogo exportado) passa a **delegar o desenho da cena a `renderWorldTo()`**, que vira a fonte única do pipeline gráfico. Antes os dois duplicavam câmera, culling, entidades, iluminação e UI; o passe de luz da Fase D precisou ser inserido nos **dois**. `render()` mantém só o que é dele: BufferStrategy, ajuste de viewport e alertas.
+
+### Removido
+- **~200 linhas de código morto em `Game.java`:** a duplicação do pipeline, mais os métodos privados `renderSelection` e `drawWorldOrigin` — chamados apenas pelo `render()` legado sob `gameState == EDITING`, condição que **nunca ocorre** nesse pipeline (ele só pinta no jogo exportado, sempre em PLAYING; no editor o `Game` não é `displayable` e o método retorna cedo).
+
+### Notas
+- **Correções ao plano da Fase E:** (1) o item 3.13 dizia "hoje só janela fixa" — **desatualizado**: resolução e tela cheia já funcionavam; o gap real era o render travado no tick. (2) **"vsync" não é implementável** com a API pública do Java2D/AWT (só via classes internas `sun.*`) — substituído por limite de FPS/frame pacing, que é o que se quer na prática. (3) O item 3.14 (interface `Renderer` abstrata) seria especulativo com uma única implementação; a dívida **real** era a duplicação do pipeline — eliminá-la é o pré-requisito de verdade para trocar de backend no futuro.
+- **3.12 Gamepad adiado:** exige biblioteca nativa (não há acesso a gamepad em Java puro). JInput está sem manutenção, e vendorizá-la no build offline (`libs/repository`) repetiria a dor que o FXEvents já deu duas vezes (case do path, bytecode de JDK incompatível). Decisão e motivo registrados no plano.
+- Cobertura: 106 testes JUnit (+5 em `BuildConfigTest`), 0 violações de Checkstyle.
+
 ## [1.10.0] - 2026-07-13
 
 ### Fase D do Motor Gráfico — polimento (texto no mundo, nine-slice, luz 2D)

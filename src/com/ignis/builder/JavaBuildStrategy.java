@@ -78,6 +78,8 @@ public class JavaBuildStrategy implements BuildStrategy {
             runtime.put("width", config.getWidth());
             runtime.put("height", config.getHeight());
             runtime.put("fullscreen", config.isFullscreen());
+            runtime.put("resizable", config.isResizable());
+            runtime.put("fpsCap", config.getFpsCap());
             BuildIO.writeString(new File(appDir, "runtime.json"), runtime.toString(2));
 
             // 4. Platform launcher

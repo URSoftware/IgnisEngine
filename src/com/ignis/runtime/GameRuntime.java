@@ -38,7 +38,9 @@ import java.nio.file.Files;
  *   "title":      "MyGame",
  *   "width":      1280,
  *   "height":     720,
- *   "fullscreen": false
+ *   "fullscreen": false,
+ *   "resizable":  true,
+ *   "fpsCap":     60      // 0 = sem limite; a simulacao segue fixa em 60 Hz
  * }
  */
 public class GameRuntime {
@@ -70,6 +72,14 @@ public class GameRuntime {
         public int width = 1280;
         public int height = 720;
         public boolean fullscreen = false;
+        /** Janela redimensionavel pelo jogador. */
+        public boolean resizable = true;
+        /**
+         * Limite de FPS do render (0 = sem limite). A simulacao segue fixa em 60 Hz;
+         * valores maiores fazem o render interpolar entre ticks (suave em monitores
+         * de alta taxa). Ver Fase E 3.13.
+         */
+        public int fpsCap = 60;
     }
 
     private static RuntimeConfig resolveConfig(String[] args) throws Exception {
@@ -90,6 +100,8 @@ public class GameRuntime {
             config.width = json.optInt("width", config.width);
             config.height = json.optInt("height", config.height);
             config.fullscreen = json.optBoolean("fullscreen", config.fullscreen);
+            config.resizable = json.optBoolean("resizable", config.resizable);
+            config.fpsCap = Math.max(0, json.optInt("fpsCap", config.fpsCap));
         }
 
         if (config.ignisFile == null) {
@@ -161,11 +173,15 @@ public class GameRuntime {
             }
         });
 
+        // Ritmo do render (Fase E 3.13): a simulacao segue fixa em 60 Hz e o render
+        // roda ate fpsCap, interpolando entre ticks (suave acima de 60 Hz).
+        game.setFpsCap(config.fpsCap);
+
         game.setPreferredSize(new Dimension(config.width, config.height));
         frame.add(game);
         frame.pack();
         frame.setLocationRelativeTo(null);
-        frame.setResizable(true);
+        frame.setResizable(config.resizable);
 
         if (config.fullscreen) {
             GraphicsDevice device = GraphicsEnvironment
