@@ -9,8 +9,6 @@ import java.awt.Graphics2D;
 import java.awt.BasicStroke;
 import java.awt.Polygon;
 import java.awt.Cursor;
-import java.awt.Robot;
-import java.awt.AWTException;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.image.BufferStrategy;
@@ -62,7 +60,7 @@ public class Game extends Canvas implements Runnable {
         private boolean showGrid = false;
         int gridSize = 32; // Grid cell size in world units
         Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
-        private boolean snapToGrid = true; // Snap objects to grid when dragging
+        boolean snapToGrid = true; // Snap objects to grid when dragging
 
     private Thread thread;
     // volatile: written by the EDT (stop) and read by the game loop thread
@@ -185,27 +183,20 @@ public class Game extends Canvas implements Runnable {
     private final EditorGizmoRenderer gizmos = new EditorGizmoRenderer(this);
     // Desenhadores-folha dos overlays da cena (grid, World, luz, alertas) — Fase F.
     private final SceneOverlayRenderer overlays = new SceneOverlayRenderer(this);
-    private int dragStartX, dragStartY;
-    private double objectStartX, objectStartY;
-    private double objectStartRotation;
-    private int objectStartWidth, objectStartHeight;
+    // Input do editor (mouse -> selecao/arrasto/pintura/panning) -- Fase F.
+    private final EditorInputController input = new EditorInputController(this);
 
     // ---- Gizmo de collider (item 8b) ----
     // Alcas de redimensionamento da hitbox do ColliderComponent do objeto selecionado.
     // Ativo somente em edicao, com 'showColliders' ligado e um ColliderComponent anexado.
     // Indices das 8 alcas: 0=NW 1=N 2=NE 3=E 4=SE 5=S 6=SW 7=W.
-    private int colliderHandle = -1;         // alca sob o cursor durante o arraste (-1 = nenhuma)
-    private int hoveredColliderHandle = -1;  // alca sob o cursor no hover (feedback de cursor)
-    private boolean draggingCollider = false;
-    private double colStartMinX, colStartMinY, colStartW, colStartH; // bounds no inicio do arraste
 
     // ---- Pintura de tiles (ferramenta TILE_PAINT, Fase C) ----
     private TilemapObject activeTilemap = null;   // alvo da pintura de tiles
-    private int activeTileIndex = 0;              // indice do tile a pintar
-    private int activeTileLayer = 0;              // camada alvo
-    private boolean tilePaintErase = false;       // stroke atual apaga (Ctrl)
-    private boolean paintingTiles = false;        // stroke em andamento
-    private Runnable tilePaintDirtyHook = null;   // marca o projeto sujo ao pintar
+    int activeTileIndex = 0;              // indice do tile a pintar
+    int activeTileLayer = 0;              // camada alvo
+    boolean tilePaintErase = false;       // stroke atual apaga (Ctrl)
+    Runnable tilePaintDirtyHook = null;   // marca o projeto sujo ao pintar
 
     public void setActiveTilemap(TilemapObject tm) { this.activeTilemap = tm; }
     public TilemapObject getActiveTilemap() { return activeTilemap; }
@@ -215,15 +206,8 @@ public class Game extends Canvas implements Runnable {
     public void setTilePaintDirtyHook(Runnable hook) { this.tilePaintDirtyHook = hook; }
 
     // ---- Pintura de barreiras do World (ferramenta WORLD_PAINT) ----
-    private boolean paintingWorld = false;   // arraste de pincel em andamento
-    private boolean worldPaintErase = false; // stroke atual apaga (Ctrl) em vez de bloquear
+    boolean worldPaintErase = false; // stroke atual apaga (Ctrl) em vez de bloquear
     
-    // Robot for infinite drag (mouse warping)
-    private Robot robot;
-    private int accumulatedDragX, accumulatedDragY; // Accumulated drag distance
-    private int lastMouseX, lastMouseY; // Last mouse position for delta calculation
-    private boolean isWarping = false; // Flag to ignore warp events
-    private static final int WARP_MARGIN = 10; // Pixels from edge to trigger warp
 
     // Interface to notify selection changes
     public interface SelectionListener {
@@ -236,7 +220,7 @@ public class Game extends Canvas implements Runnable {
         void onTransformEnd(GameObject obj);
     }
     
-    private TransformListener transformListener;
+    TransformListener transformListener;
 
     public void setTransformListener(TransformListener listener) {
         this.transformListener = listener;
@@ -249,7 +233,7 @@ public class Game extends Canvas implements Runnable {
         void onColliderEditEnd(GameObject owner, ColliderComponent collider);
     }
 
-    private ColliderEditListener colliderEditListener;
+    ColliderEditListener colliderEditListener;
 
     public void setColliderEditListener(ColliderEditListener listener) {
         this.colliderEditListener = listener;
@@ -262,7 +246,7 @@ public class Game extends Canvas implements Runnable {
         void onPaintStrokeEnd();
     }
 
-    private WorldPaintListener worldPaintListener;
+    WorldPaintListener worldPaintListener;
 
     public void setWorldPaintListener(WorldPaintListener listener) {
         this.worldPaintListener = listener;
@@ -303,7 +287,7 @@ public class Game extends Canvas implements Runnable {
     public Game() {
         this.setPreferredSize(new Dimension(WIDTH, HEIGHT));
         this.setMinimumSize(new Dimension(WIDTH, HEIGHT));
-        setupMouseListeners();
+        input.install();
         
         // Initialize Input system
         Input.init(this);
@@ -313,15 +297,7 @@ public class Game extends Canvas implements Runnable {
         
         // Initialize collision system
         collisionManager = new IgnisSampleCollisions.CollisionManager();
-        
-        // Initialize Robot for infinite drag
-        try {
-            robot = new Robot();
-        } catch (AWTException e) {
-            IgnisLogger.error("Nao foi possivel criar Robot para infinite drag: " + e.getMessage());
-            robot = null;
-        }
-        
+
         // Add resize listener to update viewport
         addComponentListener(new ComponentAdapter() {
             @Override
@@ -548,10 +524,6 @@ public class Game extends Canvas implements Runnable {
     // ==================== MOUSE LISTENERS ====================
     
     // Panning state
-    private boolean isPanning = false;
-    private int panStartX, panStartY;
-    private double camStartX, camStartY;
-    private Runnable onPanUpdate;
 
     /**
      * CanvasComponents visiveis de todas as entidades, ordenados por
@@ -571,603 +543,12 @@ public class Game extends Canvas implements Runnable {
 
     // Roteia clique de mouse para a UI durante o Play: CanvasComponents do topo
     // para o fundo, depois o canvas global de runtime. true = UI consumiu.
-    private boolean routeMouseClickToUi(MouseEvent e, boolean pressed) {
-        if (gameState != GameState.PLAYING) return false;
-        java.util.List<CanvasComponent> ccs = getCanvasComponents();
-        for (int i = ccs.size() - 1; i >= 0; i--) {
-            if (ccs.get(i).processMouseClick(e, pressed)) return true;
-        }
-        return uiCanvas != null && uiCanvas.isVisible() && uiCanvas.processMouseClick(e, pressed);
-    }
-
     // Idem para movimento do mouse (hover de botoes etc.).
-    private void routeMouseMoveToUi(MouseEvent e) {
-        if (gameState != GameState.PLAYING) return;
-        java.util.List<CanvasComponent> ccs = getCanvasComponents();
-        for (int i = ccs.size() - 1; i >= 0; i--) {
-            if (ccs.get(i).processMouseMove(e)) return;
-        }
-        if (uiCanvas != null && uiCanvas.isVisible()) uiCanvas.processMouseMove(e);
-    }
-
-    private void setupMouseListeners() {
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                // UI (CanvasComponents + canvas global) tem prioridade no Play
-                if (routeMouseClickToUi(e, true)) {
-                    e.consume();
-                    return;
-                }
-
-                // Middle mouse button for panning - handle first to avoid selection
-                if (e.getButton() == MouseEvent.BUTTON2) {
-                    startPanning(e.getX(), e.getY());
-                    e.consume();
-                    return;
-                }
-                // Left click for selection/manipulation
-                if (e.getButton() == MouseEvent.BUTTON1) {
-                    handleMousePress(e.getX(), e.getY());
-                }
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                // UI (CanvasComponents + canvas global) tem prioridade no Play
-                if (routeMouseClickToUi(e, false)) {
-                    e.consume();
-                    return;
-                }
-
-                if (e.getButton() == MouseEvent.BUTTON2) {
-                    stopPanning();
-                    e.consume();
-                    return;
-                }
-                if (e.getButton() == MouseEvent.BUTTON1) {
-                    handleMouseRelease();
-                }
-            }
-        });
-
-        addMouseMotionListener(new MouseMotionAdapter() {
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                // UI (CanvasComponents + canvas global) recebe hover no Play
-                routeMouseMoveToUi(e);
-
-                // Handle panning first
-                if (isPanning) {
-                    handlePanning(e.getX(), e.getY());
-                    return;
-                }
-                handleMouseDrag(e.getX(), e.getY());
-            }
-
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                // UI (CanvasComponents + canvas global) recebe hover no Play
-                routeMouseMoveToUi(e);
-
-                updateCursor(e.getX(), e.getY());
-            }
-        });
-    }
     
-    /**
-     * Sets up editor panning with a callback for UI updates.
-     */
-    public void setupEditorPanning(Runnable onUpdate) {
-        this.onPanUpdate = onUpdate;
-    }
     
-    private void startPanning(int x, int y) {
-        if (gameState != GameState.EDITING) return;
-        
-        isPanning = true;
-        panStartX = x;
-        panStartY = y;
-        Camera cam = getViewCamera();
-        if (cam != null) {
-            camStartX = cam.getX();
-            camStartY = cam.getY();
-        }
-        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
-    }
     
-    private void handlePanning(int x, int y) {
-        if (!isPanning || gameState != GameState.EDITING) return;
-
-        Camera cam = getViewCamera();
-        if (cam != null) {
-            double zoom = cam.getZoom();
-            double dx = (x - panStartX) / zoom;
-            // Invert dy because Y-axis is flipped (positive Y goes up)
-            double dy = -(y - panStartY) / zoom;
-            cam.setPosition(camStartX - dx, camStartY - dy);
-            repaint();
-        }
-    }
     
-    private void stopPanning() {
-        isPanning = false;
-        setCursor(Cursor.getDefaultCursor());
-        if (onPanUpdate != null) {
-            onPanUpdate.run();
-        }
-    }
-
-    private void handleMousePress(int mouseX, int mouseY) {
-        // Only allow selection and manipulation in EDITING mode
-        if (gameState != GameState.EDITING)
-            return;
-
-        // Ferramenta de pintura de barreiras: um clique/arraste bloqueia (ou apaga com
-        // Ctrl) celulas da grade do World. Nao seleciona nem move objetos.
-        if (currentTool == ToolType.WORLD_PAINT) {
-            if (world != null) {
-                paintingWorld = true;
-                if (worldPaintListener != null) worldPaintListener.onPaintStrokeStart();
-                paintCellAt(mouseX, mouseY);
-            }
-            return;
-        }
-
-        // Ferramenta de pintura de tiles: clique/arraste pinta (ou apaga com Ctrl) a
-        // celula do tilemap ativo. Nao seleciona nem move objetos.
-        if (currentTool == ToolType.TILE_PAINT) {
-            if (activeTilemap != null) {
-                paintingTiles = true;
-                paintTileAt(mouseX, mouseY);
-            }
-            return;
-        }
-
-        // Gizmo de collider (item 8b): alcas da hitbox tem precedencia sobre o gizmo
-        // de transform quando o modo de edicao de collider esta ativo.
-        int ch = getColliderHandleAt(mouseX, mouseY);
-        if (ch != -1) {
-            ColliderComponent cc = editableCollider();
-            double[] b = cc != null ? cc.getWorldBounds() : null;
-            if (b != null) {
-                colliderHandle = ch;
-                draggingCollider = true;
-                colStartMinX = b[0];
-                colStartMinY = b[1];
-                colStartW = b[2];
-                colStartH = b[3];
-                dragStartX = mouseX;
-                dragStartY = mouseY;
-                if (colliderEditListener != null) {
-                    colliderEditListener.onColliderEditStart(selectedObject, cc);
-                }
-                return;
-            }
-        }
-
-        // Check if clicked on gizmo first
-        if (selectedObject != null) {
-            GizmoDragMode mode = getGizmoHitArea(mouseX, mouseY);
-            if (mode != GizmoDragMode.NONE) {
-                currentDragMode = mode;
-                dragStartX = mouseX;
-                dragStartY = mouseY;
-                objectStartX = selectedObject.getX();
-                objectStartY = selectedObject.getY();
-                objectStartRotation = selectedObject.getRotation();
-                objectStartWidth = selectedObject.getWidth();
-                objectStartHeight = selectedObject.getHeight();
-                
-                // Initialize infinite drag tracking
-                accumulatedDragX = 0;
-                accumulatedDragY = 0;
-                lastMouseX = mouseX;
-                lastMouseY = mouseY;
-                
-                // Notificar início de transformação (para undo)
-                if (transformListener != null) {
-                    transformListener.onTransformStart(selectedObject, 
-                        objectStartX, objectStartY, objectStartRotation, 
-                        objectStartWidth, objectStartHeight);
-                }
-                return;
-            }
-        }
-
-        // Check if clicked on any object (cicla entre objetos sobrepostos a cada clique)
-        GameObject clicked = getObjectAt(mouseX, mouseY, selectedObject);
-        if (clicked != null) {
-            setSelectedObject(clicked);
-            // Start drag from center (move mode)
-            if (currentTool == ToolType.MOVE) {
-                currentDragMode = GizmoDragMode.CENTER;
-                dragStartX = mouseX;
-                dragStartY = mouseY;
-                objectStartX = clicked.getX();
-                objectStartY = clicked.getY();
-                
-                // Initialize infinite drag tracking
-                accumulatedDragX = 0;
-                accumulatedDragY = 0;
-                lastMouseX = mouseX;
-                lastMouseY = mouseY;
-                
-                // Notificar início de transformação (para undo)
-                if (transformListener != null) {
-                    transformListener.onTransformStart(clicked, 
-                        objectStartX, objectStartY, clicked.getRotation(), 
-                        clicked.getWidth(), clicked.getHeight());
-                }
-            }
-        } else {
-            // Clicked on empty area - deselect
-            setSelectedObject(null);
-        }
-    }
-
-    private void handleMouseRelease() {
-        // Fim do traco de pintura de barreiras (WORLD_PAINT).
-        if (paintingWorld) {
-            paintingWorld = false;
-            if (worldPaintListener != null) worldPaintListener.onPaintStrokeEnd();
-            return;
-        }
-        // Fim do traco de pintura de tiles (TILE_PAINT).
-        if (paintingTiles) {
-            paintingTiles = false;
-            if (tilePaintDirtyHook != null) tilePaintDirtyHook.run();
-            return;
-        }
-        // Fim do arraste de collider (item 8b): marca o projeto sujo via o mesmo
-        // listener (o transform do objeto nao mudou, entao nenhum comando de undo e
-        // gerado; apenas dispara markProjectDirty no editor).
-        if (draggingCollider) {
-            draggingCollider = false;
-            colliderHandle = -1;
-            if (selectedObject != null && colliderEditListener != null) {
-                colliderEditListener.onColliderEditEnd(selectedObject,
-                        selectedObject.getComponent(ColliderComponent.class));
-            } else if (selectedObject != null && transformListener != null) {
-                transformListener.onTransformEnd(selectedObject);
-            }
-            setCursor(Cursor.getDefaultCursor());
-            return;
-        }
-        // Notificar fim de transformacao (para undo/auto-save)
-        if (currentDragMode != GizmoDragMode.NONE && selectedObject != null && transformListener != null) {
-            transformListener.onTransformEnd(selectedObject);
-        }
-        
-        currentDragMode = GizmoDragMode.NONE;
-        setCursor(Cursor.getDefaultCursor());
-        // Notificacao de selecao NAO e necessaria aqui: o Inspector do editor FX ja
-        // sincroniza via AnimationTimer a 60fps (updateInspectorFields). Notificar
-        // redundantemente enfileirava lambdas extras em Platform.runLater, contribuindo
-        // para o loop de selecao infinita.
-    }
-
-    private void handleMouseDrag(int mouseX, int mouseY) {
-        // Arraste do pincel de barreiras (WORLD_PAINT).
-        if (paintingWorld) {
-            paintCellAt(mouseX, mouseY);
-            return;
-        }
-        // Arraste do pincel de tiles (TILE_PAINT).
-        if (paintingTiles) {
-            paintTileAt(mouseX, mouseY);
-            return;
-        }
-        // Arraste de alca de collider (item 8b) — independente do gizmo de transform.
-        if (draggingCollider) {
-            handleColliderDrag(mouseX, mouseY);
-            return;
-        }
-        if (currentDragMode == GizmoDragMode.NONE || selectedObject == null)
-            return;
-        if (gameState != GameState.EDITING)
-            return;
-        
-        // Skip if this is a warp event (mouse was just teleported)
-        if (isWarping) {
-            isWarping = false;
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            return;
-        }
-        
-        // Calculate mouse delta since last position
-        int mouseDeltaX = mouseX - lastMouseX;
-        int mouseDeltaY = mouseY - lastMouseY;
-        
-        // Accumulate the drag
-        accumulatedDragX += mouseDeltaX;
-        accumulatedDragY += mouseDeltaY;
-        
-        // Update last position
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
-        
-        // Check for edge wrapping (infinite drag)
-        if (robot != null && isShowing()) {
-            int w = getWidth();
-            int h = getHeight();
-            boolean needsWarp = false;
-            int newX = mouseX;
-            int newY = mouseY;
-            
-            if (mouseX <= WARP_MARGIN) {
-                newX = w - WARP_MARGIN - 1;
-                needsWarp = true;
-            } else if (mouseX >= w - WARP_MARGIN) {
-                newX = WARP_MARGIN + 1;
-                needsWarp = true;
-            }
-            
-            if (mouseY <= WARP_MARGIN) {
-                newY = h - WARP_MARGIN - 1;
-                needsWarp = true;
-            } else if (mouseY >= h - WARP_MARGIN) {
-                newY = WARP_MARGIN + 1;
-                needsWarp = true;
-            }
-            
-            if (needsWarp) {
-                isWarping = true;
-                lastMouseX = newX;
-                lastMouseY = newY;
-                // Convert component coordinates to screen coordinates
-                Point screenLoc = getLocationOnScreen();
-                robot.mouseMove(screenLoc.x + newX, screenLoc.y + newY);
-            }
-        }
-
-        // Use accumulated drag for calculations
-        Point2D.Double startWorld = screenToWorld(dragStartX, dragStartY);
-        Point2D.Double accumulatedWorld = screenToWorld(dragStartX + accumulatedDragX, dragStartY + accumulatedDragY);
-        
-        double deltaX = accumulatedWorld.x - startWorld.x;
-        double deltaY = accumulatedWorld.y - startWorld.y;
-
-        switch (currentDragMode) {
-                    case AXIS_X:
-                        selectedObject.setX(objectStartX + deltaX);
-                        if (snapToGrid) selectedObject.setX(snapToGrid(selectedObject.getX()));
-                        break;
-                    case AXIS_Y:
-                        selectedObject.setY(objectStartY + deltaY);
-                        if (snapToGrid) selectedObject.setY(snapToGrid(selectedObject.getY()));
-                        break;
-                    case CENTER:
-                        selectedObject.setX(objectStartX + deltaX);
-                        selectedObject.setY(objectStartY + deltaY);
-                        if (snapToGrid) {
-                            selectedObject.setX(snapToGrid(selectedObject.getX()));
-                            selectedObject.setY(snapToGrid(selectedObject.getY()));
-                        }
-                        break;
-                    case ROTATE:
-                        // Calculate rotation based on accumulated angle change
-                        double centerX = objectStartX + objectStartWidth / 2.0;
-                        double centerY = objectStartY + objectStartHeight / 2.0;
-                        double startAngle = Math.atan2(startWorld.y - centerY, startWorld.x - centerX);
-                        double currentAngle = Math.atan2(accumulatedWorld.y - centerY, accumulatedWorld.x - centerX);
-                        double deltaAngle = Math.toDegrees(currentAngle - startAngle);
-                        selectedObject.setRotation(objectStartRotation + deltaAngle);
-                        break;
-                    case SCALE_X:
-                        // Scale from center: adjust position to keep center fixed
-                        int newWidth = Math.max(1, objectStartWidth + (int)(deltaX * 2));
-                        double oldCenterX = objectStartX + objectStartWidth / 2.0;
-                        selectedObject.setWidth(newWidth);
-                        selectedObject.setX(oldCenterX - newWidth / 2.0);
-                        if (snapToGrid) selectedObject.setX(snapToGrid(selectedObject.getX()));
-                        break;
-                    case SCALE_Y:
-                        // Scale from center: adjust position to keep center fixed
-                        // Dragging up (positive Y) increases height
-                        int newHeight = Math.max(1, objectStartHeight + (int)(deltaY * 2));
-                        double oldCenterY = objectStartY + objectStartHeight / 2.0;
-                        selectedObject.setHeight(newHeight);
-                        selectedObject.setY(oldCenterY - newHeight / 2.0);
-                        if (snapToGrid) selectedObject.setY(snapToGrid(selectedObject.getY()));
-                        break;
-                    case SCALE_UNIFORM:
-                        // Uniform scale from center (use world delta)
-                        // Dragging right/up increases size
-                        double scaleAmount = deltaX + deltaY;
-                        int newUniformWidth = Math.max(1, objectStartWidth + (int)scaleAmount);
-                        int newUniformHeight = Math.max(1, objectStartHeight + (int)scaleAmount);
-                        double origCenterX = objectStartX + objectStartWidth / 2.0;
-                        double origCenterY = objectStartY + objectStartHeight / 2.0;
-                        selectedObject.setWidth(newUniformWidth);
-                        selectedObject.setHeight(newUniformHeight);
-                        selectedObject.setX(origCenterX - newUniformWidth / 2.0);
-                        selectedObject.setY(origCenterY - newUniformHeight / 2.0);
-                        if (snapToGrid) {
-                            selectedObject.setX(snapToGrid(selectedObject.getX()));
-                            selectedObject.setY(snapToGrid(selectedObject.getY()));
-                        }
-                        break;
-                    default:
-                        break;
-                }
-
-        // Hierarquia (Fase C): o objeto arrastado mantem a posicao (recaptura o
-        // offset se tiver pai) e seus descendentes acompanham ao vivo no editor.
-        syncHierarchyAfterEditorMove(selectedObject);
-
-        // Don't notify listeners during drag - prevents Inspector from updating
-        // constantly
-        // Visual changes are already visible, listeners will be notified on mouse
-        // release
-    }
-
-    private void updateCursor(int mouseX, int mouseY) {
-        if (gameState != GameState.EDITING) {
-            setCursor(Cursor.getDefaultCursor());
-            return;
-        }
-
-        // Hover nas alcas do gizmo de collider (item 8b): cursor de redimensionamento
-        // direcional, com precedencia sobre o gizmo de transform.
-        int colHandle = getColliderHandleAt(mouseX, mouseY);
-        if (colHandle != hoveredColliderHandle) {
-            hoveredColliderHandle = colHandle;
-            repaint();
-        }
-        if (colHandle != -1) {
-            setCursor(Cursor.getPredefinedCursor(colliderHandleCursor(colHandle)));
-            return;
-        }
-
-        if (selectedObject != null) {
-            GizmoDragMode mode = getGizmoHitArea(mouseX, mouseY);
-            if (mode != hoveredGizmoMode) {
-                hoveredGizmoMode = mode;
-                repaint();
-            }
-            switch (mode) {
-                case AXIS_X:
-                case SCALE_X:
-                    setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
-                    return;
-                case AXIS_Y:
-                case SCALE_Y:
-                    setCursor(Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR));
-                    return;
-                case CENTER:
-                case SCALE_UNIFORM:
-                    setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
-                    return;
-                case ROTATE:
-                    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                    return;
-                default:
-                    break;
-            }
-        } else {
-            if (hoveredGizmoMode != GizmoDragMode.NONE) {
-                hoveredGizmoMode = GizmoDragMode.NONE;
-                repaint();
-            }
-        }
-
-        // Verificar se está sobre algum objeto
-        if (getObjectAt(mouseX, mouseY) != null) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        } else {
-            setCursor(Cursor.getDefaultCursor());
-        }
-    }
-
-    private GizmoDragMode getGizmoHitArea(int screenX, int screenY) {
-        if (selectedObject == null)
-            return GizmoDragMode.NONE;
-
-        // Convert screen mouse position to world coordinates
-        Point2D.Double worldPos = screenToWorld(screenX, screenY);
-        double mouseX = worldPos.x;
-        double mouseY = worldPos.y;
-
-        int centerX = (int) selectedObject.getX() + selectedObject.getWidth() / 2;
-        int centerY = (int) selectedObject.getY() + selectedObject.getHeight() / 2;
-        
-        // Get scaled gizmo dimensions
-        int gizmoSize = getScaledGizmoSize();
-        int hitArea = getScaledGizmoHitArea();
-        int rotateRadius = getScaledRotateGizmoRadius();
-        int scaledHitTolerance = (int)(25 / (getViewCamera() != null ? getViewCamera().getZoom() : 1.0));
-
-        switch (currentTool) {
-            case MOVE:
-                // Check center first (precedence)
-                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
-                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
-                    return GizmoDragMode.CENTER;
-                }
-                // Check X axis (arrow to right)
-                if (mouseX >= centerX && mouseX <= centerX + gizmoSize &&
-                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
-                    return GizmoDragMode.AXIS_X;
-                }
-                // Check Y axis (arrow up = positive Y direction)
-                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
-                        mouseY >= centerY && mouseY <= centerY + gizmoSize) {
-                    return GizmoDragMode.AXIS_Y;
-                }
-                break;
-
-            case ROTATE:
-                // Check if on rotation circle
-                double dist = Math.sqrt(Math.pow(mouseX - centerX, 2) + Math.pow(mouseY - centerY, 2));
-                if (dist >= rotateRadius - scaledHitTolerance && dist <= rotateRadius + scaledHitTolerance) {
-                    return GizmoDragMode.ROTATE;
-                }
-                break;
-
-            case SCALE:
-                int squareSize = (int)(20 / (getViewCamera() != null ? getViewCamera().getZoom() : 1.0));
-                // Check center square first (uniform scale precedence)
-                if (mouseX >= centerX - hitArea && mouseX <= centerX + hitArea &&
-                        mouseY >= centerY - hitArea && mouseY <= centerY + hitArea) {
-                    return GizmoDragMode.SCALE_UNIFORM;
-                }
-                // Check X axis square end (scale X)
-                if (mouseX >= centerX + gizmoSize - squareSize && mouseX <= centerX + gizmoSize + squareSize &&
-                        mouseY >= centerY - squareSize && mouseY <= centerY + squareSize) {
-                    return GizmoDragMode.SCALE_X;
-                }
-                // Check Y axis square end (scale Y - positive Y direction)
-                if (mouseX >= centerX - squareSize && mouseX <= centerX + squareSize &&
-                        mouseY >= centerY + gizmoSize - squareSize && mouseY <= centerY + gizmoSize + squareSize) {
-                    return GizmoDragMode.SCALE_Y;
-                }
-                break;
-        }
-
-        return GizmoDragMode.NONE;
-    }
-
     // ==================== GIZMO DE COLLIDER (item 8b) ====================
-
-    /**
-     * ColliderComponent do objeto selecionado elegivel para edicao por gizmo, ou
-     * {@code null}. Requer modo de edicao, {@code showColliders} ligado e um
-     * ColliderComponent anexado.
-     */
-    private ColliderComponent editableCollider() {
-        if (gameState != GameState.EDITING || !showColliders || selectedObject == null
-                || selectedObject instanceof Camera) {
-            return null;
-        }
-        return selectedObject.getComponent(ColliderComponent.class);
-    }
-
-    /** Bloqueia (ou apaga, se worldPaintErase) a celula do World sob o ponto de tela. */
-    private void paintCellAt(int screenX, int screenY) {
-        if (world == null) return;
-        Point2D.Double wp = screenToWorld(screenX, screenY);
-        int col = world.cellCol(wp.x);
-        int row = world.cellRow(wp.y);
-        if (worldPaintErase) {
-            world.unblockCell(col, row);
-        } else {
-            world.blockCell(col, row);
-        }
-        repaint();
-    }
-
-    /** Pinta (ou apaga, se tilePaintErase) o tile do tilemap ativo sob o ponto de tela. */
-    private void paintTileAt(int screenX, int screenY) {
-        if (activeTilemap == null) return;
-        Point2D.Double wp = screenToWorld(screenX, screenY);
-        int col = activeTilemap.cellColAtWorld(wp.x);
-        int row = activeTilemap.cellRowAtWorld(wp.y);
-        int value = tilePaintErase ? TilemapObject.EMPTY : activeTileIndex;
-        activeTilemap.setTile(activeTileLayer, col, row, value);
-        repaint();
-    }
 
     /** Fator mundo-por-pixel da camera de edicao (1.0 sem transform de camera). */
     double editorWorldPerPixel() {
@@ -1191,75 +572,6 @@ public class Game extends Canvas implements Runnable {
             case 7: return new double[] { minX, midY }; // W
             default: return new double[] { midX, midY };
         }
-    }
-
-    /** Cursor de redimensionamento AWT correspondente a alca de collider (0..7). */
-    private int colliderHandleCursor(int handle) {
-        switch (handle) {
-            case 0: return Cursor.NW_RESIZE_CURSOR;
-            case 1: return Cursor.N_RESIZE_CURSOR;
-            case 2: return Cursor.NE_RESIZE_CURSOR;
-            case 3: return Cursor.E_RESIZE_CURSOR;
-            case 4: return Cursor.SE_RESIZE_CURSOR;
-            case 5: return Cursor.S_RESIZE_CURSOR;
-            case 6: return Cursor.SW_RESIZE_CURSOR;
-            case 7: return Cursor.W_RESIZE_CURSOR;
-            default: return Cursor.DEFAULT_CURSOR;
-        }
-    }
-
-    /**
-     * Indice (0..7) da alca de collider sob o ponto de tela, ou -1. So retorna algo
-     * quando {@link #editableCollider()} nao e nulo.
-     */
-    private int getColliderHandleAt(int screenX, int screenY) {
-        ColliderComponent cc = editableCollider();
-        if (cc == null) return -1;
-        double[] b = cc.getWorldBounds();
-        if (b == null) return -1;
-        Point2D.Double world = screenToWorld(screenX, screenY);
-        double tol = 7.0 * editorWorldPerPixel();
-        for (int i = 0; i < 8; i++) {
-            double[] p = colliderHandlePoint(b, i);
-            if (Math.abs(world.x - p[0]) <= tol && Math.abs(world.y - p[1]) <= tol) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /** Aplica o arraste de uma alca de collider, redimensionando a hitbox em mundo. */
-    private void handleColliderDrag(int mouseX, int mouseY) {
-        ColliderComponent cc = editableCollider();
-        if (cc == null) {
-            draggingCollider = false;
-            colliderHandle = -1;
-            return;
-        }
-        Point2D.Double startW = screenToWorld(dragStartX, dragStartY);
-        Point2D.Double curW = screenToWorld(mouseX, mouseY);
-        double dx = curW.x - startW.x;
-        double dy = curW.y - startW.y;
-
-        double minX = colStartMinX, minY = colStartMinY;
-        double maxX = colStartMinX + colStartW, maxY = colStartMinY + colStartH;
-
-        boolean top = (colliderHandle == 0 || colliderHandle == 1 || colliderHandle == 2);
-        boolean bottom = (colliderHandle == 4 || colliderHandle == 5 || colliderHandle == 6);
-        boolean left = (colliderHandle == 0 || colliderHandle == 6 || colliderHandle == 7);
-        boolean right = (colliderHandle == 2 || colliderHandle == 3 || colliderHandle == 4);
-
-        if (top) minY += dy;
-        if (bottom) maxY += dy;
-        if (left) minX += dx;
-        if (right) maxX += dx;
-
-        // Normaliza (permite arrastar uma borda para alem da oposta sem inverter).
-        double newMinX = Math.min(minX, maxX);
-        double newMinY = Math.min(minY, maxY);
-        double newW = Math.abs(maxX - minX);
-        double newH = Math.abs(maxY - minY);
-        cc.resizeToWorldBounds(newMinX, newMinY, newW, newH);
     }
 
     /**
@@ -1328,16 +640,7 @@ public class Game extends Canvas implements Runnable {
         repaint();
     }
 
-    public void cancelDrag() {
-        if (currentDragMode != GizmoDragMode.NONE && selectedObject != null && transformListener != null) {
-            transformListener.onTransformEnd(selectedObject);
-        }
-        currentDragMode = GizmoDragMode.NONE;
-        draggingCollider = false;
-        colliderHandle = -1;
-        isPanning = false;
-        setCursor(Cursor.getDefaultCursor());
-    }
+    public void cancelDrag() { input.cancelDrag(); }
 
     public GameObject getSelectedObject() {
         return selectedObject;
