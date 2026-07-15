@@ -27,7 +27,7 @@ import com.ignis.core.ui.UICanvas;
 import com.fxutilities.fxevents.core.GameSignalBus;
 import com.fxutilities.fxevents.core.SceneSignalDispatcher;
 
-public class Game extends Canvas implements Runnable {
+public class Game extends Canvas {
 
     public static final int WIDTH = 800;
     public static final int HEIGHT = 600;
@@ -62,9 +62,8 @@ public class Game extends Canvas implements Runnable {
         Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
         boolean snapToGrid = true; // Snap objects to grid when dragging
 
-    private Thread thread;
-    // volatile: written by the EDT (stop) and read by the game loop thread
-    private volatile boolean isRunning = false;
+    // Loop do jogo (thread propria, tick/render pacing) — Fase F.
+    private final GameLoop loop = new GameLoop(this);
     
     // ScriptManager para gerenciar scripts
     private ScriptManager scriptManager;
@@ -673,22 +672,11 @@ public class Game extends Canvas implements Runnable {
     }
 
     public synchronized void start() {
-        isRunning = true;
-        thread = new Thread(this);
-        thread.start();
+        loop.start();
     }
 
     public synchronized void stop() {
-        isRunning = false;
-        // Joining from the loop thread itself would deadlock (self-join)
-        if (thread == null || thread == Thread.currentThread()) {
-            return;
-        }
-        try {
-            thread.join(2000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        loop.stop();
     }
 
     // ==================== GAME STATE CONTROL ====================
@@ -909,8 +897,6 @@ public class Game extends Canvas implements Runnable {
     // interpolando entre ticks via getRenderAlpha(). 0 = sem limite (usa a CPU
     // livremente). Default 60 = comportamento historico.
     private volatile int fpsCap = 60;
-    // Teto de ticks de recuperacao por iteracao do loop (evita a espiral da morte).
-    private static final int MAX_CATCHUP_TICKS = 5;
 
     /** Limite de quadros por segundo do render (0 = sem limite). */
     public int getFpsCap() {
@@ -1760,68 +1746,4 @@ public class Game extends Canvas implements Runnable {
         }
     }
 
-    /**
-     * Loop do jogo (thread propria). A <b>simulacao</b> roda em passos fixos de
-     * 60 Hz; o <b>render</b> e desacoplado dela e roda ate {@link #getFpsCap()}
-     * quadros por segundo (Fase E, item 3.13).
-     *
-     * <p>Antes, {@code tick()} e {@code render()} eram chamados juntos — o render
-     * ficava travado nos mesmos 60 Hz da simulacao, e a interpolacao anti-judder
-     * da Fase A ({@link #getRenderAlpha()}) nunca beneficiava o jogo exportado (so
-     * o editor, cujo AnimationTimer roda na taxa do monitor). Com os dois
-     * separados, subir o {@code fpsCap} (ex.: 144) faz o player standalone
-     * interpolar entre ticks e ficar suave em monitores de alta taxa.</p>
-     */
-    @Override
-    public void run() {
-        long lastTime = System.nanoTime();
-        final double ns = 1_000_000_000.0 / TICKS_PER_SECOND;
-        double delta = 0;
-        long lastRenderNanos = 0L;
-
-        while (isRunning) {
-            try {
-                long now = System.nanoTime();
-                delta += (now - lastTime) / ns;
-                lastTime = now;
-
-                // Simulacao: passos fixos, com teto de recuperacao para nao entrar
-                // na "espiral da morte" (se um frame demora muito, o jogo desacelera
-                // em vez de acumular ticks infinitamente).
-                int ticks = 0;
-                while (delta >= 1 && ticks < MAX_CATCHUP_TICKS) {
-                    tick();
-                    delta--;
-                    ticks++;
-                }
-                if (delta > MAX_CATCHUP_TICKS) {
-                    delta = 0; // atraso grande demais: descarta em vez de acumular
-                }
-
-                // Render: independente do tick, limitado pelo fpsCap (0 = sem limite).
-                int cap = fpsCap;
-                boolean renderDue = cap <= 0
-                        || (now - lastRenderNanos) >= (1_000_000_000L / cap);
-                if (renderDue) {
-                    render();
-                    lastRenderNanos = now;
-                } else {
-                    // Cede a CPU ate o proximo quadro/tick em vez de girar em vazio.
-                    Thread.sleep(1);
-                }
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Throwable t) {
-                IgnisLogger.error("Erro na thread do loop do jogo: " + t.getMessage());
-                // Avoid fast spinning if there's a persistent error
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        }
-    }
 }
