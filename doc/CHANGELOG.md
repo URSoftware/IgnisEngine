@@ -11,6 +11,7 @@
 
 - **Passo 1 — `EditorGizmoRenderer` extraído de `Game`:** toda a renderização de overlays de edição (gizmos de mover/rotacionar/escalar, gizmo de collider e o frustum das câmeras) saiu para uma classe própria. Grupo coeso e puramente visual: só é chamado do passe de render, lê o estado de seleção/ferramenta/arrasto e não muda nada. Vive no mesmo pacote, então lê o estado de arrasto do gizmo (package-private) sem o `Game` expor API pública nova. **`Game.java`: 3126 → 2798 linhas.**
 - Corrigido de passagem um javadoc malformado (`/**` órfão) que existia antes do `renderMoveGizmo`.
+- **Passo 2 — `SceneOverlayRenderer` extraído de `Game`:** os desenhadores-folha dos overlays da cena — grade do editor (`drawGrid`), overlay do World (limites + barreiras), grade de pintura de barreiras, o passe de iluminação 2D e os alertas do editor. O buffer da máscara de luz (`lightMaskBuffer`, cache puramente de render) migrou para dentro dessa classe, saindo do estado do `Game`. **`Game.java`: 2798 → 2524 linhas** (−602 desde o início da Fase F).
 
 Próximos passos: extrair o desenho da cena (`SceneRenderer` — agora viável porque a Fase E unificou o pipeline), o input/ferramentas do editor e o loop do jogo. Depois, `IgnisEditorApp` (5271 linhas).
 

@@ -60,8 +60,8 @@ public class Game extends Canvas implements Runnable {
     
     // Grid display settings
         private boolean showGrid = false;
-        private int gridSize = 32; // Grid cell size in world units
-        private Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
+        int gridSize = 32; // Grid cell size in world units
+        Color gridColor = new Color(255, 255, 255, 30); // Semi-transparent white
         private boolean snapToGrid = true; // Snap objects to grid when dragging
 
     private Thread thread;
@@ -90,14 +90,12 @@ public class Game extends Canvas implements Runnable {
     // Luz ambiente da cena ativa (alpha = intensidade da escuridao). Null = sem
     // iluminacao (passe de luz nao roda, custo zero). Espelha Scene.ambientLight.
     private Color ambientLight = null;
-    // Buffer da mascara de luz, reaproveitado entre frames (realoca so ao mudar de tamanho).
-    private transient java.awt.image.BufferedImage lightMaskBuffer = null;
 
     public Color getAmbientLight() { return ambientLight; }
     public void setAmbientLight(Color c) { this.ambientLight = c; }
 
     // Reference to the editor for displaying alerts
-    private Object editorReference = null;
+    Object editorReference = null;
  
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
@@ -185,6 +183,8 @@ public class Game extends Canvas implements Runnable {
 
     // Overlays de edicao (gizmos, collider, frustum das cameras) — Fase F.
     private final EditorGizmoRenderer gizmos = new EditorGizmoRenderer(this);
+    // Desenhadores-folha dos overlays da cena (grid, World, luz, alertas) — Fase F.
+    private final SceneOverlayRenderer overlays = new SceneOverlayRenderer(this);
     private int dragStartX, dragStartY;
     private double objectStartX, objectStartY;
     private double objectStartRotation;
@@ -1780,72 +1780,6 @@ public class Game extends Canvas implements Runnable {
 
     // Desenha, no espaco do mundo, os limites do mapa (contorno) e as celulas de
     // barreira (preenchimento vermelho translucido) — feedback visual no editor.
-    /**
-     * Desenha a grade de celulas do World sobre a area visivel, para orientar a
-     * pintura de barreiras (ferramenta WORLD_PAINT). Linhas tenues; as celulas ja
-     * bloqueadas continuam sendo desenhadas por {@link #drawWorldOverlay}.
-     */
-    private void drawWorldPaintGrid(Graphics2D g2d, int width, int height) {
-        if (world == null) return;
-        int cs = world.getCellSize();
-        if (cs <= 0) return;
-        Camera cam = getViewCamera();
-        double[] vis = (cam != null) ? cam.getVisibleWorldBounds() : new double[] { 0, 0, width, height };
-        int c0 = world.cellCol(vis[0]) - 1, c1 = world.cellCol(vis[2]) + 1;
-        int r0 = world.cellRow(vis[1]) - 1, r1 = world.cellRow(vis[3]) + 1;
-        // Limite de seguranca para nao desenhar milhares de linhas em zoom-out extremo.
-        if ((long) (c1 - c0) * (r1 - r0) > 20000) return;
-        g2d.setColor(new Color(255, 255, 255, 40));
-        g2d.setStroke(new BasicStroke((float) Math.max(0.5, editorWorldPerPixel())));
-        for (int c = c0; c <= c1; c++) {
-            int x = c * cs;
-            g2d.drawLine(x, r0 * cs, x, r1 * cs);
-        }
-        for (int r = r0; r <= r1; r++) {
-            int y = r * cs;
-            g2d.drawLine(c0 * cs, y, c1 * cs, y);
-        }
-    }
-
-    private void drawWorldOverlay(Graphics2D g2d) {
-        if (world == null) return;
-        // Barreiras: so as celulas dentro do retangulo visivel (culling barato).
-        if (world.getBlockedCount() > 0) {
-            double[] vis = null;
-            Camera cam = getViewCamera();
-            if (cam != null) vis = cam.getVisibleWorldBounds();
-            int cs = world.getCellSize();
-            int c0, c1, r0, r1;
-            if (vis != null) {
-                c0 = world.cellCol(vis[0]); c1 = world.cellCol(vis[2]);
-                r0 = world.cellRow(vis[1]); r1 = world.cellRow(vis[3]);
-            } else {
-                c0 = r0 = -200; c1 = r1 = 200; // fallback limitado
-            }
-            g2d.setColor(new Color(220, 60, 60, 90));
-            java.awt.Color border = new Color(220, 60, 60, 160);
-            for (int c = c0; c <= c1; c++) {
-                for (int r = r0; r <= r1; r++) {
-                    if (!world.isCellBlocked(c, r)) continue;
-                    int cx = c * cs, cy = r * cs;
-                    g2d.setColor(new Color(220, 60, 60, 90));
-                    g2d.fillRect(cx, cy, cs, cs);
-                    g2d.setColor(border);
-                    g2d.drawRect(cx, cy, cs, cs);
-                }
-            }
-        }
-        // Limites do mapa: contorno azul-claro.
-        if (world.hasBounds()) {
-            g2d.setColor(new Color(80, 170, 255, 220));
-            g2d.setStroke(new java.awt.BasicStroke(2f));
-            int bx = (int) world.getMinX(), by = (int) world.getMinY();
-            int bw = (int) (world.getMaxX() - world.getMinX());
-            int bh = (int) (world.getMaxY() - world.getMinY());
-            g2d.drawRect(bx, by, bw, bh);
-        }
-    }
-
     private boolean isCulled(Camera cam, GameObject e) {
         if (cam == null || !e.isCullable()) return false;
         double[] b = cam.getVisibleWorldBounds(); // [minX, minY, maxX, maxY]
@@ -1997,80 +1931,10 @@ public class Game extends Canvas implements Runnable {
             renderWorldTo(g2d, getWidth(), getHeight(), selectedObject);
 
             // Alertas por cima de tudo (especifico deste pipeline).
-            renderAlerts(g2d);
+            overlays.renderAlerts(g2d);
         } finally {
             g.dispose();
             bs.show();
-        }
-    }
-
-    /**
-     * Passe de iluminacao 2D (Fase D 3.11), desenhado em screen-space logo antes
-     * da UI. No-op quando nao ha {@link #ambientLight}. Compoe uma mascara de
-     * escuridao com buracos suaves nas luzes (ver {@link LightObject#composeMask})
-     * e a sobrepoe a cena; depois aplica um brilho colorido translucido por luz.
-     *
-     * @param g2d          alvo, ja no transform de tela (identidade de dispositivo)
-     * @param width,height dimensoes em pixels do alvo
-     * @param cam          camera ativa (para mapear mundo->tela), ou null
-     * @param cameraApplied se a transform de camera estava aplicada as entidades
-     */
-    private void renderLightingPass(Graphics2D g2d, int width, int height,
-                                    Camera cam, boolean cameraApplied) {
-        if (ambientLight == null || ambientLight.getAlpha() == 0) return;
-
-        java.util.List<LightObject> lights = new java.util.ArrayList<>();
-        for (GameObject e : getEntities()) {
-            if (e instanceof LightObject && e.isVisible()) {
-                lights.add((LightObject) e);
-            }
-        }
-
-        // Transform mundo->dispositivo: captura a mesma que a camera aplicou as
-        // entidades (base do g2d = identidade nos dois pipelines). Null = mundo==tela.
-        AffineTransform worldToDevice = null;
-        if (cameraApplied && cam != null) {
-            Graphics2D probe = (Graphics2D) g2d.create();
-            cam.applyTransform(probe);
-            worldToDevice = probe.getTransform();
-            probe.dispose();
-        }
-
-        lightMaskBuffer = LightObject.composeMask(lightMaskBuffer, width, height,
-                ambientLight, lights, worldToDevice);
-        if (lightMaskBuffer != null) {
-            g2d.drawImage(lightMaskBuffer, 0, 0, null);
-        }
-
-        // Brilho colorido por luz (tinge a area iluminada), no espaco do mundo.
-        if (!lights.isEmpty()) {
-            Graphics2D gg = (Graphics2D) g2d.create();
-            try {
-                gg.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
-                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-                if (worldToDevice != null) gg.transform(worldToDevice);
-                for (LightObject light : lights) {
-                    Color c = light.getLightColor();
-                    if (c == null) continue;
-                    double r = Math.max(1, light.getRadius());
-                    float inten = (float) Math.max(0, Math.min(1, light.getIntensity()));
-                    if (inten <= 0) continue;
-                    double cx = light.getX();
-                    double cy = light.getY();
-                    int a0 = (int) (130 * inten); // forca do brilho no centro
-                    java.awt.RadialGradientPaint glow = new java.awt.RadialGradientPaint(
-                            new java.awt.geom.Point2D.Double(cx, cy), (float) r,
-                            new float[] {0f, 1f},
-                            new Color[] {
-                                new Color(c.getRed(), c.getGreen(), c.getBlue(), a0),
-                                new Color(c.getRed(), c.getGreen(), c.getBlue(), 0)
-                            });
-                    gg.setPaint(glow);
-                    gg.fill(new java.awt.geom.Ellipse2D.Double(cx - r, cy - r, r * 2, r * 2));
-                }
-            } finally {
-                gg.dispose();
-            }
         }
     }
 
@@ -2109,7 +1973,7 @@ public class Game extends Canvas implements Runnable {
         }
 
         if (gameState == GameState.EDITING && showGrid && shouldApplyCameraTransform) {
-            drawGrid(g2d);
+            overlays.drawGrid(g2d);
         }
 
         // Entidades (ordenadas por zIndex; empate = ordem da lista/hierarquia)
@@ -2138,7 +2002,7 @@ public class Game extends Canvas implements Runnable {
         // ver e ajustar. No espaco do mundo (transform de camera aplicada).
         if (gameState == GameState.EDITING && world != null && world.isActive() && shouldApplyCameraTransform) {
             AffineTransform worldTransform = g2d.getTransform();
-            drawWorldOverlay(g2d);
+            overlays.drawWorldOverlay(g2d);
             g2d.setTransform(worldTransform);
         }
 
@@ -2147,7 +2011,7 @@ public class Game extends Canvas implements Runnable {
         if (gameState == GameState.EDITING && currentTool == ToolType.WORLD_PAINT
                 && world != null && shouldApplyCameraTransform) {
             AffineTransform paintTransform = g2d.getTransform();
-            drawWorldPaintGrid(g2d, width, height);
+            overlays.drawWorldPaintGrid(g2d, width, height);
             g2d.setTransform(paintTransform);
         }
 
@@ -2253,7 +2117,7 @@ public class Game extends Canvas implements Runnable {
 
         // ==================== ILUMINACAO 2D (Fase D 3.11) ====================
         // Antes da UI (que fica imune a luz) e depois de toda a cena/overlays.
-        renderLightingPass(g2d, width, height, activeCamera, shouldApplyCameraTransform);
+        overlays.renderLightingPass(g2d, width, height, activeCamera, shouldApplyCameraTransform);
         g2d.setTransform(originalTransform);
 
         // ==================== UI RENDERING (espaco de tela) ====================
@@ -2271,145 +2135,7 @@ public class Game extends Canvas implements Runnable {
         }
     }
 
-    /**
-     * Renderiza mensagens de alerta na tela do editor
-     */
-    private void renderAlerts(Graphics2D g2d) {
-        if (editorReference == null) return;
-        
-        try {
-            // Use reflection para obter os alertas do editor
-            Class<?> editorClass = editorReference.getClass();
-            java.lang.reflect.Method getAlertsMethod = editorClass.getMethod("getActiveAlerts");
-            @SuppressWarnings("unchecked")
-            java.util.List<Object> alerts = (java.util.List<Object>) getAlertsMethod.invoke(editorReference);
-            
-            if (alerts == null || alerts.isEmpty()) return;
-            
-            // Configurar font e cores
-            Font alertFont = new Font("Courier New", Font.BOLD, 14);
-            g2d.setFont(alertFont);
-            
-            int x = 15;
-            int y = 35;
-            int lineHeight = 22;
-            
-            // Renderizar cada alerta
-            for (int i = 0; i < alerts.size() && i < 5; i++) {
-                Object alertObj = alerts.get(i);
-                
-                // Obter a mensagem do alerta via reflection
-                Class<?> alertClass = alertObj.getClass();
-                java.lang.reflect.Field messageField = alertClass.getDeclaredField("message");
-                messageField.setAccessible(true);
-                String message = (String) messageField.get(alertObj);
-                
-                // Calcular opacidade baseado na idade do alerta
-                java.lang.reflect.Field createdTimeField = alertClass.getDeclaredField("createdTime");
-                createdTimeField.setAccessible(true);
-                long createdTime = createdTimeField.getLong(alertObj);
-                long age = System.currentTimeMillis() - createdTime;
-                
-                // Fade out no último segundo
-                float opacity = 1.0f;
-                if (age > 2000) { // Último 1 segundo de 3 segundos totais
-                    opacity = 1.0f - ((age - 2000) / 1000.0f);
-                }
-                
-                // Definir cor com transparência
-                int alpha = (int)(255 * opacity);
-                g2d.setColor(new java.awt.Color(0, 200, 100, alpha));
-                
-                // Desenhar caixa de fundo
-                java.awt.FontMetrics fm = g2d.getFontMetrics();
-                int textWidth = fm.stringWidth(message);
-                int textHeight = fm.getHeight();
-                
-                g2d.fillRect(x - 5, y - textHeight + 5, textWidth + 10, textHeight + 4);
-                
-                // Desenhar texto
-                g2d.setColor(new java.awt.Color(255, 255, 255, alpha));
-                g2d.drawString(message, x, y);
-                
-                y += lineHeight;
-            }
-        } catch (Exception e) {
-            // Silenciosamente ignorar erros ao renderizar alertas
-        }
-    }
-
     
-    /**
-     * Draws the editor grid in world space.
-     * The grid adapts to the camera zoom level for better visibility.
-     */
-    private void drawGrid(Graphics2D g2d) {
-        Camera cam = getViewCamera();
-        if (cam == null) return;
-        
-        double zoom = cam.getZoom();
-        
-        // Adapt grid size based on zoom level for better visibility
-        int effectiveGridSize = gridSize;
-        if (zoom < 0.25) {
-            effectiveGridSize = gridSize * 8;
-        } else if (zoom < 0.5) {
-            effectiveGridSize = gridSize * 4;
-        } else if (zoom < 1.0) {
-            effectiveGridSize = gridSize * 2;
-        }
-        
-        // Get visible world bounds
-        double[] bounds = cam.getVisibleWorldBounds();
-        double minX = bounds[0];
-        double minY = bounds[1];
-        double maxX = bounds[2];
-        double maxY = bounds[3];
-        
-        // Extend bounds slightly to avoid edge artifacts
-        minX -= effectiveGridSize;
-        minY -= effectiveGridSize;
-        maxX += effectiveGridSize;
-        maxY += effectiveGridSize;
-        
-        // Snap to grid
-        int startX = (int)(Math.floor(minX / effectiveGridSize) * effectiveGridSize);
-        int startY = (int)(Math.floor(minY / effectiveGridSize) * effectiveGridSize);
-        int endX = (int)(Math.ceil(maxX / effectiveGridSize) * effectiveGridSize);
-        int endY = (int)(Math.ceil(maxY / effectiveGridSize) * effectiveGridSize);
-        
-        // Set grid appearance
-        g2d.setColor(gridColor);
-        g2d.setStroke(new BasicStroke(1.0f / (float)zoom)); // Thin lines that stay consistent
-        
-        // Draw vertical lines
-        for (int x = startX; x <= endX; x += effectiveGridSize) {
-            g2d.drawLine(x, startY, x, endY);
-        }
-        
-        // Draw horizontal lines
-        for (int y = startY; y <= endY; y += effectiveGridSize) {
-            g2d.drawLine(startX, y, endX, y);
-        }
-        
-        // Draw major grid lines (every 4 cells) with slightly more opacity
-        g2d.setColor(new Color(gridColor.getRed(), gridColor.getGreen(), gridColor.getBlue(), 
-                              Math.min(255, gridColor.getAlpha() * 2)));
-        g2d.setStroke(new BasicStroke(1.5f / (float)zoom));
-        
-        int majorGridSize = effectiveGridSize * 4;
-        int majorStartX = (int)(Math.floor(minX / majorGridSize) * majorGridSize);
-        int majorStartY = (int)(Math.floor(minY / majorGridSize) * majorGridSize);
-        
-        for (int x = majorStartX; x <= endX; x += majorGridSize) {
-            g2d.drawLine(x, startY, x, endY);
-        }
-        
-        for (int y = majorStartY; y <= endY; y += majorGridSize) {
-            g2d.drawLine(startX, y, endX, y);
-        }
-    }
-
     // ==================== TOOL MANAGEMENT ====================
 
     public void setCurrentTool(ToolType tool) {
