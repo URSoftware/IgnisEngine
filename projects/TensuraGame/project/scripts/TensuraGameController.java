@@ -1,3 +1,6 @@
+import com.ignis.animation.AnimationIO;
+import com.ignis.animation.Animator;
+import com.ignis.animation.SpriteAnimation;
 import com.ignis.core.AssetResolver;
 import com.ignis.core.GameObject;
 import com.ignis.core.IgnisScript;
@@ -52,6 +55,28 @@ public final class TensuraGameController extends IgnisScript {
     // lista de stream() a cada tick.
     private final Set<Long> activeIds = new HashSet<>();
     private final List<Long> staleIds = new ArrayList<>();
+
+    // ---- Apresentacao: mapeamento evento/estado -> clipe (contrato do Codex em
+    // 02_design/rimuru-survivors-direcao-visual-fatia-slime.md).
+    // Este e o UNICO lugar que sabe nomes de clipe. O dominio so diz o que aconteceu
+    // (PREDATOR_CAST, RANGA_ATTACK, playerMoving...) e nunca cita arte ou audio.
+    private static final String CLIP_SLIME_IDLE = "rimuru_slime_idle";
+    private static final String CLIP_SLIME_MOVE = "rimuru_slime_move";
+    private static final String CLIP_SLIME_HIT = "rimuru_slime_hit";
+    private static final String CLIP_SLIME_PREDATOR_CAST = "rimuru_slime_predator_cast";
+    private static final String CLIP_HUMANOID_RUN = "rimuru_humanoid_run";
+    private static final String CLIP_DEMON_LORD_RUN = "rimuru_demon_lord_run";
+    private static final String CLIP_RANGA_RUN = "ranga_run";
+    private static final String CLIP_RANGA_SUMMON = "ranga_summon";
+    private static final String CLIP_RANGA_ATTACK = "ranga_attack";
+
+    // Id do Ranga no snapshot do dominio (entidade unica, sempre a mesma).
+    private static final long RANGA_ID = 0L;
+
+    // Clipes carregados uma vez e compartilhados entre objetos: SpriteAnimation nao
+    // guarda estado de playback (elapsed/currentName vivem no Animator), entao a
+    // mesma instancia pode servir o Rimuru e o Ranga sem interferencia.
+    private final Map<String, SpriteAnimation> clips = new HashMap<>();
 
     private RunSimulation simulation;
     private RunSnapshot snapshot;
@@ -152,6 +177,10 @@ public final class TensuraGameController extends IgnisScript {
         snapshot = simulation.snapshot();
         player = spawnRuntimeVisual("Rimuru", 0, 0);
         player.setZIndex(30);
+        // Todos os clipes do jogador de uma vez (inclusive os das formas seguintes):
+        // trocar de forma passa a ser so escolher outro clipe pelo nome.
+        attachClips(player, CLIP_SLIME_IDLE, CLIP_SLIME_MOVE, CLIP_SLIME_HIT,
+                CLIP_SLIME_PREDATOR_CAST, CLIP_HUMANOID_RUN, CLIP_DEMON_LORD_RUN);
         lastForm = null;
         createHud();
         createUpgradeOverlay();
@@ -197,6 +226,9 @@ public final class TensuraGameController extends IgnisScript {
             if (visual == null) {
                 visual = spawnRuntimeVisual(entity.kind().name(), entity.x(), entity.y());
                 visuals.put(entity.id(), visual);
+                if (entity.kind() == WorldEntityKind.RANGA) {
+                    attachClips(visual, CLIP_RANGA_RUN, CLIP_RANGA_SUMMON, CLIP_RANGA_ATTACK);
+                }
             }
             VisualSpec spec = specFor(entity.kind());
             visual.setWidth(spec.width());
@@ -205,7 +237,14 @@ public final class TensuraGameController extends IgnisScript {
             visual.setY(entity.y() - spec.height() / 2.0);
             visual.setRotation(entity.rotation());
             visual.setZIndex(spec.zIndex());
-            setSpriteIfChanged(visual, spec.sprite(snapshot.elapsedSeconds()));
+            if (entity.kind() == WorldEntityKind.RANGA && clip(CLIP_RANGA_RUN) != null) {
+                // Ranga tem clipes proprios: quem escreve o sprite dele e o Animator.
+                driveLocomotion(visual, CLIP_RANGA_RUN);
+            } else {
+                // Demais entidades — e o Ranga caso o clipe ainda nao exista, para um
+                // asset em producao nunca deixar o lobo sem sprite na tela.
+                setSpriteIfChanged(visual, spec.sprite(snapshot.elapsedSeconds()));
+            }
         }
 
         // Sem stream()/toList() por tick: itera o keySet e reusa a lista de trabalho.
@@ -216,50 +255,31 @@ public final class TensuraGameController extends IgnisScript {
         for (Long id : staleIds) recycle(visuals.remove(id));
     }
 
-    // Quadros de cada forma do Rimuru, prontos: syncPlayer roda todo tick e montava
-    // o caminho do sprite na hora (switch + concatenacao).
-    private static final Map<RimuruForm, String[]> PLAYER_FRAMES = buildPlayerFrames();
-
-    private static Map<RimuruForm, String[]> buildPlayerFrames() {
-        Map<RimuruForm, String[]> frames = new java.util.EnumMap<>(RimuruForm.class);
-        frames.put(RimuruForm.SLIME, playerFrames("slime"));
-        frames.put(RimuruForm.HUMANOID, playerFrames("humanoid"));
-        frames.put(RimuruForm.DEMON_LORD, playerFrames("demon_lord"));
-        return frames;
-    }
-
-    private static String[] playerFrames(String formName) {
-        String[] paths = new String[4];
-        for (int i = 0; i < paths.length; i++) {
-            paths[i] = SPRITES + "rimuru_" + formName + "_0" + (i + 1) + ".png";
-        }
-        return paths;
-    }
-
     private void syncPlayer() {
         if (player == null) return;
-        String[] frames = PLAYER_FRAMES.get(snapshot.form());
-        int frame = (int) (snapshot.elapsedSeconds() / frameDuration(snapshot.form())) % frames.length;
         int width = snapshot.form() == RimuruForm.SLIME ? 48 : 46;
         int height = snapshot.form() == RimuruForm.SLIME ? 42 : 62;
         player.setWidth(width);
         player.setHeight(height);
         player.setX(snapshot.playerX() - width / 2.0);
         player.setY(snapshot.playerY() - height / 2.0);
-        setSpriteIfChanged(player, frames[frame]);
+        // O sprite do jogador agora vem do Animator (o motor aplica o quadro em
+        // GameObject.tickAnimator). O script NAO escreve mais spritePath aqui: os
+        // dois brigariam pelo mesmo campo a cada frame.
+        String clipName = locomotionClipFor(snapshot.form(), snapshot.playerMoving());
+        if (clip(clipName) != null) {
+            driveLocomotion(player, clipName);
+        } else {
+            // Clipe ainda nao entregue: pose estatica. Sem isto, uma forma sem clipe
+            // deixaria o Rimuru literalmente sem sprite na tela.
+            setSpriteIfChanged(player, fallbackPlayerSprite(snapshot.form()));
+        }
         if (lastForm != snapshot.form()) {
             lastForm = snapshot.form();
             player.setOpacity(1.0);
         }
     }
 
-    private double frameDuration(RimuruForm form) {
-        return switch (form) {
-            case SLIME -> 0.16;
-            case HUMANOID -> 0.11;
-            case DEMON_LORD -> 0.09;
-        };
-    }
 
     private GameObject spawnRuntimeVisual(String name, double x, double y) {
         // 1) Reusa um visual aposentado antes de criar qualquer coisa.
@@ -288,6 +308,10 @@ public final class TensuraGameController extends IgnisScript {
      */
     private void recycle(GameObject visual) {
         if (visual == null) return;
+        // Zera o Animator antes de devolver ao pool: o visual do Ranga tem clipes
+        // anexados e, sem isto, o proximo spawn (um orbe, por exemplo) herdaria a
+        // animacao de lobo e o Animator continuaria escrevendo o sprite dele.
+        visual.setAnimator(null);
         if (visualPool.size() >= MAX_POOLED_VISUALS) {
             destroy(visual);
             return;
@@ -298,6 +322,80 @@ public final class TensuraGameController extends IgnisScript {
 
     private void setSpriteIfChanged(GameObject object, String path) {
         if (!path.equals(object.getSpritePath())) object.setSpritePath(path);
+    }
+
+    // ==================== Apresentacao (clipes) ====================
+
+    /** Clipe do disco, carregado uma vez. Null quando o asset ainda nao existe. */
+    private SpriteAnimation clip(String name) {
+        if (clips.containsKey(name)) return clips.get(name);
+        SpriteAnimation loaded = null;
+        try {
+            File file = AssetResolver.resolve("assets/animations/" + name + ".anim.json");
+            if (file != null && file.exists()) loaded = AnimationIO.load(file);
+        } catch (IOException exception) {
+            loaded = null; // clipe ausente nao pode derrubar a partida
+        }
+        clips.put(name, loaded);
+        return loaded;
+    }
+
+    /** Anexa os clipes existentes ao Animator do objeto (ignora os que faltarem). */
+    private void attachClips(GameObject object, String... names) {
+        if (object == null) return;
+        Animator animator = object.getOrCreateAnimator();
+        for (String name : names) {
+            SpriteAnimation animation = clip(name);
+            if (animation != null) animator.addAnimation(animation);
+        }
+    }
+
+    /**
+     * Seleciona a locomocao (repouso x deslocamento) sem cortar um clipe de acao.
+     *
+     * <p>Chamar play() num clipe em LOOP que ja e o atual o reiniciaria a cada tick
+     * (elapsed = 0), congelando a animacao no primeiro quadro — por isso so agimos
+     * quando o clipe desejado muda. Com waitForCurrent, se um one-shot (dano,
+     * Predador) estiver rodando, a locomocao entra na fila e assume quando ele
+     * terminar: o contrato pede que clipes de ataque nao substituam a locomocao
+     * permanentemente.</p>
+     */
+    private void driveLocomotion(GameObject object, String clipName) {
+        if (object == null || clipName == null) return;
+        Animator animator = object.getOrCreateAnimator();
+        if (animator.getAnimation(clipName) == null) return;
+        if (!clipName.equals(animator.getCurrentName())) {
+            animator.play(clipName, true);
+        }
+    }
+
+    /** Dispara um clipe de acao imediatamente; a locomocao volta sozinha depois. */
+    private void playOneShot(GameObject object, String clipName) {
+        if (object == null) return;
+        Animator animator = object.getOrCreateAnimator();
+        // Forma sem o clipe (a fatia atual so tem acoes de Slime): sem acao visual,
+        // mas som e dano seguem normais.
+        if (animator.getAnimation(clipName) == null) return;
+        animator.play(clipName);
+    }
+
+    /** Pose fixa por forma, usada so quando o clipe de locomocao nao existe. */
+    private String fallbackPlayerSprite(RimuruForm form) {
+        return switch (form) {
+            case SLIME -> SPRITES + "rimuru_slime_01.png";
+            case HUMANOID -> SPRITES + "rimuru_humanoid_01.png";
+            case DEMON_LORD -> SPRITES + "rimuru_demon_lord_01.png";
+        };
+    }
+
+    private String locomotionClipFor(RimuruForm form, boolean moving) {
+        return switch (form) {
+            case SLIME -> moving ? CLIP_SLIME_MOVE : CLIP_SLIME_IDLE;
+            // Humanoid/Demon Lord ainda nao tem clipe de repouso proprio: o de corrida
+            // cobre os dois estados ate o Codex entregar a fatia dessas formas.
+            case HUMANOID -> CLIP_HUMANOID_RUN;
+            case DEMON_LORD -> CLIP_DEMON_LORD_RUN;
+        };
     }
 
     // VisualSpec e imutavel, mas specFor() montava uma instancia nova (com
@@ -657,7 +755,20 @@ public final class TensuraGameController extends IgnisScript {
                 continue;
             }
             switch (event.type()) {
-                case PLAYER_HIT -> playSound(SOUNDS + "rimuru_hit.wav", 0.35f);
+                case PREDATOR_CAST -> {
+                    // Tipado pelo dominio: nao dependemos mais de casar a string
+                    // "Predador" no detail para saber que clipe/som tocar.
+                    playSound(SOUNDS + "predator.wav", 0.34f);
+                    playOneShot(player, CLIP_SLIME_PREDATOR_CAST);
+                }
+                case RANGA_ATTACK -> {
+                    playSound(SOUNDS + "ranga_bite.wav", 0.34f);
+                    playOneShot(visuals.get(RANGA_ID), CLIP_RANGA_ATTACK);
+                }
+                case PLAYER_HIT -> {
+                    playSound(SOUNDS + "rimuru_hit.wav", 0.35f);
+                    playOneShot(player, CLIP_SLIME_HIT);
+                }
                 case LEVEL_UP -> {
                     playSound(SOUNDS + "level_up.wav", 0.58f);
                     showMessage("Grande Sabio: nivel " + event.detail() + " analisado", 1.6);
@@ -669,6 +780,8 @@ public final class TensuraGameController extends IgnisScript {
                 }
                 case RANGA_SUMMONED -> {
                     playSound(SOUNDS + "ranga_call.wav", 0.72f);
+                    // syncWorld ja rodou neste tick, entao o visual do Ranga existe.
+                    playOneShot(visuals.get(RANGA_ID), CLIP_RANGA_SUMMON);
                     showMessage("Ranga respondeu ao chamado de Rimuru", 3.0);
                 }
                 case CIEL_AWAKENED -> showMessage("Grande Sabio evoluiu para Ciel", 3.2);
