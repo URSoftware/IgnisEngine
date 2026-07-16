@@ -91,9 +91,30 @@ public class Game extends Canvas {
     public Color getAmbientLight() { return ambientLight; }
     public void setAmbientLight(Color c) { this.ambientLight = c; }
 
-    // Reference to the editor for displaying alerts
-    Object editorReference = null;
- 
+    // Alertas visuais transitorios (overlay no viewport do editor - Fase F, dívida
+    // 2.4: antes localizava o editor via reflection sobre um Object generico
+    // (setEditor/alert(String) por nome), workaround do antigo editor Swing. O
+    // editor JavaFX nunca chamava setEditor(), entao a fila nunca era populada e
+    // renderAlerts() sempre no-opava silenciosamente. A fila agora mora aqui: nao
+    // ha razao para o alerta depender de uma referencia ao editor.
+    private final java.util.List<EditorAlert> activeAlerts = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Alerta transitorio exibido como overlay no viewport (mensagem + timestamp). */
+    static final class EditorAlert {
+        final String message;
+        final long createdTime;
+
+        EditorAlert(String message, long createdTime) {
+            this.message = message;
+            this.createdTime = createdTime;
+        }
+    }
+
+    /** Alertas ativos para o overlay do editor, mais recente por ultimo. */
+    java.util.List<EditorAlert> getActiveAlerts() {
+        return activeAlerts;
+    }
+
     // Game states: EDITING, PLAYING, PAUSED
     public enum GameState {
         EDITING, // Editor mode - no simulation
@@ -390,35 +411,24 @@ public class Game extends Canvas {
     public IgnisSampleCollisions.CollisionManager getCollisionManager() {
         return collisionManager;
     }
-    
+
+    // Quantos alertas o overlay mantem; SceneOverlayRenderer so desenha os 5 mais
+    // recentes, mas a fila cresceria sem limite numa sessao longa sem esse teto.
+    private static final int MAX_ACTIVE_ALERTS = 10;
+
     /**
-     * Define a referência do editor para exibir alertas
-     */
-    public void setEditor(Object editor) {
-        this.editorReference = editor;
-    }
-    
-    /**
-     * Exibe uma mensagem de alerta no editor (se disponível)
+     * Exibe uma mensagem de alerta como overlay transitorio no viewport do editor
+     * (~3s, com fade) e sempre a loga (IgnisLogger.info), inclusive headless/build.
      * @param message A mensagem a ser exibida
      */
     public void alert(String message) {
-        if (editorReference != null) {
-            try {
-                // Use reflection para chamar o método alert do editor
-                Class<?> editorClass = editorReference.getClass();
-                java.lang.reflect.Method alertMethod = editorClass.getMethod("alert", String.class);
-                alertMethod.invoke(editorReference, message);
-            } catch (Exception e) {
-                // Silenciosamente ignorar se o editor não tiver o método alert
-                IgnisLogger.warn("Aviso: Nao foi possivel chamar alert() no editor: " + e.getMessage());
-            }
-        } else {
-            // Se não há editor, exibir no console
-            IgnisLogger.info("[ALERT] " + message);
+        activeAlerts.add(new EditorAlert(message, System.currentTimeMillis()));
+        while (activeAlerts.size() > MAX_ACTIVE_ALERTS) {
+            activeAlerts.remove(0);
         }
+        IgnisLogger.info("[ALERT] " + message);
     }
-    
+
     
     /**
      * Sets whether to show collider debug visualization
