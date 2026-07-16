@@ -30,12 +30,21 @@ public class ScriptManager {
     private URLClassLoader scriptClassLoader;
     private final List<URLClassLoader> retiredClassLoaders = new ArrayList<>();
 
-    // Quantos loaders aposentados permanecem ABERTOS. Instancias antigas so
-    // precisam de resolucao preguicosa durante a transicao de um Play; depois de
-    // algumas gerações a cena ja foi recriada com o loader atual e manter os
-    // antigos abertos so acumula memoria nativa (foi um dos fatores do
-    // OutOfMemoryError observado no editor em 15/07/2026).
-    private static final int MAX_RETIRED_CLASSLOADERS = 2;
+    // NAO existe teto aqui, e e de proposito. Ja tentei limitar isto de duas formas e
+    // as duas foram piores (16/07/2026):
+    //
+    //   1. Fechar os mais antigos -> derrubou o auto-save do editor com
+    //      NoClassDefFoundError. Um loader aposentado ainda e o loader de definicao
+    //      das instancias que estao na cena, e resolucao de tipo e preguicosa: o tipo
+    //      de um campo so carrega quando o reflection olha para ele. A premissa de que
+    //      "depois de N gerações a cena ja foi recriada" e falsa — basta recompilar
+    //      sem recarregar a cena.
+    //   2. Soltar a referencia sem fechar -> o close() perde o rastro deles e o handle
+    //      do .jar fica preso ate o GC (no Windows isso impede ate apagar o arquivo).
+    //
+    // A lista fica completa e o close() fecha todos de uma vez, quando o projeto e
+    // trocado e ninguem mais usa aquelas classes. O custo real e baixo: um loader por
+    // LOTE de compilacao (ver compileAllScripts), nao um por script.
 
     // Cache of loaded script classes
     private Map<String, Class<? extends IgnisScript>> scriptClasses = new HashMap<>();
@@ -210,12 +219,6 @@ public class ScriptManager {
                 // Existing scene instances still belong to this loader. Closing it here
                 // breaks lazy dependency resolution when Play recompiles the scripts.
                 retiredClassLoaders.add(scriptClassLoader);
-                // Mas manter TODOS abertos vaza memoria a cada recompilacao; apos
-                // MAX_RETIRED_CLASSLOADERS gerações a cena ja foi recriada com o
-                // loader novo, entao os mais antigos podem ser fechados com seguranca.
-                while (retiredClassLoaders.size() > MAX_RETIRED_CLASSLOADERS) {
-                    closeClassLoader(retiredClassLoaders.remove(0));
-                }
             }
 
             List<URL> urls = new ArrayList<>();
