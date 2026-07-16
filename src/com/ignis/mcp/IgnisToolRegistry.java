@@ -115,8 +115,9 @@ public final class IgnisToolRegistry {
 
     // Contexto vivo do editor (opcional): presente quando o bridge roda dentro do
     // editor JavaFX, habilitando ferramentas de cena e de Play. Nulo no modo headless.
-    private Game liveGame;
-    private Runnable playHook, stopHook, refreshHook, saveHook;
+    Game liveGame;
+    private Runnable playHook, stopHook, saveHook;
+    Runnable refreshHook;
 
     // Captura da janela inteira do editor, injetada pelo IgnisEditorApp (inversao de
     // dependencia: o registry nao conhece JavaFX — o snapshot FX vive no editor).
@@ -223,7 +224,7 @@ public final class IgnisToolRegistry {
     // Registro das ferramentas padrao
     // ----------------------------------------------------------------------
 
-    private void add(String name, String description, JSONObject schema, ToolHandler handler) {
+    void add(String name, String description, JSONObject schema, ToolHandler handler) {
         tools.put(name, new ToolDef(name, description, schema, handler));
     }
 
@@ -231,7 +232,7 @@ public final class IgnisToolRegistry {
         return new JSONObject().put("type", "object");
     }
 
-    private static JSONObject schemaWith(Map<String, String> props, List<String> required) {
+    static JSONObject schemaWith(Map<String, String> props, List<String> required) {
         JSONObject schema = new JSONObject().put("type", "object");
         JSONObject properties = new JSONObject();
         for (Map.Entry<String, String> e : props.entrySet()) {
@@ -1032,7 +1033,7 @@ public final class IgnisToolRegistry {
         }
     }
 
-    private GameObject findObject(String name) {
+    GameObject findObject(String name) {
         if (liveGame == null || name == null) return null;
         for (GameObject go : liveGame.getEntities()) {
             if (name.equals(go.getName())) return go;
@@ -1250,11 +1251,7 @@ public final class IgnisToolRegistry {
         registerGameObjectExtraTools();
         registerSceneInfoTools();
         registerWorldTools();
-        registerBackgroundTools();
-        registerParticleTools();
-        registerTilemapTools();
-        registerTextTools();
-        registerLightTools();
+        new ContentTools(this).registerAll();
         registerHierarchyTools();
         registerCaptureTools();
     }
@@ -1402,453 +1399,24 @@ public final class IgnisToolRegistry {
     // Ferramentas de tilemap (com.ignis.core.TilemapObject)
     // ----------------------------------------------------------------------
 
-    private void registerTilemapTools() {
-        // create_tilemap
-        Map<String, String> tmProps = new LinkedHashMap<>();
-        tmProps.put("name", "Nome unico do tilemap");
-        tmProps.put("tileset", "Caminho da imagem do tileset, relativo ao projeto");
-        tmProps.put("tileW", "Largura de cada tile em px (padrao 32)");
-        tmProps.put("tileH", "Altura de cada tile em px (padrao 32)");
-        tmProps.put("cols", "Numero de colunas da grade (padrao 20)");
-        tmProps.put("rows", "Numero de linhas da grade (padrao 15)");
-        tmProps.put("x", "Posicao X do canto superior-esquerdo (padrao 0)");
-        tmProps.put("y", "Posicao Y do canto superior-esquerdo (padrao 0)");
-        add("create_tilemap",
-            "Cria um tilemap (grade de tiles a partir de um tileset) e o adiciona a cena.",
-            schemaWith(tmProps, List.of("name", "tileset")),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String name = args.optString("name", "").trim();
-                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
-                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
-                String tileset = args.optString("tileset", "");
-                if (resolveInProject(tileset) == null) return "Erro: tileset fora do projeto: " + tileset;
-                com.ignis.core.TilemapObject tm = new com.ignis.core.TilemapObject();
-                tm.setName(name);
-                tm.setGame(liveGame);
-                tm.configure(tileset,
-                        args.optInt("tileW", 32), args.optInt("tileH", 32),
-                        args.optInt("cols", 20), args.optInt("rows", 15));
-                tm.setX(args.optDouble("x", 0));
-                tm.setY(args.optDouble("y", 0));
-                liveGame.addEntity(tm);
-                if (refreshHook != null) refreshHook.run();
-                return "Tilemap criado: " + name + " (" + tm.getCols() + "x" + tm.getRows()
-                        + " tiles de " + tm.getTileW() + "x" + tm.getTileH() + ")";
-            });
-
-        // add_tilemap_layer
-        add("add_tilemap_layer",
-            "Adiciona uma nova camada vazia a um tilemap e retorna o indice dela.",
-            schemaWith(Map.of("name", "Nome do tilemap"), List.of("name")),
-            args -> {
-                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
-                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
-                int idx = tm.addLayer();
-                if (refreshHook != null) refreshHook.run();
-                return "Camada adicionada ao tilemap " + tm.getName() + ": indice " + idx;
-            });
-
-        // set_tile
-        Map<String, String> setTileProps = new LinkedHashMap<>();
-        setTileProps.put("name", "Nome do tilemap");
-        setTileProps.put("col", "Coluna da celula");
-        setTileProps.put("row", "Linha da celula");
-        setTileProps.put("tile", "Indice do tile no tileset (-1 = vazio)");
-        setTileProps.put("layer", "Indice da camada (padrao 0)");
-        add("set_tile",
-            "Define o tile de uma celula de um tilemap (indice do tileset; -1 apaga).",
-            schemaWith(setTileProps, List.of("name", "col", "row", "tile")),
-            args -> {
-                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
-                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
-                tm.setTile(args.optInt("layer", 0), args.optInt("col"), args.optInt("row"), args.optInt("tile"));
-                if (refreshHook != null) refreshHook.run();
-                return "Tile (" + args.optInt("col") + "," + args.optInt("row") + ") = " + args.optInt("tile")
-                        + " no tilemap " + tm.getName();
-            });
-
-        // paint_tiles
-        Map<String, String> paintProps = new LinkedHashMap<>();
-        paintProps.put("name", "Nome do tilemap");
-        paintProps.put("col0", "Coluna inicial do retangulo");
-        paintProps.put("row0", "Linha inicial do retangulo");
-        paintProps.put("col1", "Coluna final do retangulo");
-        paintProps.put("row1", "Linha final do retangulo");
-        paintProps.put("tile", "Indice do tile a pintar (-1 = apagar)");
-        paintProps.put("layer", "Indice da camada (padrao 0)");
-        add("paint_tiles",
-            "Pinta um retangulo de celulas [col0..col1]x[row0..row1] com um tile.",
-            schemaWith(paintProps, List.of("name", "col0", "row0", "col1", "row1", "tile")),
-            args -> {
-                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
-                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
-                tm.fillTiles(args.optInt("layer", 0),
-                        args.optInt("col0"), args.optInt("row0"),
-                        args.optInt("col1"), args.optInt("row1"), args.optInt("tile"));
-                if (refreshHook != null) refreshHook.run();
-                return "Retangulo pintado no tilemap " + tm.getName();
-            });
-
-        // clear_tilemap_layer
-        Map<String, String> clearProps = new LinkedHashMap<>();
-        clearProps.put("name", "Nome do tilemap");
-        clearProps.put("layer", "Indice da camada a limpar (padrao 0)");
-        add("clear_tilemap_layer",
-            "Apaga todos os tiles de uma camada de um tilemap.",
-            schemaWith(clearProps, List.of("name")),
-            args -> {
-                com.ignis.core.TilemapObject tm = findTilemap(args.optString("name", ""));
-                if (tm == null) return "Erro: tilemap nao encontrado: " + args.optString("name", "");
-                int layer = args.optInt("layer", 0);
-                tm.fillTiles(layer, 0, 0, tm.getCols() - 1, tm.getRows() - 1, com.ignis.core.TilemapObject.EMPTY);
-                if (refreshHook != null) refreshHook.run();
-                return "Camada " + layer + " do tilemap " + tm.getName() + " limpa";
-            });
-    }
-
-    /** Localiza um TilemapObject por nome na cena viva, ou null. */
-    private com.ignis.core.TilemapObject findTilemap(String name) {
-        GameObject go = findObject(name);
-        return (go instanceof com.ignis.core.TilemapObject) ? (com.ignis.core.TilemapObject) go : null;
-    }
-
     // ----------------------------------------------------------------------
     // Ferramentas de texto no mundo (com.ignis.core.TextObject) — Fase D 3.9
     // ----------------------------------------------------------------------
-
-    private void registerTextTools() {
-        // create_text_object
-        Map<String, String> txtProps = new LinkedHashMap<>();
-        txtProps.put("name", "Nome unico do objeto de texto");
-        txtProps.put("text", "Conteudo do texto (use \\n para varias linhas)");
-        txtProps.put("x", "Posicao X do canto (padrao 0)");
-        txtProps.put("y", "Posicao Y do canto (padrao 0)");
-        txtProps.put("fontSize", "Tamanho da fonte em px (padrao 24)");
-        txtProps.put("fontFamily", "Familia da fonte (padrao SansSerif)");
-        txtProps.put("color", "Cor do texto 0xAARRGGBB/#RRGGBB (padrao branco)");
-        txtProps.put("bold", "Negrito (padrao false)");
-        txtProps.put("italic", "Italico (padrao false)");
-        txtProps.put("align", "Alinhamento: LEFT|CENTER|RIGHT (padrao LEFT)");
-        txtProps.put("zIndex", "Ordem de render (padrao 100, na frente das entidades)");
-        add("create_text_object",
-            "Cria um texto no espaco do mundo (placa/rotulo/dano flutuante) e o adiciona a cena.",
-            schemaWith(txtProps, List.of("name", "text")),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String name = args.optString("name", "").trim();
-                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
-                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
-                com.ignis.core.TextObject txt = new com.ignis.core.TextObject();
-                txt.setName(name);
-                txt.setGame(liveGame);
-                txt.setText(args.optString("text", "Texto"));
-                txt.setX(args.optDouble("x", 0));
-                txt.setY(args.optDouble("y", 0));
-                txt.setFontSize(args.optInt("fontSize", 24));
-                if (args.has("fontFamily")) txt.setFontFamily(args.optString("fontFamily"));
-                java.awt.Color c = parseColor(args.optString("color", ""));
-                if (c != null) txt.setColor(c);
-                txt.setBold(args.optBoolean("bold", false));
-                txt.setItalic(args.optBoolean("italic", false));
-                txt.setAlign(parseAlign(args.optString("align", "")));
-                txt.setZIndex(args.optInt("zIndex", 100));
-                liveGame.addEntity(txt);
-                if (refreshHook != null) refreshHook.run();
-                return "Texto criado: " + name + " (\"" + txt.getText().replace("\n", "\\n") + "\", "
-                        + txt.getFontSize() + "px)";
-            });
-
-        // set_text — edita conteudo/estilo de um TextObject existente
-        Map<String, String> setTxtProps = new LinkedHashMap<>();
-        setTxtProps.put("name", "Nome do objeto de texto");
-        setTxtProps.put("text", "Novo conteudo (opcional)");
-        setTxtProps.put("fontSize", "Novo tamanho em px (opcional)");
-        setTxtProps.put("fontFamily", "Nova familia de fonte (opcional)");
-        setTxtProps.put("color", "Nova cor 0xAARRGGBB/#RRGGBB (opcional)");
-        setTxtProps.put("bold", "Negrito (opcional)");
-        setTxtProps.put("italic", "Italico (opcional)");
-        setTxtProps.put("align", "Alinhamento LEFT|CENTER|RIGHT (opcional)");
-        add("set_text",
-            "Edita o conteudo e/ou o estilo de um objeto de texto existente.",
-            schemaWith(setTxtProps, List.of("name")),
-            args -> {
-                GameObject go = findObject(args.optString("name", ""));
-                if (!(go instanceof com.ignis.core.TextObject)) {
-                    return "Erro: objeto de texto nao encontrado: " + args.optString("name", "");
-                }
-                com.ignis.core.TextObject txt = (com.ignis.core.TextObject) go;
-                if (args.has("text")) txt.setText(args.optString("text"));
-                if (args.has("fontSize")) txt.setFontSize(args.optInt("fontSize"));
-                if (args.has("fontFamily")) txt.setFontFamily(args.optString("fontFamily"));
-                if (args.has("color")) {
-                    java.awt.Color c = parseColor(args.optString("color", ""));
-                    if (c != null) txt.setColor(c);
-                }
-                if (args.has("bold")) txt.setBold(args.optBoolean("bold"));
-                if (args.has("italic")) txt.setItalic(args.optBoolean("italic"));
-                if (args.has("align")) txt.setAlign(parseAlign(args.optString("align", "")));
-                if (refreshHook != null) refreshHook.run();
-                return "Texto atualizado: " + txt.getName();
-            });
-    }
 
     // ----------------------------------------------------------------------
     // Ferramentas de iluminacao 2D (com.ignis.core.LightObject) — Fase D 3.11
     // ----------------------------------------------------------------------
 
-    private void registerLightTools() {
-        // create_light_object
-        Map<String, String> lightProps = new LinkedHashMap<>();
-        lightProps.put("name", "Nome unico da luz");
-        lightProps.put("x", "Posicao X do centro (padrao 0)");
-        lightProps.put("y", "Posicao Y do centro (padrao 0)");
-        lightProps.put("color", "Cor da luz 0xAARRGGBB/#RRGGBB (padrao quente)");
-        lightProps.put("radius", "Raio de alcance em px (padrao 160)");
-        lightProps.put("intensity", "Intensidade 0..1 no centro (padrao 1)");
-        add("create_light_object",
-            "Cria um ponto de luz 2D. So ilumina se a cena tiver luz ambiente (set_scene_ambient_light).",
-            schemaWith(lightProps, List.of("name")),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String name = args.optString("name", "").trim();
-                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
-                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
-                com.ignis.core.LightObject light = new com.ignis.core.LightObject();
-                light.setName(name);
-                light.setGame(liveGame);
-                light.setX(args.optDouble("x", 0));
-                light.setY(args.optDouble("y", 0));
-                java.awt.Color c = parseColor(args.optString("color", ""));
-                if (c != null) light.setLightColor(c);
-                light.setRadius(args.optDouble("radius", 160));
-                light.setIntensity(args.optDouble("intensity", 1.0));
-                liveGame.addEntity(light);
-                if (refreshHook != null) refreshHook.run();
-                return "Luz criada: " + name + " (raio=" + (int) light.getRadius()
-                        + ", intensidade=" + light.getIntensity() + ")";
-            });
-
-        // set_light_properties
-        Map<String, String> setLightProps = new LinkedHashMap<>();
-        setLightProps.put("name", "Nome da luz");
-        setLightProps.put("color", "Nova cor (opcional)");
-        setLightProps.put("radius", "Novo raio em px (opcional)");
-        setLightProps.put("intensity", "Nova intensidade 0..1 (opcional)");
-        add("set_light_properties",
-            "Ajusta cor, raio e/ou intensidade de uma luz existente.",
-            schemaWith(setLightProps, List.of("name")),
-            args -> {
-                GameObject go = findObject(args.optString("name", ""));
-                if (!(go instanceof com.ignis.core.LightObject)) {
-                    return "Erro: luz nao encontrada: " + args.optString("name", "");
-                }
-                com.ignis.core.LightObject light = (com.ignis.core.LightObject) go;
-                if (args.has("color")) {
-                    java.awt.Color c = parseColor(args.optString("color", ""));
-                    if (c != null) light.setLightColor(c);
-                }
-                if (args.has("radius")) light.setRadius(args.optDouble("radius"));
-                if (args.has("intensity")) light.setIntensity(args.optDouble("intensity"));
-                if (refreshHook != null) refreshHook.run();
-                return "Luz atualizada: " + light.getName();
-            });
-
-        // set_scene_ambient_light
-        Map<String, String> ambProps = new LinkedHashMap<>();
-        ambProps.put("color", "Cor/escuridao ambiente 0xAARRGGBB (o alpha e a intensidade da escuridao), ex: 0xE0050510. Vazio/none desliga.");
-        add("set_scene_ambient_light",
-            "Define a luz ambiente (escuridao) da cena ativa. Sem ela, as luzes nao tem efeito. Passe 'none' para desligar.",
-            schemaWith(ambProps, List.of()),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String raw = args.optString("color", "").trim();
-                if (raw.isEmpty() || raw.equalsIgnoreCase("none")) {
-                    liveGame.setAmbientLight(null);
-                    if (refreshHook != null) refreshHook.run();
-                    return "Luz ambiente desligada (cena totalmente visivel).";
-                }
-                java.awt.Color c = parseColor(raw);
-                if (c == null) return "Erro: cor invalida: " + raw;
-                liveGame.setAmbientLight(c);
-                if (refreshHook != null) refreshHook.run();
-                return "Luz ambiente definida (alpha/escuridao=" + c.getAlpha() + ").";
-            });
-    }
-
-    /** Interpreta o alinhamento textual; default LEFT para vazio/invalido. */
-    private static com.ignis.core.TextObject.TextAlign parseAlign(String s) {
-        if (s == null) return com.ignis.core.TextObject.TextAlign.LEFT;
-        try {
-            return com.ignis.core.TextObject.TextAlign.valueOf(s.trim().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            return com.ignis.core.TextObject.TextAlign.LEFT;
-        }
-    }
-
     // ----------------------------------------------------------------------
     // Ferramentas de particulas (com.ignis.core.ParticleEmitter)
     // ----------------------------------------------------------------------
-
-    private void registerParticleTools() {
-        // create_particle_emitter
-        Map<String, String> peProps = new LinkedHashMap<>();
-        peProps.put("name", "Nome unico do emissor");
-        peProps.put("x", "Posicao X (padrao 0)");
-        peProps.put("y", "Posicao Y (padrao 0)");
-        peProps.put("rate", "Particulas por segundo (padrao 40)");
-        peProps.put("maxParticles", "Tamanho do pool (padrao 200)");
-        peProps.put("lifetime", "Vida base da particula em segundos (padrao 1.2)");
-        peProps.put("velX", "Velocidade inicial media X px/s (padrao 0)");
-        peProps.put("velY", "Velocidade inicial media Y px/s (padrao 80)");
-        peProps.put("gravityY", "Aceleracao vertical px/s^2 (padrao -120)");
-        peProps.put("sizeStart", "Diametro inicial px (padrao 10)");
-        peProps.put("sizeEnd", "Diametro final px (padrao 2)");
-        peProps.put("colorStart", "Cor inicial 0xAARRGGBB/#RRGGBB (opcional)");
-        peProps.put("colorEnd", "Cor final 0xAARRGGBB/#RRGGBB (opcional)");
-        peProps.put("sprite", "Sprite opcional da particula (relativo ao projeto)");
-        add("create_particle_emitter",
-            "Cria um emissor de particulas (poeira/fogo/explosao) e o adiciona a cena.",
-            schemaWith(peProps, List.of("name")),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String name = args.optString("name", "").trim();
-                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
-                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
-                com.ignis.core.ParticleEmitter pe = new com.ignis.core.ParticleEmitter();
-                pe.setName(name);
-                pe.setGame(liveGame);
-                pe.setX(args.optDouble("x", 0));
-                pe.setY(args.optDouble("y", 0));
-                if (args.has("rate")) pe.setEmissionRate(args.optDouble("rate"));
-                if (args.has("maxParticles")) pe.setMaxParticles(args.optInt("maxParticles"));
-                if (args.has("lifetime")) pe.setLifetime(args.optDouble("lifetime"));
-                if (args.has("velX")) pe.setVelX(args.optDouble("velX"));
-                if (args.has("velY")) pe.setVelY(args.optDouble("velY"));
-                if (args.has("gravityY")) pe.setGravityY(args.optDouble("gravityY"));
-                if (args.has("sizeStart")) pe.setSizeStart(args.optDouble("sizeStart"));
-                if (args.has("sizeEnd")) pe.setSizeEnd(args.optDouble("sizeEnd"));
-                java.awt.Color cs = parseColor(args.optString("colorStart", ""));
-                if (cs != null) pe.setColorStart(cs);
-                java.awt.Color ce = parseColor(args.optString("colorEnd", ""));
-                if (ce != null) pe.setColorEnd(ce);
-                String sprite = args.optString("sprite", "");
-                if (!sprite.isEmpty()) {
-                    if (resolveInProject(sprite) == null) return "Erro: sprite fora do projeto: " + sprite;
-                    pe.setParticleSprite(sprite);
-                }
-                liveGame.addEntity(pe);
-                if (refreshHook != null) refreshHook.run();
-                return "Emissor de particulas criado: " + name + " (rate=" + pe.getEmissionRate()
-                        + ", pool=" + pe.getMaxParticles() + ")";
-            });
-
-        // particle_burst
-        Map<String, String> burstProps = new LinkedHashMap<>();
-        burstProps.put("name", "Nome do emissor");
-        burstProps.put("count", "Quantidade de particulas a emitir de uma vez");
-        add("particle_burst",
-            "Emite uma rajada instantanea de particulas de um emissor (explosao).",
-            schemaWith(burstProps, List.of("name", "count")),
-            args -> {
-                GameObject go = findObject(args.optString("name", ""));
-                if (!(go instanceof com.ignis.core.ParticleEmitter)) {
-                    return "Erro: emissor nao encontrado: " + args.optString("name", "");
-                }
-                int count = args.optInt("count", 0);
-                if (count <= 0) return "Erro: 'count' deve ser > 0.";
-                ((com.ignis.core.ParticleEmitter) go).burst(count);
-                if (refreshHook != null) refreshHook.run();
-                return "Rajada de " + count + " particulas em " + go.getName();
-            });
-
-        // set_particle_emitting
-        Map<String, String> emitProps = new LinkedHashMap<>();
-        emitProps.put("name", "Nome do emissor");
-        emitProps.put("emitting", "true para emitir continuamente, false para pausar");
-        add("set_particle_emitting",
-            "Liga/desliga a emissao continua de um emissor de particulas.",
-            schemaWith(emitProps, List.of("name", "emitting")),
-            args -> {
-                GameObject go = findObject(args.optString("name", ""));
-                if (!(go instanceof com.ignis.core.ParticleEmitter)) {
-                    return "Erro: emissor nao encontrado: " + args.optString("name", "");
-                }
-                ((com.ignis.core.ParticleEmitter) go).setEmitting(args.optBoolean("emitting", true));
-                if (refreshHook != null) refreshHook.run();
-                return "Emissao de " + go.getName() + ": " + args.optBoolean("emitting", true);
-            });
-    }
 
     // ----------------------------------------------------------------------
     // Ferramentas de fundo com parallax (com.ignis.core.BackgroundLayer)
     // ----------------------------------------------------------------------
 
-    private void registerBackgroundTools() {
-        // create_background_layer
-        Map<String, String> bgProps = new LinkedHashMap<>();
-        bgProps.put("name", "Nome unico da camada de fundo");
-        bgProps.put("path", "Caminho do sprite de fundo, relativo ao projeto (opcional; sem ele use 'color')");
-        bgProps.put("color", "Cor solida de fundo em hex 0xAARRGGBB ou #RRGGBB (opcional)");
-        bgProps.put("parallax", "Fator de parallax 0..1 nos dois eixos (0=fixo no mundo, 1=preso a camera). Padrao 0.5");
-        bgProps.put("zIndex", "Ordem de render (padrao -1000, atras de tudo). Menor = mais ao fundo");
-        bgProps.put("repeat", "true para repetir o sprite cobrindo a tela (padrao true)");
-        add("create_background_layer",
-            "Cria uma camada de fundo com parallax e a adiciona a cena ativa.",
-            schemaWith(bgProps, List.of("name")),
-            args -> {
-                if (liveGame == null) return "Erro: editor nao disponivel.";
-                String name = args.optString("name", "").trim();
-                if (name.isEmpty()) return "Erro: 'name' obrigatorio.";
-                if (findObject(name) != null) return "Erro: ja existe objeto com o nome: " + name;
-                com.ignis.core.BackgroundLayer bg = new com.ignis.core.BackgroundLayer();
-                bg.setName(name);
-                bg.setGame(liveGame);
-                String path = args.optString("path", "");
-                if (!path.isEmpty()) {
-                    if (resolveInProject(path) == null) return "Erro: path invalido (fora do projeto): " + path;
-                    bg.setImagePath(path);
-                }
-                java.awt.Color c = parseColor(args.optString("color", ""));
-                if (c != null) bg.setColor(c);
-                if (path.isEmpty() && c == null) {
-                    return "Erro: informe 'path' (sprite) ou 'color' (fundo solido).";
-                }
-                bg.setParallax(clamp01(args.optDouble("parallax", 0.5)));
-                bg.setZIndex(args.optInt("zIndex", -1000));
-                boolean repeat = args.optBoolean("repeat", true);
-                bg.setRepeatX(repeat);
-                bg.setRepeatY(repeat);
-                liveGame.addEntity(bg);
-                if (refreshHook != null) refreshHook.run();
-                return "Camada de fundo criada: " + name + " (parallax=" + bg.getParallaxX() + ", zIndex=" + bg.getZIndex() + ")";
-            });
-
-        // set_parallax_factor
-        Map<String, String> pfProps = new LinkedHashMap<>();
-        pfProps.put("name", "Nome da camada de fundo");
-        pfProps.put("parallax", "Fator 0..1 aplicado aos dois eixos (opcional)");
-        pfProps.put("parallaxX", "Fator do eixo X (opcional, sobrescreve 'parallax')");
-        pfProps.put("parallaxY", "Fator do eixo Y (opcional, sobrescreve 'parallax')");
-        add("set_parallax_factor",
-            "Ajusta o fator de parallax de uma camada de fundo existente.",
-            schemaWith(pfProps, List.of("name")),
-            args -> {
-                GameObject go = findObject(args.optString("name", ""));
-                if (!(go instanceof com.ignis.core.BackgroundLayer)) {
-                    return "Erro: camada de fundo nao encontrada: " + args.optString("name", "");
-                }
-                com.ignis.core.BackgroundLayer bg = (com.ignis.core.BackgroundLayer) go;
-                if (args.has("parallax")) bg.setParallax(clamp01(args.optDouble("parallax")));
-                if (args.has("parallaxX")) bg.setParallaxX(clamp01(args.optDouble("parallaxX")));
-                if (args.has("parallaxY")) bg.setParallaxY(clamp01(args.optDouble("parallaxY")));
-                if (refreshHook != null) refreshHook.run();
-                return "Parallax de " + bg.getName() + ": X=" + bg.getParallaxX() + " Y=" + bg.getParallaxY();
-            });
-    }
-
     /** Limita um valor ao intervalo [0,1]. */
-    private static double clamp01(double v) {
+    static double clamp01(double v) {
         return Math.max(0.0, Math.min(1.0, v));
     }
 
@@ -1856,7 +1424,7 @@ public final class IgnisToolRegistry {
      * Interpreta uma cor de texto: {@code #RRGGBB}, {@code #AARRGGBB}, {@code 0x...}
      * ou um inteiro decimal. Retorna null se vazio/invalido.
      */
-    private static java.awt.Color parseColor(String s) {
+    static java.awt.Color parseColor(String s) {
         if (s == null) return null;
         s = s.trim();
         if (s.isEmpty()) return null;
@@ -2866,7 +2434,7 @@ public final class IgnisToolRegistry {
     }
 
     // Resolve um caminho relativo garantindo que permaneca dentro do projeto (anti path-traversal).
-    private File resolveInProject(String relative) {
+    File resolveInProject(String relative) {
         return resolveWithin(projectFolder, relative);
     }
 
