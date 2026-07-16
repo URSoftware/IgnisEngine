@@ -14,6 +14,9 @@
 *.jar
 !.mvn/wrapper/maven-wrapper.jar
 !libs/**/*.jar
+# Bibliotecas privadas de projeto (ver doc/PROJECT_LIBS_GUIDE.md) - conteudo de
+# projeto versionado, nao artefato de build acidental.
+!projects/*/project/libs/*.jar
 *.war
 *.nar
 *.ear

@@ -20,6 +20,7 @@ Este documento explica **tudo** sobre o sistema de scripts do motor Ignis Engine
 12. [Sistema de Coordenadas](#sistema-de-coordenadas)
 13. [Exemplos Práticos](#exemplos-práticos-completos)
 14. [Boas Práticas](#boas-práticas)
+15. [Bibliotecas privadas de projeto](PROJECT_LIBS_GUIDE.md) — quando seus scripts precisam referenciar outras classes Java próprias do projeto.
 
 ---
 

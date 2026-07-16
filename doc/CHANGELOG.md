@@ -6,6 +6,9 @@
 
 ## [Não lançado]
 
+### Suporte a bibliotecas privadas de projeto (`project/libs/`)
+`ScriptManager` compilava scripts um arquivo por vez, sem incluir os demais `.java` do projeto nem `.class` pré-compilados no classpath — qualquer projeto com lógica própria espalhada em mais de um arquivo (ex: classes de domínio reutilizadas por vários scripts) esbarrava em `cannot find symbol` ao compilar pelo editor. Agora `ScriptManager` procura `.jar` soltos em `project/libs/` e os inclui tanto no classpath de compilação (`compileScript`) quanto no `URLClassLoader` de runtime (`reloadClassLoader`) — por-projeto, opcional, sem acoplar a engine a nenhuma dependência específica de jogo. Ver `doc/PROJECT_LIBS_GUIDE.md`. Validado com o projeto `RimuruSurvivors` (`domain-lib` empacotado em `project/libs/rimuru-survivors-domain.jar`, 23 testes JUnit).
+
 ### Fase F — decomposição das god classes (em andamento)
 `Game.java` acumulava loop, render, input do editor e gerência de cena numa classe de 3126 linhas. A decomposição é incremental: cada extração é um *move* de código puro (sem mudança de lógica), validado por build + suíte completa.
 

@@ -18,10 +18,17 @@ public class ScriptManager {
     // Folder where compiled scripts will be stored
     private File scriptsFolder;
     private File compiledFolder;
-    
+
+    // Pasta opcional "libs/" na raiz do projeto: qualquer .jar solto ali entra no
+    // classpath de compilacao dos scripts e no ClassLoader de runtime. Isso deixa um
+    // projeto trazer sua propria camada de dominio/bibliotecas privadas sem que a
+    // engine precise depender dela - nenhum outro projeto e afetado, porque cada
+    // ScriptManager so olha para a libs/ do seu proprio projectFolder.
+    private File libsFolder;
+
     // Custom ClassLoader to load scripts
     private URLClassLoader scriptClassLoader;
-    
+
     // Cache of loaded script classes
     private Map<String, Class<? extends IgnisScript>> scriptClasses = new HashMap<>();
 
@@ -32,13 +39,41 @@ public class ScriptManager {
     public ScriptManager(File projectFolder) {
         this.scriptsFolder = new File(projectFolder, "scripts");
         this.compiledFolder = new File(projectFolder, "scripts/compiled");
-        
+        this.libsFolder = new File(projectFolder, "libs");
+
         if (!scriptsFolder.exists()) {
             scriptsFolder.mkdirs();
         }
         if (!compiledFolder.exists()) {
             compiledFolder.mkdirs();
         }
+        // libsFolder e opcional por design - so criamos se o projeto ja pediu para
+        // usa-la (evita poluir todo projeto sem libs privadas com uma pasta vazia).
+    }
+
+    /**
+     * Jars soltos em libs/ na raiz do projeto (nao a engine). Vazio se a pasta nao
+     * existir ou nao tiver nenhum .jar - um projeto sem bibliotecas privadas nao
+     * precisa criar essa pasta.
+     */
+    private List<File> discoverLibJars() {
+        if (!libsFolder.exists()) {
+            return Collections.emptyList();
+        }
+        File[] jars = libsFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".jar"));
+        if (jars == null || jars.length == 0) {
+            return Collections.emptyList();
+        }
+        List<File> result = Arrays.asList(jars);
+        Collections.sort(result, Comparator.comparing(File::getName));
+        return result;
+    }
+
+    /**
+     * Pasta "libs/" deste projeto (pode nao existir se o projeto nunca a usou).
+     */
+    public File getLibsFolder() {
+        return libsFolder;
     }
 
     /**
@@ -73,6 +108,12 @@ public class ScriptManager {
             File targetClasses = new File("target/classes");
             if (targetClasses.exists()) {
                 classpath = targetClasses.getAbsolutePath() + File.pathSeparator + classpath;
+            }
+            // Bibliotecas privadas do projeto (project/libs/*.jar), se houver - assim um
+            // script pode referenciar uma classe de outro arquivo do proprio projeto
+            // desde que ela esteja empacotada num jar aqui, sem a engine depender dela.
+            for (File jar : discoverLibJars()) {
+                classpath = classpath + File.pathSeparator + jar.getAbsolutePath();
             }
             options.add("-classpath");
             options.add(classpath);
@@ -148,13 +189,21 @@ public class ScriptManager {
             if (scriptClassLoader != null) {
                 scriptClassLoader.close();
             }
-            
-            URL[] urls = { compiledFolder.toURI().toURL() };
-            scriptClassLoader = new URLClassLoader(urls, getClass().getClassLoader());
-            
+
+            List<URL> urls = new ArrayList<>();
+            urls.add(compiledFolder.toURI().toURL());
+            // Mesmas libs privadas usadas na compilacao (ver discoverLibJars) - sem isso
+            // um script compilado com sucesso contra o jar ainda falharia ao rodar,
+            // porque o classloader de runtime nao acharia as classes do jar.
+            for (File jar : discoverLibJars()) {
+                urls.add(jar.toURI().toURL());
+            }
+
+            scriptClassLoader = new URLClassLoader(urls.toArray(new URL[0]), getClass().getClassLoader());
+
             // Clear cache
             scriptClasses.clear();
-            
+
         } catch (Exception e) {
             IgnisLogger.error("Error reloading ClassLoader: " + e.getMessage());
         }
