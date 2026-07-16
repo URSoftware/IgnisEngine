@@ -4,7 +4,9 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import java.io.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Manages prefabs - reusable object templates that can be instantiated in the game.
@@ -14,11 +16,30 @@ import java.util.List;
  * scripts, and settings preserved.
  */
 public class PrefabManager {
-    
+
     private File prefabsFolder;
     private Game game;
     private ScriptManager scriptManager;
-    
+
+    // Cache do JSON ja parseado de cada prefab. Sem isso, CADA instantiatePrefab lia
+    // o .prefab.json do disco e reparseava o JSON — num jogo com spawner (orbes,
+    // projeteis) isso e I/O + parse centenas de vezes por segundo, e foi um dos
+    // fatores da pressao de memoria que derrubou o editor em 15/07/2026.
+    // A desserializacao apenas LE o JSON (nenhum loadProperties muta o objeto
+    // recebido), entao a mesma instancia pode ser reusada com seguranca.
+    private final Map<String, CachedPrefab> prefabCache = new HashMap<>();
+
+    /** JSON de um prefab + o mtime do arquivo de origem que o produziu. */
+    private static final class CachedPrefab {
+        final JSONObject json;
+        final long lastModified;
+
+        CachedPrefab(JSONObject json, long lastModified) {
+            this.json = json;
+            this.lastModified = lastModified;
+        }
+    }
+
     public PrefabManager(File projectFolder, Game game, ScriptManager scriptManager) {
         this.prefabsFolder = new File(projectFolder, "prefabs");
         this.game = game;
@@ -53,7 +74,10 @@ public class PrefabManager {
             try (FileWriter writer = new FileWriter(prefabFile)) {
                 writer.write(prefabJson.toString(2));
             }
-            
+            // Salvar duas vezes dentro do mesmo tick de mtime (resolucao do FS pode
+            // ser de 1s) deixaria o cache servindo a versao antiga: invalida na mao.
+            invalidatePrefabCache(prefabName);
+
             com.ignis.core.IgnisLogger.info("Prefab salvo com sucesso: " + prefabFile.getName());
             return true;
             
@@ -138,11 +162,10 @@ public class PrefabManager {
         }
         
         try {
-            String content = readFile(prefabFile);
-            JSONObject prefabJson = new JSONObject(content);
-            
+            JSONObject prefabJson = prefabJson(prefabFile);
+
             return deserializeGameObject(prefabJson, x, y);
-            
+
         } catch (Exception e) {
             IgnisLogger.error("Failed to instantiate prefab: " + e.getMessage(), e);
             return null;
@@ -305,6 +328,7 @@ public class PrefabManager {
     public boolean deletePrefab(String prefabName) {
         File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
         if (prefabFile.exists()) {
+            invalidatePrefabCache(prefabName);
             return prefabFile.delete();
         }
         return false;
@@ -328,6 +352,30 @@ public class PrefabManager {
     /**
      * Reads a file to string
      */
+    /**
+     * JSON do prefab, do cache quando o arquivo nao mudou desde a ultima leitura.
+     *
+     * <p>A chave de validade e o {@code lastModified} do arquivo: editar o prefab no
+     * editor (ou fora dele) muda o mtime e a proxima instanciacao reparseia sozinha —
+     * o cache nao "congela" o prefab.</p>
+     */
+    private JSONObject prefabJson(File prefabFile) throws IOException {
+        String key = prefabFile.getPath();
+        long stamp = prefabFile.lastModified();
+        CachedPrefab cached = prefabCache.get(key);
+        if (cached != null && cached.lastModified == stamp) {
+            return cached.json;
+        }
+        JSONObject parsed = new JSONObject(readFile(prefabFile));
+        prefabCache.put(key, new CachedPrefab(parsed, stamp));
+        return parsed;
+    }
+
+    /** Invalida o cache de um prefab (salvar/apagar). */
+    private void invalidatePrefabCache(String prefabName) {
+        prefabCache.remove(new File(prefabsFolder, prefabName + ".prefab.json").getPath());
+    }
+
     private String readFile(File file) throws IOException {
         StringBuilder content = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
