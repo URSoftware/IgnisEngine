@@ -44,12 +44,22 @@ public class IgnisProjectIO {
     // Root folder where all projects are stored
     public static final String PROJECTS_ROOT_FOLDER = "projects";
 
+    // Raiz de projetos alternativa. So os testes usam: a raiz real vem de user.dir, e
+    // sem isto um teste de save gravaria dentro do projects/ do proprio repositorio.
+    private static File projectsRootOverride;
+
+    /** Aponta a raiz de projetos para uma pasta temporaria (uso exclusivo de teste). */
+    static void setProjectsRootFolderForTest(File folder) {
+        projectsRootOverride = folder;
+    }
+
     /**
      * Returns the root folder where all projects are stored
      */
     public static File getProjectsRootFolder() {
-        File engineRoot = new File(System.getProperty("user.dir"));
-        File projectsFolder = new File(engineRoot, PROJECTS_ROOT_FOLDER);
+        File projectsFolder = projectsRootOverride != null
+                ? projectsRootOverride
+                : new File(new File(System.getProperty("user.dir")), PROJECTS_ROOT_FOLDER);
         if (!projectsFolder.exists()) {
             projectsFolder.mkdirs();
         }
@@ -84,31 +94,50 @@ public class IgnisProjectIO {
             // The .ignis file goes into the project folder
             File actualIgnisFile = new File(projectMainFolder, projectName + ".ignis");
 
-            // Create ZIP file
-            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(actualIgnisFile))) {
+            // GRAVACAO ATOMICA: escreve num temporario e so troca o .ignis real no
+            // fim, com tudo serializado e o ZIP fechado.
+            //
+            // Antes, o ZipOutputStream abria o .ignis REAL direto — e new
+            // FileOutputStream trunca o arquivo na hora. Qualquer excecao durante a
+            // serializacao (um toJSON que falha, disco cheio, a maquina desligando)
+            // destruia o projeto: sobrava um zip vazio no lugar dele. Foi o que
+            // aconteceu em 16/07/2026 — um NoClassDefFoundError no auto-save trocou um
+            // projeto de 3,5 MB por 140 bytes. O save nunca pode destruir o estado
+            // anterior antes de saber que o novo esta inteiro.
+            File tempFile = new File(projectMainFolder, projectName + ".ignis.tmp");
+            try {
+                try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile))) {
 
-                // 1. Save project.json
-                ZipEntry projectEntry = new ZipEntry(PROJECT_FILE);
-                zos.putNextEntry(projectEntry);
-                byte[] projectBytes = project.toJSON().toString(2).getBytes("UTF-8");
-                zos.write(projectBytes);
-                zos.closeEntry();
-
-                // 2. Save ALL scenes
-                for (Scene scene : project.getScenes()) {
-                    String sceneFileName = SCENES_DIR + scene.getSceneName() + ".scene.json";
-                    ZipEntry sceneEntry = new ZipEntry(sceneFileName);
-                    zos.putNextEntry(sceneEntry);
-                    byte[] sceneBytes = scene.toJSON().toString(2).getBytes("UTF-8");
-                    zos.write(sceneBytes);
+                    // 1. Save project.json
+                    ZipEntry projectEntry = new ZipEntry(PROJECT_FILE);
+                    zos.putNextEntry(projectEntry);
+                    byte[] projectBytes = project.toJSON().toString(2).getBytes("UTF-8");
+                    zos.write(projectBytes);
                     zos.closeEntry();
+
+                    // 2. Save ALL scenes
+                    for (Scene scene : project.getScenes()) {
+                        String sceneFileName = SCENES_DIR + scene.getSceneName() + ".scene.json";
+                        ZipEntry sceneEntry = new ZipEntry(sceneFileName);
+                        zos.putNextEntry(sceneEntry);
+                        byte[] sceneBytes = scene.toJSON().toString(2).getBytes("UTF-8");
+                        zos.write(sceneBytes);
+                        zos.closeEntry();
+                    }
+
+                    // 3. Copiar a pasta de assets do projeto para dentro do ZIP.
+                    // Assets vivem em projectFolder/assets/ (sprites, sounds, music, etc.);
+                    // sem isto o .ignis/jogo exportado saía sem os recursos.
+                    File assetsFolder = new File(projectFolder, "assets");
+                    copyAssetsToZip(zos, assetsFolder, ASSETS_DIR);
                 }
 
-                // 3. Copiar a pasta de assets do projeto para dentro do ZIP.
-                // Assets vivem em projectFolder/assets/ (sprites, sounds, music, etc.);
-                // sem isto o .ignis/jogo exportado saía sem os recursos.
-                File assetsFolder = new File(projectFolder, "assets");
-                copyAssetsToZip(zos, assetsFolder, ASSETS_DIR);
+                replaceWithTemp(tempFile, actualIgnisFile);
+
+            } catch (IOException | RuntimeException | Error failure) {
+                // O projeto no disco continua sendo o de antes: so o temporario cai.
+                tempFile.delete();
+                throw failure;
             }
 
             // Update file reference in project (use actual file in projects folder)
@@ -116,6 +145,24 @@ public class IgnisProjectIO {
 
             com.ignis.core.IgnisLogger.info("Projeto salvo em: " + actualIgnisFile.getName());
         }
+
+    /**
+     * Troca o arquivo final pelo temporario ja gravado por inteiro.
+     *
+     * <p>Tenta primeiro a substituicao atomica; se o sistema de arquivos nao suportar
+     * (acontece no Windows quando algo mantem o alvo aberto), cai para a troca comum,
+     * que ainda e muito melhor do que ter truncado o original la atras.</p>
+     */
+    private static void replaceWithTemp(File tempFile, File target) throws IOException {
+        try {
+            java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException notAtomic) {
+            java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
 
     /**
      * Copia recursivamente o conteudo de {@code dir} para dentro do ZIP sob o prefixo
