@@ -1,3 +1,5 @@
+package com.rimurusurvivors.domain;
+
 import java.util.Comparator;
 import java.util.List;
 

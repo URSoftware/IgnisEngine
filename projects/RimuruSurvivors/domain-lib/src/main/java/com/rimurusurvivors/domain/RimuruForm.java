@@ -1,3 +1,5 @@
+package com.rimurusurvivors.domain;
+
 /**
  * Porta de RimuruForm (mods/vampire-survivors-rimuru/src/RimuruRuntimeRules.cs).
  * A fatia vertical so usa Slime; Humanoid/DemonLord ficam portados por inteiro

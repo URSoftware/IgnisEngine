@@ -1,3 +1,5 @@
+package com.rimurusurvivors.domain;
+
 /**
  * Porta de RimuruContent (mods/vampire-survivors-rimuru/src/RimuruContent.cs).
  * Dados fixos de personagem/arma/evolucao/passiva do design original — sem

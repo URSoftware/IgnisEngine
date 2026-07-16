@@ -1,4 +1,6 @@
 import com.ignis.core.AssetResolver;
+import com.rimurusurvivors.domain.WeaponLevelStats;
+import com.rimurusurvivors.domain.WeaponProgression;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -10,7 +12,8 @@ import java.util.List;
 
 /**
  * Le project/data/rimuru-progression.json (copia aparada de
- * mods/vampire-survivors-rimuru/data/rimuru-progression.json) e monta a WeaponProgression.
+ * mods/vampire-survivors-rimuru/data/rimuru-progression.json) e monta a WeaponProgression
+ * (com.rimurusurvivors.domain, empacotada em project/libs/rimuru-survivors-domain.jar).
  * Chamado uma vez e cacheado estaticamente — os scripts de gameplay pedem a instancia
  * em vez de reler o arquivo a cada tick.
  */

@@ -1,3 +1,5 @@
+package com.rimurusurvivors.domain;
+
 /**
  * Substitui System.Numerics.Vector2 do mod C# original (RimuruRuntimeRules.cs).
  * Java nao tem um tipo de vetor 2D embutido; mantido minimo e sem dependencia do motor

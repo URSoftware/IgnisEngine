@@ -1,3 +1,5 @@
+package com.rimurusurvivors.domain;
+
 /** Porta de TargetSnapshot (RimuruRuntimeRules.cs). */
 public record TargetSnapshot(
         String enemyFamilyId,
