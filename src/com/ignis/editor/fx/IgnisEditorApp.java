@@ -93,7 +93,7 @@ public class IgnisEditorApp extends Application {
     final Game game = new Game();
     GameObject selected;
     private boolean suppressInspectorEvents = false;
-    private boolean suppressSelectionEvents = false;
+     boolean suppressSelectionEvents = false;
     private File projectFolder;
     private File currentIgnisFile;
     private Project currentProject;
@@ -138,9 +138,9 @@ public class IgnisEditorApp extends Application {
     // KeyEvent/MouseEvent que roteiam o input do viewport FX para o singleton Input.
     private final java.awt.Component awtEventSource = new java.awt.Canvas();
 
-    private final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
-    private TreeView<String> hierarchy;
-    private TreeView<File> assetTree;
+     final TreeItem<String> hierarchyRoot = new TreeItem<>("Cena");
+     TreeView<String> hierarchy;
+     TreeView<File> assetTree;
     private Label status;
 
     // Campos do Inspector
@@ -166,7 +166,7 @@ public class IgnisEditorApp extends Application {
     private GameObject clipboardObject;
     // Multi-selecao: lista de objetos selecionados secundariamente (alem do primario 'selected').
     // O primario recebe gizmo/drag; os secundarios recebem contorno tracejado (editorHighlights).
-    private final java.util.List<GameObject> secondarySelection = new java.util.ArrayList<>();
+     final java.util.List<GameObject> secondarySelection = new java.util.ArrayList<>();
     private ToggleButton btnMove;
     private ToggleButton btnRotate;
     private ToggleButton btnScale;
@@ -300,10 +300,10 @@ public class IgnisEditorApp extends Application {
         wireFxInputToEngine(canvas);
 
         // ---- Hierarchy + Asset Browser (esquerda) ----
-        // buildHierarchy() atribui o campo 'hierarchy' (TreeView) e devolve o painel
+        // panels.buildHierarchy() atribui o campo 'hierarchy' (TreeView) e devolve o painel
         // (VBox com o campo de filtro + a arvore).
-        javafx.scene.Node hierarchyPanel = buildHierarchy();
-        javafx.scene.Node assetBrowser = buildAssetBrowser();
+        javafx.scene.Node hierarchyPanel = panels.buildHierarchy();
+        javafx.scene.Node assetBrowser = panels.buildAssetBrowser();
         leftSplit = new SplitPane();
         leftSplit.setOrientation(Orientation.VERTICAL);
         leftSplit.getItems().addAll(hierarchyPanel, assetBrowser);
@@ -1791,149 +1791,8 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Hierarchy ----------------
 
-        private javafx.scene.Node buildHierarchy() {
-            refreshHierarchy();
-            hierarchyRoot.setExpanded(true);
-            TreeView<String> tree = new TreeView<>(hierarchyRoot);
-            this.hierarchy = tree;
-            // Habilitar multi-selecao nativa (Ctrl+Click / Shift+Click) na TreeView.
-            tree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        
-            // Search/filter field for hierarchy
-            TextField hierarchyFilter = new TextField();
-            hierarchyFilter.setPromptText("Filtrar Hierarchy...");
-            hierarchyFilter.textProperty().addListener((obs, oldVal, newVal) -> applyHierarchyFilter(newVal));
-
-            // Cell factory: selecionar o item sob o cursor no clique DIREITO (SECONDARY).
-            // Sem isso, JavaFX TreeView so seleciona no clique esquerdo, e o menu de
-            // contexto opera no item previamente selecionado — nao no que esta sob o cursor.
-            tree.setCellFactory(tv -> {
-                javafx.scene.control.TreeCell<String> cell = new javafx.scene.control.TreeCell<>() {
-                    @Override protected void updateItem(String item, boolean empty) {
-                        super.updateItem(item, empty);
-                        if (empty || item == null) {
-                            setText(null);
-                            setGraphic(null);
-                            setStyle(null);
-                        } else {
-                            TreeItem<String> treeItem = getTreeItem();
-                            if (treeItem != null && treeItem.getParent() != null && treeItem.getParent() != hierarchyRoot) {
-                                // É um componente
-                                setText("  ↳  " + item);
-                                setStyle("-fx-text-fill: #9ab0c5; -fx-font-style: italic; -fx-font-size: 11px;");
-                            } else {
-                                // É um GameObject ou o nó raiz "Cena"
-                                setText(item);
-                                if (treeItem == hierarchyRoot) {
-                                    setStyle("-fx-text-fill: -ignis-primary; -fx-font-weight: bold;");
-                                } else {
-                                    setStyle("-fx-text-fill: #e0e0e0; -fx-font-weight: bold; -fx-font-size: 12px;");
-                                }
-                            }
-                        }
-                    }
-                };
-                cell.setOnMousePressed(e -> {
-                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                        tv.getSelectionModel().select(cell.getTreeItem());
-                    }
-                });
-                cell.setOnDragDetected(e -> {
-                    if (!cell.isEmpty() && cell.getItem() != null && !cell.getItem().equals("Cena")) {
-                        javafx.scene.input.Dragboard db = cell.startDragAndDrop(javafx.scene.input.TransferMode.ANY);
-                        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                        content.putString(cell.getItem());
-                        db.setContent(content);
-                        e.consume();
-                    }
-                });
-                return cell;
-            });
-            // Listener de selecao: sincroniza o primario + secundarios a partir da
-            // multi-selecao nativa do TreeView. O ultimo item na lista de selecao do
-            // modelo e o primario (recebe gizmo/Inspector); os demais viram secundarios.
-            tree.getSelectionModel().getSelectedItems().addListener(
-                    (javafx.collections.ListChangeListener<TreeItem<String>>) change -> {
-                if (suppressSelectionEvents) return;
-                suppressSelectionEvents = true;
-                try {
-                    var selItems = tree.getSelectionModel().getSelectedItems();
-                    java.util.List<GameObject> ents = game.getEntities();
-                    if (selItems.isEmpty() || (selItems.size() == 1 && selItems.get(0) == hierarchyRoot)) {
-                        setSelected(null);
-                        clearSecondarySelection();
-                        return;
-                    }
-                    // O item com foco (ultimo clicado) vira o primario.
-                    TreeItem<String> focusedItem = selItems.get(selItems.size() - 1);
-                    if (focusedItem == null || focusedItem == hierarchyRoot) focusedItem = selItems.get(0);
-                
-                    TreeItem<String> goItem = focusedItem;
-                    if (focusedItem.getParent() != null && focusedItem.getParent() != hierarchyRoot) {
-                        goItem = focusedItem.getParent();
-                        selectedComponentName = focusedItem.getValue();
-                    } else {
-                        selectedComponentName = null;
-                    }
-                
-                    int primaryIdx = hierarchyRoot.getChildren().indexOf(goItem);
-                    GameObject primary = (primaryIdx >= 0 && primaryIdx < ents.size()) ? ents.get(primaryIdx) : null;
-                    setSelected(primary);
-                
-                    // Montar a lista de secundarios (os demais).
-                    secondarySelection.clear();
-                    for (TreeItem<String> ti : selItems) {
-                        if (ti == null || ti == hierarchyRoot || ti == focusedItem) continue;
-                        TreeItem<String> pItem = ti;
-                        if (ti.getParent() != null && ti.getParent() != hierarchyRoot) {
-                            pItem = ti.getParent();
-                        }
-                        int idx = hierarchyRoot.getChildren().indexOf(pItem);
-                        if (idx >= 0 && idx < ents.size()) {
-                            GameObject go = ents.get(idx);
-                            if (go != primary && !secondarySelection.contains(go)) {
-                                secondarySelection.add(go);
-                            }
-                        }
-                    }
-                    syncHighlights();
-                } finally {
-                    suppressSelectionEvents = false;
-                }
-            });
-            tree.setOnMouseClicked(ev -> {
-                if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
-                    ContextMenu menu;
-                    if (sel != null && sel != hierarchyRoot) {
-                        menu = menus.buildHierarchyContextMenu();
-                    } else {
-                        menu = new ContextMenu();
-                        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
-                        criarObjeto.setOnAction(e -> createEntity("GameObject"));
-                        MenuItem criarCamera = new MenuItem("Criar Câmera");
-                        criarCamera.setOnAction(e -> createEntity("Camera"));
-                        menu.getItems().addAll(criarObjeto, criarCamera);
-                    }
-                    menu.show(tree, ev.getScreenX(), ev.getScreenY());
-                }
-            });
-            // Atalhos so quando a arvore tem foco (evita conflito com os campos do Inspector).
-            tree.setOnKeyPressed(ev -> {
-                if (ev.getCode() == KeyCode.DELETE) { deleteSelected(); ev.consume(); }
-                else if (ev.getCode() == KeyCode.F2) { renameSelected(); ev.consume(); }
-                else if (ev.getCode() == KeyCode.D && ev.isControlDown()) { duplicateSelected(); ev.consume(); }
-            });
-        
-            // Painel: campo de filtro acima da arvore (antes o VBox era montado mas
-            // o metodo retornava so a 'tree', deixando o filtro da Hierarchy orfao).
-            VBox hierarchyBox = new VBox(4, hierarchyFilter, tree);
-            VBox.setVgrow(tree, Priority.ALWAYS);
-            return hierarchyBox;
-        }
-
         // Apply filter to hierarchy tree
-        private void applyHierarchyFilter(String filterText) {
+        void applyHierarchyFilter(String filterText) {
             if (filterText == null || filterText.trim().isEmpty()) {
                 // Show all items
                 for (TreeItem<String> item : hierarchyRoot.getChildren()) {
@@ -2244,7 +2103,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Nome do prefab a partir do arquivo <nome>.prefab.json.
-    private String prefabNameOf(File f) {
+     String prefabNameOf(File f) {
         return f == null ? null : f.getName().replaceFirst("(?i)\\.prefab\\.json$", "");
     }
 
@@ -2269,7 +2128,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Instancia o prefab nomeado, adiciona a cena e registra desfazer/refazer.
-    private void instantiatePrefabByName(String name) {
+     void instantiatePrefabByName(String name) {
         if (name == null || !requireProject()) return;
         com.ignis.core.PrefabManager pm = getPrefabManager();
         if (pm == null) return;
@@ -2340,12 +2199,12 @@ public class IgnisEditorApp extends Application {
     // ---------------- Multi-selecao ----------------
 
     // Empurra a lista de selecao secundaria para o Game (contornos tracejados no viewport).
-    private void syncHighlights() {
+     void syncHighlights() {
         game.setEditorHighlights(secondarySelection.isEmpty() ? null : secondarySelection);
     }
 
     // Limpa a selecao secundaria e atualiza o viewport.
-    private void clearSecondarySelection() {
+     void clearSecondarySelection() {
         if (!secondarySelection.isEmpty()) {
             secondarySelection.clear();
             syncHighlights();
@@ -2569,71 +2428,8 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Asset Browser (arvore de arquivos do projeto) ----------------
 
-        private javafx.scene.Node buildAssetBrowser() {
-            VBox box = new VBox(4);
-            box.getStyleClass().add("ignis-panel");
-            Label title = new Label("Assets");
-            title.getStyleClass().add("panel-title");
-
-            // Search/filter field for asset browser
-            TextField assetFilter = new TextField();
-            assetFilter.setPromptText("Filtrar Assets...");
-            assetFilter.textProperty().addListener((obs, oldVal, newVal) -> applyAssetFilter(newVal));
-
-            assetTree = new TreeView<>();
-            assetTree.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal != null) {
-                    File file = newVal.getValue();
-                    if (file != null && file.isFile() && file.getName().endsWith(".java")) {
-                        inspectScriptFile(file);
-                    }
-                }
-            });
-            assetTree.setShowRoot(true);
-            assetTree.setCellFactory(tv -> {
-                TreeCell<File> cell = new TreeCell<>() {
-                    @Override protected void updateItem(File item, boolean empty) {
-                        super.updateItem(item, empty);
-                        setText(empty || item == null ? null : item.getName());
-                    }
-                };
-                // Selecionar o item sob o cursor no clique DIREITO (SECONDARY), para o menu de
-                // contexto operar no item certo. Sem isso o TreeView so seleciona no clique
-                // esquerdo e o menu agia sobre a selecao anterior (ou nenhuma).
-                cell.setOnMousePressed(e -> {
-                    if (!cell.isEmpty() && e.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                        tv.getSelectionModel().select(cell.getTreeItem());
-                    }
-                });
-                return cell;
-            });
-            assetTree.setOnMouseClicked(ev -> {
-                TreeItem<File> sel = assetTree.getSelectionModel().getSelectedItem();
-                File file = (sel != null) ? sel.getValue() : null;
-                if (ev.getClickCount() == 2 && ev.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                    if (file != null && file.isFile()) {
-                        if (file.getName().endsWith(".prefab.json")) {
-                            instantiatePrefabByName(prefabNameOf(file));
-                        } else if (file.getName().endsWith(".java")) {
-                            openScriptInIgnisEditor(file);
-                        } else {
-                            openAssetFile(file);
-                        }
-                    }
-                } else if (ev.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                    ContextMenu menu = buildAssetsContextMenu(file);
-                    menu.show(assetTree, ev.getScreenX(), ev.getScreenY());
-                }
-            });
-            VBox.setVgrow(assetTree, Priority.ALWAYS);
-
-            box.getChildren().addAll(title, assetFilter, assetTree);
-            refreshAssetBrowser();
-            return box;
-        }
-
         // Apply filter to asset browser tree
-        private void applyAssetFilter(String filterText) {
+        void applyAssetFilter(String filterText) {
             if (filterText == null || filterText.trim().isEmpty()) {
                 // Show all items
                 if (assetTree.getRoot() != null) {
@@ -2674,7 +2470,7 @@ public class IgnisEditorApp extends Application {
         }
 
     // Reconstroi a arvore a partir da pasta do projeto (ou vazia se nenhum projeto).
-    private void refreshAssetBrowser() {
+     void refreshAssetBrowser() {
         if (assetTree == null) return;
         if (projectFolder != null && projectFolder.isDirectory()) {
             TreeItem<File> root = buildFileTree(projectFolder);
@@ -2712,7 +2508,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Abre o arquivo com o aplicativo padrao do sistema (best-effort).
-    private void openAssetFile(File f) {
+     void openAssetFile(File f) {
         if (f.getName().endsWith(".java") && currentProject != null && currentProject.getProjectFile() != null) {
             try {
                 // Tenta abrir o VSCode em modo Workspace (garante leitura do .vscode/settings.json)
@@ -2741,7 +2537,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openScriptInIgnisEditor(File file) {
+     void openScriptInIgnisEditor(File file) {
             if (!requireProject()) return;
             try {
                 com.ignis.core.ScriptManager sm = game.getScriptManager();
@@ -2844,7 +2640,8 @@ public class IgnisEditorApp extends Application {
     // ---------------- Inspector ----------------
 
     private final InspectorSectionBuilder inspector = new InspectorSectionBuilder(this);
-    private final EditorMenuBuilder menus = new EditorMenuBuilder(this);
+     final EditorMenuBuilder menus = new EditorMenuBuilder(this);
+    private final EditorPanelBuilder panels = new EditorPanelBuilder(this);
 
     private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
@@ -2988,7 +2785,7 @@ public class IgnisEditorApp extends Application {
         markProjectDirty();
     }
 
-    private void setSelected(GameObject go) {
+     void setSelected(GameObject go) {
         // So cancela um drag em andamento se a selecao NAO veio do proprio engine. Quando
         // game.getSelectedObject()==go, o handleMousePress ja selecionou e ARMOU o drag deste
         // objeto no mesmo gesto; cancelar aqui (via selectionListener->runLater) abortaria um
@@ -3173,7 +2970,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void inspectScriptFile(File file) {
+     void inspectScriptFile(File file) {
         // Deseleciona GameObject ativo
         setSelected(null);
         
@@ -4220,7 +4017,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private ContextMenu buildAssetsContextMenu(File file) {
+     ContextMenu buildAssetsContextMenu(File file) {
         ContextMenu menu = new ContextMenu();
         if (file == null) {
             MenuItem refreshItem = new MenuItem("Atualizar Assets");
