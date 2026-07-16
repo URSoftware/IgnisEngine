@@ -28,14 +28,22 @@ public class IgnisSoundEngine {
     // Concurrent SFX voices. Threads are daemon so they never keep the JVM
     // alive on their own (defense-in-depth against orphan processes).
     private static final int MAX_SOUND_EFFECTS = 8;
-    
+
+    // Teto do cache de audio pre-carregado. preload() guarda o arquivo INTEIRO em
+    // memoria; sem limite, um jogo que pre-carrega varias musicas esgota a RAM
+    // (um dos fatores do OutOfMemoryError observado no editor em 15/07/2026).
+    // Acima do teto o audio continua funcionando — apenas passa a ler do disco.
+    private static final long MAX_AUDIO_CACHE_BYTES = 64L * 1024 * 1024;
+
     // ==================== CAMPOS ====================
-    
+
     // Executor para reprodução assíncrona
     private ExecutorService audioExecutor;
-    
+
     // Cache de clips de áudio
     private Map<String, byte[]> audioCache;
+    private final java.util.concurrent.atomic.AtomicLong audioCacheBytes =
+            new java.util.concurrent.atomic.AtomicLong();
     
     // Música de fundo atual
     private Clip backgroundMusic;
@@ -431,10 +439,19 @@ public class IgnisSoundEngine {
      */
     public void preload(String filePath) {
         try {
-            File file = new File(filePath);
+            File file = resolveAudioFile(filePath);
             if (file.exists()) {
                 byte[] data = readFileBytes(file);
+                byte[] previous = audioCache.get(filePath);
+                long delta = data.length - (previous != null ? previous.length : 0L);
+                if (audioCacheBytes.get() + delta > MAX_AUDIO_CACHE_BYTES) {
+                    IgnisLogger.warn("[IgnisSoundEngine] Cache de áudio cheio ("
+                            + (MAX_AUDIO_CACHE_BYTES / (1024 * 1024)) + "MB); '" + filePath
+                            + "' será lido do disco ao tocar.");
+                    return;
+                }
                 audioCache.put(filePath, data);
+                audioCacheBytes.addAndGet(delta);
                 IgnisLogger.info("[IgnisSoundEngine] Áudio pré-carregado: " + filePath);
             }
         } catch (Exception e) {
@@ -457,6 +474,7 @@ public class IgnisSoundEngine {
      */
     public void clearCache() {
         audioCache.clear();
+        audioCacheBytes.set(0);
         IgnisLogger.info("[IgnisSoundEngine] Cache limpo");
     }
 
@@ -472,7 +490,7 @@ public class IgnisSoundEngine {
                 ByteArrayInputStream bais = new ByteArrayInputStream(data);
                 audioStream = AudioSystem.getAudioInputStream(bais);
             } else {
-                File file = new File(filePath);
+                File file = resolveAudioFile(filePath);
                 if (!file.exists()) {
                     IgnisLogger.error("[IgnisSoundEngine] Arquivo não encontrado: " + filePath);
                     return null;
@@ -532,6 +550,10 @@ public class IgnisSoundEngine {
         }
     }
     
+    static File resolveAudioFile(String filePath) {
+        return AssetResolver.resolve(filePath);
+    }
+
     private float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }

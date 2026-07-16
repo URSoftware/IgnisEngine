@@ -493,7 +493,12 @@ public class Game extends Canvas {
                 }
             }
             
-            IgnisLogger.info("Prefab '" + prefabName + "' instanciada como '" + instance.getName() + "' em (" + x + ", " + y + ")");
+            // Em PLAYING este metodo e caminho quente (spawners chamam varias vezes
+            // por segundo); logar cada clone inunda o console e o stderr. O log fica
+            // restrito a instanciacoes feitas em modo de edicao.
+            if (gameState != GameState.PLAYING) {
+                IgnisLogger.info("Prefab '" + prefabName + "' instanciada como '" + instance.getName() + "' em (" + x + ", " + y + ")");
+            }
         } else {
             IgnisLogger.error("Falha ao instanciar prefab '" + prefabName + "'. Verifique se a prefab existe.");
         }

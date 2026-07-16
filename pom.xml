@@ -201,6 +201,11 @@
                     <options>
                         <option>--upgrade-module-path</option>
                         <option>${settings.localRepository}/org/openjfx/jdk-jsobject/26.0.1/jdk-jsobject-26.0.1-win.jar</option>
+                        <!-- Sem teto a JVM reserva ate 25% da RAM para o heap do editor;
+                             somado ao Maven + javac in-process + jogo em Play, isso ja
+                             esgotou a memoria nativa do sistema (hs_err 15/07/2026).
+                             1.5GB e folgado para o editor 2D e mantem o SO respiravel. -->
+                        <option>-Xmx1536m</option>
                     </options>
                 </configuration>
             </plugin>

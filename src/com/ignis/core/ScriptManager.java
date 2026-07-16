@@ -28,6 +28,14 @@ public class ScriptManager {
 
     // Custom ClassLoader to load scripts
     private URLClassLoader scriptClassLoader;
+    private final List<URLClassLoader> retiredClassLoaders = new ArrayList<>();
+
+    // Quantos loaders aposentados permanecem ABERTOS. Instancias antigas so
+    // precisam de resolucao preguicosa durante a transicao de um Play; depois de
+    // algumas gerações a cena ja foi recriada com o loader atual e manter os
+    // antigos abertos so acumula memoria nativa (foi um dos fatores do
+    // OutOfMemoryError observado no editor em 15/07/2026).
+    private static final int MAX_RETIRED_CLASSLOADERS = 2;
 
     // Cache of loaded script classes
     private Map<String, Class<? extends IgnisScript>> scriptClasses = new HashMap<>();
@@ -82,6 +90,10 @@ public class ScriptManager {
      * @return true if compilation was successful
      */
     public boolean compileScript(File scriptFile) {
+        return compileScript(scriptFile, true);
+    }
+
+    private boolean compileScript(File scriptFile, boolean reloadAfter) {
         try {
             // Get Java compiler
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -141,8 +153,11 @@ public class ScriptManager {
             
             if (success) {
                 com.ignis.core.IgnisLogger.info("Script compilado com sucesso: " + scriptFile.getName());
-                // Reload ClassLoader to get new classes
-                reloadClassLoader();
+                // Reload ClassLoader to get new classes (compileAllScripts adia a
+                // recarga para o fim do lote — uma recarga por lote, nao por script).
+                if (reloadAfter) {
+                    reloadClassLoader();
+                }
             }
             
             return success;
@@ -174,9 +189,14 @@ public class ScriptManager {
 
         int count = 0;
         for (File script : scripts) {
-            if (compileScript(script)) {
+            if (compileScript(script, false)) {
                 count++;
             }
+        }
+        if (count > 0) {
+            // Uma unica recarga para o lote inteiro: recarregar por script aposentava
+            // um classloader por arquivo a cada Play, acumulando memoria a toa.
+            reloadClassLoader();
         }
         return count;
     }
@@ -187,7 +207,15 @@ public class ScriptManager {
     private void reloadClassLoader() {
         try {
             if (scriptClassLoader != null) {
-                scriptClassLoader.close();
+                // Existing scene instances still belong to this loader. Closing it here
+                // breaks lazy dependency resolution when Play recompiles the scripts.
+                retiredClassLoaders.add(scriptClassLoader);
+                // Mas manter TODOS abertos vaza memoria a cada recompilacao; apos
+                // MAX_RETIRED_CLASSLOADERS gerações a cena ja foi recriada com o
+                // loader novo, entao os mais antigos podem ser fechados com seguranca.
+                while (retiredClassLoaders.size() > MAX_RETIRED_CLASSLOADERS) {
+                    closeClassLoader(retiredClassLoaders.remove(0));
+                }
             }
 
             List<URL> urls = new ArrayList<>();
@@ -200,6 +228,7 @@ public class ScriptManager {
             }
 
             scriptClassLoader = new URLClassLoader(urls.toArray(new URL[0]), getClass().getClassLoader());
+            IgnisLogger.info("[ScriptManager] Runtime classpath: " + urls);
 
             // Clear cache
             scriptClasses.clear();
@@ -231,6 +260,10 @@ public class ScriptManager {
             if (IgnisScript.class.isAssignableFrom(clazz)) {
                 Class<? extends IgnisScript> scriptClass = (Class<? extends IgnisScript>) clazz;
                 scriptClasses.put(className, scriptClass);
+                // Diagnostico de qual loader serviu a classe — uma vez por classe por
+                // recarga (por instancia inundava o console em jogos com spawners).
+                IgnisLogger.info("[ScriptManager] Classe " + className + " carregada por "
+                        + scriptClass.getClassLoader());
                 return scriptClass;
             } else {
                 IgnisLogger.error("Class " + className + " does not extend IgnisScript");
@@ -259,7 +292,7 @@ public class ScriptManager {
             
             IgnisScript script = scriptClass.getDeclaredConstructor().newInstance();
             script.init(gameObject, game);
-            
+
             return script;
             
         } catch (Exception e) {
@@ -454,12 +487,26 @@ public class ScriptManager {
      * Closes ScriptManager resources
      */
     public void close() {
+        closeClassLoader(scriptClassLoader);
+        for (URLClassLoader classLoader : retiredClassLoaders) {
+            closeClassLoader(classLoader);
+        }
+        retiredClassLoaders.clear();
+        scriptClassLoader = null;
+    }
+
+    int retainedClassLoaderCount() {
+        return retiredClassLoaders.size();
+    }
+
+    private void closeClassLoader(URLClassLoader classLoader) {
+        if (classLoader == null) {
+            return;
+        }
         try {
-            if (scriptClassLoader != null) {
-                scriptClassLoader.close();
-            }
-        } catch (IOException e) {
-            // Ignore
+            classLoader.close();
+        } catch (IOException ignored) {
+            // The operating system will release these read-only handles on process exit.
         }
     }
 }
