@@ -101,7 +101,7 @@ public class IgnisEditorApp extends Application {
     private com.ignis.core.PrefabManager prefabManager;
     private File prefabManagerFolder;
     private Stage primaryStage;
-    private Menu recentMenu;
+     Menu recentMenu;
     private boolean projectDirty = false;
     private javafx.animation.Timeline projectAutoSaveTimer;
     private Button playButton;
@@ -112,7 +112,7 @@ public class IgnisEditorApp extends Application {
     private SplitPane leftSplit;
     private SplitPane centerSplit;
     private FxConsolePanel console;
-    private CheckMenuItem consoleMenuItem;
+     CheckMenuItem consoleMenuItem;
     private FxSettingsWindow settingsWindow;
 
     // Desfazer/Refazer (padrao Command). Cobre criar/deletar/duplicar/colar/
@@ -157,7 +157,7 @@ public class IgnisEditorApp extends Application {
     private VBox inspectorExtras;
 
     private Label cameraPosLabel;
-    private ToggleButton cameraPreviewToggle;
+     ToggleButton cameraPreviewToggle;
     private Label cameraZoomLabel;
     // Seletor de cena ativa na toolbar (organizador de cenários). 'updatingSceneSelector'
     // evita que a repopulação programática dispare o handler de troca de cena.
@@ -268,7 +268,7 @@ public class IgnisEditorApp extends Application {
             new Label("Cena:"), sceneSelector, btnScenes, new Separator(),
             cameraPosLabel, cameraZoomLabel
         );
-        root.setTop(new VBox(buildMenuBar(stage), toolBar));
+        root.setTop(new VBox(menus.buildMenuBar(stage), toolBar));
 
         // Configure selection listener from Game
         game.addSelectionListener(go -> {
@@ -473,144 +473,9 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Menu ----------------
 
-    private MenuBar buildMenuBar(Stage stage) {
-        Menu file = new Menu("Arquivo");
-        MenuItem novo = new MenuItem("Novo projeto…");
-        novo.setOnAction(e -> newProject(stage));
-        MenuItem open = new MenuItem("Abrir projeto…");
-        open.setOnAction(e -> openProjectViaChooser(stage));
-        recentMenu = new Menu("Abrir recente");
-        rebuildRecentMenu(stage);
-        MenuItem selecionar = new MenuItem("Selecionar projeto…");
-        selecionar.setOnAction(e -> showProjectStartup(stage, false));
-        MenuItem salvar = new MenuItem("Salvar");
-        salvar.setOnAction(e -> saveProject());
-        MenuItem salvarComo = new MenuItem("Salvar como…");
-        salvarComo.setOnAction(e -> saveProjectAs(stage));
-        MenuItem fechar = new MenuItem("Fechar projeto");
-        fechar.setOnAction(e -> closeProject(stage));
-        MenuItem prefs = new MenuItem("Configuracoes…");
-        prefs.setAccelerator(new KeyCodeCombination(KeyCode.COMMA, KeyCombination.CONTROL_DOWN));
-        prefs.setOnAction(e -> openSettings());
-        MenuItem exit = new MenuItem("Sair");
-        exit.setOnAction(e -> { saveLayout(); stopGameLoop(); stage.close(); Platform.exit(); System.exit(0); });
-        file.getItems().addAll(novo, open, recentMenu, selecionar, new SeparatorMenuItem(),
-                salvar, salvarComo, prefs, new SeparatorMenuItem(), fechar, exit);
-
-        Menu tools = new Menu("Ferramentas");
-        MenuItem miAudio = new MenuItem("Editor de Audio (DAW)");
-        miAudio.setOnAction(e -> openAudioEditor());
-        MenuItem miImage = new MenuItem("Editor de Imagens");
-        miImage.setOnAction(e -> openImageEditor());
-        MenuItem miAnim = new MenuItem("Editor de Animacao");
-        miAnim.setOnAction(e -> openAnimationEditor());
-        MenuItem miNotes = new MenuItem("Sistema de Notas");
-        miNotes.setOnAction(e -> openNotes());
-        MenuItem miCommunity = new MenuItem("Comunidade & Marketplace");
-        miCommunity.setOnAction(e -> openCommunity());
-        MenuItem miCode = new MenuItem("Editor de Codigo (Scripts)");
-        miCode.setOnAction(e -> openCodeEditor());
-        MenuItem miBuild = new MenuItem("Build do Projeto");
-        miBuild.setOnAction(e -> openBuildDialog());
-        tools.getItems().addAll(miAudio, miImage, miAnim, miNotes, miCommunity, miCode, miBuild);
-
-        Menu view = new Menu("Visualizar");
-        
-        MenuItem zoomInItem = new MenuItem("Zoom In");
-        zoomInItem.setAccelerator(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.CONTROL_DOWN));
-        zoomInItem.setOnAction(e -> zoomCamera(1.25));
-        
-        MenuItem zoomOutItem = new MenuItem("Zoom Out");
-        zoomOutItem.setAccelerator(new KeyCodeCombination(KeyCode.MINUS, KeyCombination.CONTROL_DOWN));
-        zoomOutItem.setOnAction(e -> zoomCamera(0.8));
-        
-        MenuItem zoom100Item = new MenuItem("Zoom to 100%");
-        zoom100Item.setAccelerator(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.CONTROL_DOWN));
-        zoom100Item.setOnAction(e -> {
-            com.ignis.core.Camera cam = game.getViewCamera();
-            if (cam != null) {
-                cam.setZoom(1.0);
-                updateCameraLabels();
-            }
-        });
-        
-        MenuItem resetCamItem = new MenuItem("Reset Camera");
-        resetCamItem.setAccelerator(new KeyCodeCombination(KeyCode.HOME));
-        resetCamItem.setOnAction(e -> resetCamera());
-        
-        MenuItem focusSelectedItem = new MenuItem("Focus on Selected");
-        focusSelectedItem.setAccelerator(new KeyCodeCombination(KeyCode.F));
-        focusSelectedItem.setOnAction(e -> focusCameraOnSelected());
-
-        MenuItem frameAllItem = new MenuItem("Enquadrar Tudo");
-        frameAllItem.setAccelerator(new KeyCodeCombination(KeyCode.F, KeyCombination.SHIFT_DOWN));
-        frameAllItem.setOnAction(e -> frameAllObjects());
-        
-        CheckMenuItem showCollidersItem = new CheckMenuItem("Show Colliders");
-                showCollidersItem.setSelected(game.isShowColliders());
-                showCollidersItem.setOnAction(e -> game.setShowColliders(showCollidersItem.isSelected()));
-
-                CheckMenuItem showCameraBoundsItem = new CheckMenuItem("Mostrar Câmera (campo de visão)");
-                showCameraBoundsItem.setSelected(game.isShowCameraBounds());
-                showCameraBoundsItem.setOnAction(e -> game.setShowCameraBounds(showCameraBoundsItem.isSelected()));
-
-                CheckMenuItem showGridItem = new CheckMenuItem("Show Grid");
-                showGridItem.setSelected(game.isShowGrid());
-                showGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN));
-                showGridItem.setOnAction(e -> game.setShowGrid(showGridItem.isSelected()));
-
-                CheckMenuItem snapToGridItem = new CheckMenuItem("Snap to Grid");
-                snapToGridItem.setSelected(game.isSnapToGrid());
-                snapToGridItem.setAccelerator(new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN));
-                snapToGridItem.setOnAction(e -> game.setSnapToGrid(snapToGridItem.isSelected()));
-
-                Menu gridSizeMenu = new Menu("Grid Size");
-                ToggleGroup gridSizeGroup = new ToggleGroup();
-                int[] gridSizes = {16, 32, 64, 128};
-                for (int size : gridSizes) {
-                    RadioMenuItem sizeItem = new RadioMenuItem(size + " px");
-                    sizeItem.setToggleGroup(gridSizeGroup);
-                    sizeItem.setSelected(game.getGridSize() == size);
-                    sizeItem.setOnAction(e -> game.setGridSize(size));
-                    gridSizeMenu.getItems().add(sizeItem);
-                }
-
-                // Item de alternancia do Console (dock inferior). Instanciado aqui —
-                // antes so era declarado como campo e entrava null no menu, causando
-                // NullPointerException ao renderizar a MenuBar no start.
-                consoleMenuItem = new CheckMenuItem("Mostrar Console");
-                consoleMenuItem.setSelected(EditorPrefs.isConsoleVisible());
-                consoleMenuItem.setOnAction(e -> setConsoleVisible(consoleMenuItem.isSelected()));
-
-                // Espelho do toggle da toolbar: ver a cena pela camera ativa do jogo.
-                CheckMenuItem cameraPreviewItem = new CheckMenuItem("Ver pela Câmera do Jogo");
-                cameraPreviewItem.setSelected(game.isCameraPreview());
-                if (cameraPreviewToggle != null) {
-                    cameraPreviewItem.selectedProperty()
-                            .bindBidirectional(cameraPreviewToggle.selectedProperty());
-                }
-                cameraPreviewItem.setOnAction(e -> setCameraPreview(cameraPreviewItem.isSelected()));
-
-                view.getItems().addAll(
-                    zoomInItem, zoomOutItem, zoom100Item, new SeparatorMenuItem(),
-                    resetCamItem, focusSelectedItem, frameAllItem, cameraPreviewItem, new SeparatorMenuItem(),
-                    showGridItem, snapToGridItem, gridSizeMenu, new SeparatorMenuItem(),
-                    showCollidersItem, showCameraBoundsItem, new SeparatorMenuItem(),
-                    consoleMenuItem
-                );
-
-        Menu help = new Menu("Ajuda");
-        MenuItem about = new MenuItem("Sobre");
-        about.setOnAction(e -> new Alert(Alert.AlertType.INFORMATION,
-                "IgnisEngine — editor JavaFX (Fase 3 da migracao).").showAndWait());
-        help.getItems().add(about);
-
-        return new MenuBar(file, buildEditMenu(), buildSceneMenu(), tools, view, help);
-    }
-
     // Menu "Editar": desfazer/refazer. Os rotulos/estado sao mantidos por
     // updateUndoRedoUi (via UndoManager.onChange).
-    private Menu buildEditMenu() {
+     Menu buildEditMenu() {
         Menu edit = new Menu("Editar");
         undoItem = new MenuItem("Desfazer");
         undoItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN));
@@ -663,7 +528,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Menu "Cena": criar/duplicar/renomear/deletar/reordenar entidades.
-    private Menu buildSceneMenu() {
+     Menu buildSceneMenu() {
         Menu scene = new Menu("Cena");
         MenuItem gerenciarCenarios = new MenuItem("Gerenciar Cenários…");
         gerenciarCenarios.setOnAction(e -> openSceneManager());
@@ -713,46 +578,6 @@ public class IgnisEditorApp extends Application {
         return scene;
     }
 
-    private ContextMenu buildHierarchyContextMenu() {
-        ContextMenu menu = new ContextMenu();
-        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
-        criarObjeto.setOnAction(e -> createEntity("GameObject"));
-        MenuItem criarCamera = new MenuItem("Criar Câmera");
-        criarCamera.setOnAction(e -> createEntity("Camera"));
-        menu.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem());
-        MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
-        dup.setOnAction(e -> duplicateSelected());
-        MenuItem ren = new MenuItem("Renomear… (F2)");
-        ren.setOnAction(e -> renameSelected());
-        MenuItem del = new MenuItem("Deletar (Delete)");
-        del.setOnAction(e -> deleteSelected());
-        MenuItem copyItem = new MenuItem("Copiar (Ctrl+C)");
-        copyItem.setOnAction(e -> copySelected());
-        MenuItem pasteItem = new MenuItem("Colar (Ctrl+V)");
-        pasteItem.setOnAction(e -> pasteSelected());
-
-        Menu ordenar = new Menu("Ordenar");
-        MenuItem up = new MenuItem("Mover para cima");
-        up.setOnAction(e -> moveSelected(-1));
-        MenuItem down = new MenuItem("Mover para baixo");
-        down.setOnAction(e -> moveSelected(1));
-        MenuItem top = new MenuItem("Mover para o topo");
-        top.setOnAction(e -> moveSelectedTo(Integer.MAX_VALUE));
-        MenuItem bottom = new MenuItem("Mover para o fundo");
-        bottom.setOnAction(e -> moveSelectedTo(0));
-        ordenar.getItems().addAll(up, down, top, bottom);
-
-        MenuItem savePrefab = new MenuItem("Salvar como Prefab…");
-        savePrefab.setOnAction(e -> saveSelectedAsPrefab());
-        MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
-        instPrefab.setOnAction(e -> instantiatePrefabDialog());
-
-        menu.getItems().addAll(dup, ren, del,
-                new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar,
-                new SeparatorMenuItem(), savePrefab, instPrefab);
-        return menu;
-    }
-
     // ---------------- Ciclo de vida do projeto ----------------
     // Tela de selecao inicial + abrir/criar/salvar/fechar/trocar projeto, com
     // persistencia de ultimo/recentes (EditorPrefs). Reproduz o fluxo do editor
@@ -762,7 +587,7 @@ public class IgnisEditorApp extends Application {
     // Mostra a tela de selecao em laco ate carregar um projeto ou o usuario sair.
     // exitOnCancel=true (startup/fechar): cancelar sem projeto encerra o app, como o Swing.
     // exitOnCancel=false (trocar): cancelar apenas mantem o estado atual.
-    private void showProjectStartup(Stage stage, boolean exitOnCancel) {
+     void showProjectStartup(Stage stage, boolean exitOnCancel) {
         while (true) {
             FxProjectStartupDialog.Choice c =
                     FxProjectStartupDialog.show(stage, listProjectIgnisFiles(), recentProjectFiles());
@@ -790,7 +615,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Abre via FileChooser (.ignis). Retorna true se carregou.
-    private boolean openProjectViaChooser(Stage stage) {
+     boolean openProjectViaChooser(Stage stage) {
         FileChooser fc = new FileChooser();
         fc.setTitle("Abrir projeto .ignis");
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Projeto Ignis (*.ignis)", "*.ignis"));
@@ -862,7 +687,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Cria um novo projeto no disco (estrutura + .ignis + Square central), como o Swing.
-    private boolean newProject(Stage stage) {
+     boolean newProject(Stage stage) {
         TextInputDialog dlg = new TextInputDialog("MyGame");
         dlg.setTitle("Novo projeto");
         dlg.setHeaderText(null);
@@ -932,7 +757,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Salva o projeto atual (sincroniza game -> Scene, depois IgnisProjectIO.save).
-    private void saveProject() {
+     void saveProject() {
         if (currentProject == null || currentIgnisFile == null) {
             setStatus("Nenhum projeto aberto para salvar.");
             return;
@@ -953,7 +778,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void saveProjectAs(Stage stage) {
+     void saveProjectAs(Stage stage) {
         if (currentProject == null) {
             setStatus("Nenhum projeto aberto.");
             return;
@@ -1377,7 +1202,7 @@ public class IgnisEditorApp extends Application {
 
     // Fecha o projeto atual e volta para a tela de selecao (espelha o ramo sem-projeto
     // de updateProjectRoot() do Swing: libera ScriptManager e limpa o estado).
-    private void closeProject(Stage stage) {
+     void closeProject(Stage stage) {
         this.currentProject = null;
         this.currentIgnisFile = null;
         this.projectFolder = null;
@@ -1400,7 +1225,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // (Re)constroi o submenu "Abrir recente" a partir do EditorPrefs (limpa inexistentes).
-    private void rebuildRecentMenu(Stage stage) {
+     void rebuildRecentMenu(Stage stage) {
         if (recentMenu == null) return;
         recentMenu.getItems().clear();
         java.util.List<File> recents = recentProjectFiles();
@@ -1479,7 +1304,7 @@ public class IgnisEditorApp extends Application {
     // Salva tamanho/posicao da janela e posicoes dos divisores (best-effort).
     // Quando maximizada, nao sobrescreve os bounds restaurados (passa NaN) para
     // preservar o tamanho "janela" anterior; apenas grava o flag de maximizacao.
-    private void saveLayout() {
+     void saveLayout() {
         try {
             if (!EditorPrefs.isRememberLayout()) return;
             Stage s = primaryStage;
@@ -1546,7 +1371,7 @@ public class IgnisEditorApp extends Application {
         return true;
     }
 
-    private void openAudioEditor() {
+     void openAudioEditor() {
         try {
             FxAudioEditor editor = new FxAudioEditor();
             editor.show();
@@ -1555,7 +1380,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openImageEditor() {
+     void openImageEditor() {
         try {
             File folder = projectFolder != null ? projectFolder : IgnisProjectIO.getProjectsRootFolder();
             FxImageEditor editor = new FxImageEditor(folder);
@@ -1565,7 +1390,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openAnimationEditor() {
+     void openAnimationEditor() {
         if (!requireProject()) return;
         if (selected == null) {
             new Alert(Alert.AlertType.INFORMATION,
@@ -1581,7 +1406,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openNotes() {
+     void openNotes() {
         if (!requireProject()) return;
         try {
             FxNotesWindow notes = new FxNotesWindow(projectFolder, null);
@@ -1591,7 +1416,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openCommunity() {
+     void openCommunity() {
         if (!requireProject()) return;
         try {
             FxCommunityWindow community = new FxCommunityWindow(projectFolder);
@@ -1603,7 +1428,7 @@ public class IgnisEditorApp extends Application {
 
     // Editor de Codigo nativo (FxCodeEditor / RichTextFX). Liga a ultima janela-ferramenta
     // do Gemini ao menu. Sem editor Swing acoplado: passa null (FxCodeEditor ja trata null).
-    private void openCodeEditor() {
+     void openCodeEditor() {
         if (!requireProject()) return;
         try {
             com.ignis.core.ScriptManager sm = game.getScriptManager();
@@ -1659,7 +1484,7 @@ public class IgnisEditorApp extends Application {
 
     // Janela de Configuracoes centralizada (tema, Auto Save, editor de codigo, viewport).
     // Reusa a instancia se ja aberta (apenas traz ao foco).
-    private void openSettings() {
+     void openSettings() {
         try {
             if (settingsWindow != null && settingsWindow.isShowing()) {
                 settingsWindow.toFront();
@@ -1697,7 +1522,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Build nativo em JavaFX (Fase 3, passo 1).
-    private void openBuildDialog() {
+     void openBuildDialog() {
         if (!requireProject() || currentIgnisFile == null) return;
         String name = currentIgnisFile.getName().replace(".ignis", "");
         try {
@@ -1744,7 +1569,7 @@ public class IgnisEditorApp extends Application {
         setStatus("Parado (edicao)");
     }
 
-    private void stopGameLoop() {
+     void stopGameLoop() {
         if (!playing) return;
         try {
             game.stopWorld();
@@ -1837,7 +1662,7 @@ public class IgnisEditorApp extends Application {
             }
         });
 
-        ContextMenu viewportMenu = buildViewportContextMenu();
+        ContextMenu viewportMenu = menus.buildViewportContextMenu();
         canvas.setOnContextMenuRequested(e -> {
             game.cancelDrag();
             GameObject clicked = game.getObjectAt((int) e.getX(), (int) e.getY());
@@ -2081,7 +1906,7 @@ public class IgnisEditorApp extends Application {
                     TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
                     ContextMenu menu;
                     if (sel != null && sel != hierarchyRoot) {
-                        menu = buildHierarchyContextMenu();
+                        menu = menus.buildHierarchyContextMenu();
                     } else {
                         menu = new ContextMenu();
                         MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
@@ -2146,7 +1971,7 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Mecanicas de edicao da cena ----------------
 
-    private void createEntity(String type) {
+     void createEntity(String type) {
         if (!requireProject()) return;
         try {
             GameObject obj = com.ignis.core.EntityFactory.create(type);
@@ -2178,7 +2003,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void duplicateSelected() {
+     void duplicateSelected() {
         java.util.List<GameObject> targets = allSelected();
         if (targets.isEmpty()) { setStatus("Nada selecionado para duplicar."); return; }
         try {
@@ -2243,7 +2068,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void deleteSelected() {
+     void deleteSelected() {
         java.util.List<GameObject> targets = allSelected();
         if (targets.isEmpty()) { setStatus("Nada selecionado para deletar."); return; }
         
@@ -2313,7 +2138,7 @@ public class IgnisEditorApp extends Application {
         );
     }
 
-    private void renameSelected() {
+     void renameSelected() {
         if (selected == null) { setStatus("Nada selecionado para renomear."); return; }
         GameObject go = selected;
         TextInputDialog dlg = new TextInputDialog(go.getName());
@@ -2335,7 +2160,7 @@ public class IgnisEditorApp extends Application {
                 () -> { go.setName(newName); refreshHierarchy(); selectEntity(go); markProjectDirty(); });
     }
 
-    private void moveSelected(int delta) {
+     void moveSelected(int delta) {
         if (selected == null) return;
         GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
         int oldIdx = game.getEntities().indexOf(toReselect);
@@ -2347,7 +2172,7 @@ public class IgnisEditorApp extends Application {
         if (newIdx != oldIdx) { markProjectDirty(); pushReorder(toReselect, oldIdx, newIdx); }
     }
 
-    private void moveSelectedTo(int index) {
+     void moveSelectedTo(int index) {
         if (selected == null) return;
         GameObject toReselect = selected; // refreshHierarchy() zera 'selected' via listener
         int oldIdx = game.getEntities().indexOf(toReselect);
@@ -2392,7 +2217,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Salva o objeto selecionado como prefab reutilizavel.
-    private void saveSelectedAsPrefab() {
+     void saveSelectedAsPrefab() {
         if (selected == null) { setStatus("Nada selecionado para salvar como prefab."); return; }
         if (!requireProject()) return;
         com.ignis.core.PrefabManager pm = getPrefabManager();
@@ -2424,7 +2249,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Escolhe um prefab salvo e o instancia na cena atual.
-    private void instantiatePrefabDialog() {
+     void instantiatePrefabDialog() {
         if (!requireProject()) return;
         com.ignis.core.PrefabManager pm = getPrefabManager();
         if (pm == null) return;
@@ -2729,7 +2554,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Mostra/oculta o painel de Console (dock inferior) e persiste a preferencia.
-    private void setConsoleVisible(boolean visible) {
+     void setConsoleVisible(boolean visible) {
         if (centerSplit == null || console == null) return;
         boolean present = centerSplit.getItems().contains(console);
         if (visible && !present) {
@@ -3019,6 +2844,7 @@ public class IgnisEditorApp extends Application {
     // ---------------- Inspector ----------------
 
     private final InspectorSectionBuilder inspector = new InspectorSectionBuilder(this);
+    private final EditorMenuBuilder menus = new EditorMenuBuilder(this);
 
     private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
@@ -4218,7 +4044,7 @@ public class IgnisEditorApp extends Application {
 
     // Liga/desliga o preview da camera do jogo na Scene View e sincroniza o botao
     // da toolbar (que tambem pode ser acionado pelo menu de contexto do viewport).
-    private void setCameraPreview(boolean enabled) {
+     void setCameraPreview(boolean enabled) {
         game.setCameraPreview(enabled);
         if (cameraPreviewToggle != null && cameraPreviewToggle.isSelected() != enabled) {
             cameraPreviewToggle.setSelected(enabled);
@@ -4231,7 +4057,7 @@ public class IgnisEditorApp extends Application {
 
     // Navegacao da Scene View: sempre na camera de VISAO (camera livre do editor;
     // ou a camera do jogo quando o preview esta ligado / durante o Play).
-    private void zoomCamera(double factor) {
+     void zoomCamera(double factor) {
         com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
             cam.setZoom(cam.getZoom() * factor);
@@ -4239,7 +4065,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void resetCamera() {
+     void resetCamera() {
         com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
             cam.setPosition(0, 0);
@@ -4249,7 +4075,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void focusCameraOnSelected() {
+     void focusCameraOnSelected() {
         GameObject sel = this.selected;
         com.ignis.core.Camera cam = game.getViewCamera();
         if (sel != null && cam != null) {
@@ -4262,7 +4088,7 @@ public class IgnisEditorApp extends Application {
 
     // Enquadra todos os objetos visiveis da cena na Scene View: centraliza a camera
     // de visao no bounding box do conjunto e ajusta o zoom para caber com folga.
-    private void frameAllObjects() {
+     void frameAllObjects() {
         com.ignis.core.Camera cam = game.getViewCamera();
         if (cam == null) return;
         double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
@@ -4295,7 +4121,7 @@ public class IgnisEditorApp extends Application {
         setStatus(String.format("Enquadrados %d objetos (zoom %.0f%%).", count, zoom * 100));
     }
 
-    private void updateCameraLabels() {
+     void updateCameraLabels() {
         if (cameraPosLabel == null || cameraZoomLabel == null) return;
         com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
@@ -4308,14 +4134,14 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void copySelected() {
+     void copySelected() {
         if (selected != null) {
             clipboardObject = selected;
             setStatus("Copiado: " + selected.getName());
         }
     }
 
-    private void pasteSelected() {
+     void pasteSelected() {
         if (clipboardObject != null) {
             try {
                 GameObject original = clipboardObject;
@@ -4341,41 +4167,6 @@ public class IgnisEditorApp extends Application {
                 new Alert(Alert.AlertType.ERROR, "Erro ao colar objeto:\n" + ex.getMessage()).showAndWait();
             }
         }
-    }
-
-    private ContextMenu buildViewportContextMenu() {
-        ContextMenu menu = new ContextMenu();
-
-        MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
-        criarObjeto.setOnAction(e -> createEntity("GameObject"));
-        MenuItem criarCamera = new MenuItem("Criar Câmera");
-        criarCamera.setOnAction(e -> createEntity("Camera"));
-        menu.getItems().addAll(criarObjeto, criarCamera, new SeparatorMenuItem());
-
-        MenuItem dup = new MenuItem("Duplicar (Ctrl+D)");
-        dup.setOnAction(e -> duplicateSelected());
-
-        MenuItem ren = new MenuItem("Renomear… (F2)");
-        ren.setOnAction(e -> renameSelected());
-
-        MenuItem del = new MenuItem("Deletar (Delete)");
-        del.setOnAction(e -> deleteSelected());
-
-        MenuItem copyItem = new MenuItem("Copiar (Ctrl+C)");
-        copyItem.setOnAction(e -> copySelected());
-
-        MenuItem pasteItem = new MenuItem("Colar (Ctrl+V)");
-        pasteItem.setOnAction(e -> pasteSelected());
-
-        MenuItem savePrefab = new MenuItem("Salvar como Prefab…");
-        savePrefab.setOnAction(e -> saveSelectedAsPrefab());
-        MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
-        instPrefab.setOnAction(e -> instantiatePrefabDialog());
-
-        menu.getItems().addAll(dup, ren, del,
-                new SeparatorMenuItem(), copyItem, pasteItem,
-                new SeparatorMenuItem(), savePrefab, instPrefab);
-        return menu;
     }
 
     private void updateInspectorFields() {
