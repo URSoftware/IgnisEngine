@@ -9,6 +9,17 @@
 ### Suporte a bibliotecas privadas de projeto (`project/libs/`)
 `ScriptManager` compilava scripts um arquivo por vez, sem incluir os demais `.java` do projeto nem `.class` pré-compilados no classpath — qualquer projeto com lógica própria espalhada em mais de um arquivo (ex: classes de domínio reutilizadas por vários scripts) esbarrava em `cannot find symbol` ao compilar pelo editor. Agora `ScriptManager` procura `.jar` soltos em `project/libs/` e os inclui tanto no classpath de compilação (`compileScript`) quanto no `URLClassLoader` de runtime (`reloadClassLoader`) — por-projeto, opcional, sem acoplar a engine a nenhuma dependência específica de jogo. Ver `doc/PROJECT_LIBS_GUIDE.md`. Validado com o projeto `RimuruSurvivors` (`domain-lib` empacotado em `project/libs/rimuru-survivors-domain.jar`, 23 testes JUnit).
 
+### Cache de prefab — fim do I/O por spawn
+`PrefabManager.instantiatePrefab` lia o `.prefab.json` do disco e **reparseava o JSON em toda chamada**. Num jogo com spawner (orbes, projéteis) isso é leitura de disco + parse centenas de vezes por segundo — era o custo real por trás das milhares de linhas `Prefab RuntimeVisual instanciada` no log da sessão que estourou a memória do editor em 15/07/2026.
+
+- O JSON parseado passa a ser **cacheado por arquivo**, com o `lastModified` como chave de validade: editar o prefab (no editor ou fora) invalida sozinho — o cache não congela o prefab.
+- `savePrefab`/`deletePrefab` invalidam explicitamente: a resolução de mtime do sistema de arquivos pode ser de 1s, e dois saves no mesmo segundo serviriam a versão velha.
+- **Seguro por construção:** a desserialização apenas *lê* o JSON — nenhum dos 17 overrides de `loadProperties` muta o objeto recebido —, então a mesma instância pode servir todos os spawns.
+- `PrefabManagerCacheTest`: reuso sem reler o arquivo (reescrevendo o conteúdo mas preservando o mtime), identidade/posição próprias por instância, reparse após edição, invalidação no save, e prefab inexistente ainda retornando `null`.
+
+### Mural de coordenação recusa mensagem em branco
+`send_message` declarava `text` como obrigatório no schema, mas nada validava o conteúdo: string vazia era aceita e virava uma linha em branco no mural. Entre agentes isso é pior que um erro — quem lê vê `Codex -> Claude:` sem texto e não distingue falha de transporte de "o colega não tinha nada a dizer". Aconteceu de verdade em 16/07/2026 (seq 13 e 14, duas mensagens seguidas). A guarda ficou em `McpCoordination.sendMessage` (não no handler da ferramenta): protege qualquer chamador da camada e é testável headless, já que `call()` sem conflito despacha para a FX thread, ausente na suíte.
+
 ### Coordenação multi-agente aplicada de verdade (MCP)
 O MCP já tinha a camada de coordenação (`McpCoordination`: presença, mural de mensagens, claims e quadro de tarefas), mas ela era **decorativa fora dos scripts**: o claim só era verificado em `write_script`/`create_script`. Dois agentes podiam reservar `objeto:Hero` e mesmo assim ambos chamarem `set_object_transform` nele — as outras ~115 ferramentas ignoravam claims. Além disso não havia identificação do chamador: o console logava `[MCP] create_object …`, sem dizer **quem** chamou.
 
