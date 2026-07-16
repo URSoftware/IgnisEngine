@@ -237,7 +237,17 @@ public class UIButton extends UIComponent {
             return;
         }
         try {
-            iconImage = javax.imageio.ImageIO.read(new java.io.File(iconPath));
+            // Via AssetResolver, como UIImage e os sprites: com new File(iconPath) um
+            // caminho relativo ("assets/sprites/x.png") resolvia contra o diretorio de
+            // trabalho do processo em vez da pasta do projeto, e o icone sumia — o
+            // catch abaixo transformava isso numa linha de log facil de nao ver.
+            java.io.File file = com.ignis.core.AssetResolver.resolve(iconPath);
+            if (file == null || !file.exists()) {
+                IgnisLogger.warn("[UIButton] Icone nao encontrado: " + iconPath);
+                iconImage = null;
+                return;
+            }
+            iconImage = javax.imageio.ImageIO.read(file);
         } catch (Exception e) {
             IgnisLogger.error("[UIButton] Erro ao carregar ícone: " + e.getMessage());
             iconImage = null;
