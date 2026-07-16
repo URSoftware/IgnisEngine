@@ -90,8 +90,8 @@ public class IgnisEditorApp extends Application {
         return instance;
     }
 
-    private final Game game = new Game();
-    private GameObject selected;
+    final Game game = new Game();
+    GameObject selected;
     private boolean suppressInspectorEvents = false;
     private boolean suppressSelectionEvents = false;
     private File projectFolder;
@@ -117,7 +117,7 @@ public class IgnisEditorApp extends Application {
 
     // Desfazer/Refazer (padrao Command). Cobre criar/deletar/duplicar/colar/
     // renomear/reordenar e transformacoes por gizmo (via TransformListener).
-    private final UndoManager undoManager = new UndoManager();
+    final UndoManager undoManager = new UndoManager();
     private MenuItem undoItem;
     private MenuItem redoItem;
     // Estado capturado no inicio de um arraste de gizmo (para o comando de transformacao).
@@ -147,7 +147,7 @@ public class IgnisEditorApp extends Application {
     private TextField nameField, xField, yField, wField, hField, rotField;
     private CheckBox visibleCheck;
     private GridPane inspectorTransformGrid;
-    private String selectedComponentName = null;
+    String selectedComponentName = null;
     private Label inspectorTitleLabel;
     // Snapshot para desfazer edicoes digitadas no Inspector (valor capturado no foco).
     private GameObject inspectorEditObj;
@@ -2724,7 +2724,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Marca alteracoes nao salvas no projeto (consumido pelo Auto Save).
-    private void markProjectDirty() {
+    void markProjectDirty() {
         projectDirty = true;
     }
 
@@ -2962,7 +2962,7 @@ public class IgnisEditorApp extends Application {
             }
         }
 
-    private void refreshHierarchy() {
+    void refreshHierarchy() {
         hierarchyRoot.setValue("Cena  (z menor = atras)");
         hierarchyRoot.getChildren().clear();
         for (GameObject go : game.getEntities()) {
@@ -3017,6 +3017,8 @@ public class IgnisEditorApp extends Application {
     }
 
     // ---------------- Inspector ----------------
+
+    private final InspectorSectionBuilder inspector = new InspectorSectionBuilder(this);
 
     private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
@@ -3248,7 +3250,7 @@ public class IgnisEditorApp extends Application {
     // ligados APOS definir o valor inicial, para que o setup nao dispare escritas.
 
     @SuppressWarnings("deprecation") // checa colliderType legado para oferecer migracao (item 8c)
-    private void rebuildInspectorExtras(GameObject go) {
+    void rebuildInspectorExtras(GameObject go) {
         if (inspectorExtras == null) return;
         inspectorExtras.getChildren().clear();
         if (go == null) return;
@@ -3257,17 +3259,17 @@ public class IgnisEditorApp extends Application {
             if (selectedComponentName.equals("SpriteComponent")) {
                 SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
                 if (spriteComp != null) {
-                    inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+                    inspectorExtras.getChildren().add(inspector.buildSpriteComponentSection(go, spriteComp));
                 }
             } else if (selectedComponentName.equals("ColliderComponent")) {
                 ColliderComponent colliderComp = go.getComponent(ColliderComponent.class);
                 if (colliderComp != null) {
-                    inspectorExtras.getChildren().add(buildColliderComponentSection(go, colliderComp));
+                    inspectorExtras.getChildren().add(inspector.buildColliderComponentSection(go, colliderComp));
                 }
             } else if (selectedComponentName.equals("HealthComponent")) {
                 HealthComponent healthComp = go.getComponent(HealthComponent.class);
                 if (healthComp != null) {
-                    inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
+                    inspectorExtras.getChildren().add(inspector.buildHealthComponentSection(go, healthComp));
                 }
             } else if (selectedComponentName.equals("AnimationComponent")) {
                 AnimationComponent animationComp = go.getComponent(AnimationComponent.class);
@@ -3291,21 +3293,21 @@ public class IgnisEditorApp extends Application {
             // Modo classico: Renderiza todos
             SpriteComponent spriteComp = go.getComponent(SpriteComponent.class);
             if (spriteComp != null) {
-                inspectorExtras.getChildren().add(buildSpriteComponentSection(go, spriteComp));
+                inspectorExtras.getChildren().add(inspector.buildSpriteComponentSection(go, spriteComp));
             }
             
             ColliderComponent colliderComp = go.getComponent(ColliderComponent.class);
             if (colliderComp != null) {
-                inspectorExtras.getChildren().add(buildColliderComponentSection(go, colliderComp));
+                inspectorExtras.getChildren().add(inspector.buildColliderComponentSection(go, colliderComp));
             } else if (go.getColliderType() != com.ignis.core.IgnisSampleCollisions.ColliderType.NONE) {
                 // Objeto ainda no par legado colliderType/collisionMode (aposentado no
                 // item 8c): oferece migracao para o ColliderComponent, fonte unica.
-                inspectorExtras.getChildren().add(buildLegacyColliderMigrationSection(go));
+                inspectorExtras.getChildren().add(inspector.buildLegacyColliderMigrationSection(go));
             }
 
             HealthComponent healthComp = go.getComponent(HealthComponent.class);
             if (healthComp != null) {
-                inspectorExtras.getChildren().add(buildHealthComponentSection(go, healthComp));
+                inspectorExtras.getChildren().add(inspector.buildHealthComponentSection(go, healthComp));
             }
 
             AnimationComponent animationComp = go.getComponent(AnimationComponent.class);
@@ -3315,33 +3317,33 @@ public class IgnisEditorApp extends Application {
 
             RigidbodyComponent rigidbodyComp = go.getComponent(RigidbodyComponent.class);
             if (rigidbodyComp != null) {
-                inspectorExtras.getChildren().add(buildRigidbodyComponentSection(go, rigidbodyComp));
+                inspectorExtras.getChildren().add(inspector.buildRigidbodyComponentSection(go, rigidbodyComp));
             }
             if (go instanceof com.ignis.core.Camera) {
-                inspectorExtras.getChildren().add(buildCameraSection((com.ignis.core.Camera) go));
+                inspectorExtras.getChildren().add(inspector.buildCameraSection((com.ignis.core.Camera) go));
             }
             // Entidades da Fase C: cada uma expoe suas proprias propriedades.
             if (go instanceof com.ignis.core.BackgroundLayer) {
                 inspectorExtras.getChildren().add(
-                        buildBackgroundLayerSection((com.ignis.core.BackgroundLayer) go));
+                        inspector.buildBackgroundLayerSection((com.ignis.core.BackgroundLayer) go));
             } else if (go instanceof com.ignis.core.ParticleEmitter) {
                 inspectorExtras.getChildren().add(
-                        buildParticleEmitterSection((com.ignis.core.ParticleEmitter) go));
+                        inspector.buildParticleEmitterSection((com.ignis.core.ParticleEmitter) go));
             } else if (go instanceof com.ignis.core.TilemapObject) {
                 inspectorExtras.getChildren().add(
-                        buildTilemapSection((com.ignis.core.TilemapObject) go));
+                        inspector.buildTilemapSection((com.ignis.core.TilemapObject) go));
             } else if (go instanceof com.ignis.core.TextObject) {
                 inspectorExtras.getChildren().add(
-                        buildTextObjectSection((com.ignis.core.TextObject) go));
+                        inspector.buildTextObjectSection((com.ignis.core.TextObject) go));
             } else if (go instanceof com.ignis.core.LightObject) {
                 inspectorExtras.getChildren().add(
-                        buildLightObjectSection((com.ignis.core.LightObject) go));
+                        inspector.buildLightObjectSection((com.ignis.core.LightObject) go));
             }
             if (go.getParent() != null) {
-                inspectorExtras.getChildren().add(buildHierarchySection(go));
+                inspectorExtras.getChildren().add(inspector.buildHierarchySection(go));
             }
-            inspectorExtras.getChildren().add(buildTagsLayersSection(go));
-            inspectorExtras.getChildren().add(buildScriptsSection(go));
+            inspectorExtras.getChildren().add(inspector.buildTagsLayersSection(go));
+            inspectorExtras.getChildren().add(inspector.buildScriptsSection(go));
         }
     }
 
@@ -3423,95 +3425,15 @@ public class IgnisEditorApp extends Application {
         inspectorExtras.getChildren().add(panel);
     }
 
-    private Label sectionTitle(String text) {
-        Label l = new Label(text);
-        l.getStyleClass().add("panel-title");
-        VBox.setMargin(l, new Insets(8, 0, 2, 0));
-        return l;
-    }
-
-    // Cor (so para objetos que expoem getColor/setColor via reflexao) + Sprite.
-    private javafx.scene.Node buildSpriteComponentSection(GameObject go, SpriteComponent spriteComp) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("SpriteComponent"));
-
-        // 1. Textura / Sprite
-        Label spriteVal = new Label(spriteLabel(spriteComp.getTexture() != null ? spriteComp.getTexture().getPath() : null));
-        spriteVal.getStyleClass().add("field-label");
-        spriteVal.setWrapText(true);
-        Button pick = new Button("Escolher…");
-        pick.setOnAction(e -> {
-            File f = chooseSpriteFile();
-            if (f != null) {
-                String path = importSpriteToProject(f);
-                spriteComp.setTexture(new Texture2D(path));
-                spriteVal.setText(spriteLabel(path));
-                markProjectDirty();
-                // update hierarchy when texture changes
-                refreshHierarchy();
-            }
-        });
-        Button clear = new Button("Limpar");
-        clear.setOnAction(e -> {
-            spriteComp.setTexture(null);
-            spriteVal.setText(spriteLabel(null));
-            markProjectDirty();
-            refreshHierarchy();
-        });
-        Label spriteLbl = new Label("Sprite");
-        spriteLbl.getStyleClass().add("field-label");
-        sec.getChildren().add(new VBox(4, spriteLbl, spriteVal, new HBox(6, pick, clear)));
-
-        // 2. Tipo de Forma (shapeType)
-        ComboBox<String> shapeBox = new ComboBox<>();
-        shapeBox.getItems().addAll("None", "Square", "Circle", "Triangle", "Star", "Pentagon");
-        shapeBox.setValue(spriteComp.getShapeType());
-        shapeBox.setOnAction(e -> {
-            spriteComp.setShapeType(shapeBox.getValue());
-            markProjectDirty();
-        });
-        sec.getChildren().add(labeledInspectorRow("Forma", shapeBox));
-
-        // 3. Cor / Tint
-        ColorPicker tintPicker = new ColorPicker();
-        if (spriteComp.getTint() != null) {
-            tintPicker.setValue(awtToFx(spriteComp.getTint()));
-        }
-        tintPicker.setOnAction(e -> {
-            spriteComp.setTint(fxToAwt(tintPicker.getValue()));
-            markProjectDirty();
-        });
-        sec.getChildren().add(labeledInspectorRow("Cor / Tint", tintPicker));
-
-        // 4. FlipX e FlipY
-        CheckBox fxCheck = new CheckBox("Flip X");
-        fxCheck.setSelected(spriteComp.isFlipX());
-        fxCheck.setOnAction(e -> {
-            spriteComp.setFlipX(fxCheck.isSelected());
-            markProjectDirty();
-        });
-
-        CheckBox fyCheck = new CheckBox("Flip Y");
-        fyCheck.setSelected(spriteComp.isFlipY());
-        fyCheck.setOnAction(e -> {
-            spriteComp.setFlipY(fyCheck.isSelected());
-            markProjectDirty();
-        });
-
-        sec.getChildren().add(new HBox(12, fxCheck, fyCheck));
-
-        return sec;
-    }
-
     // Rotina comum apos adicionar/remover um componente (inclusive por undo/redo):
     // atualiza a Hierarchy, reconstroi o Inspector e marca o projeto como modificado.
-    private void afterComponentChange(GameObject go) {
+    void afterComponentChange(GameObject go) {
         refreshHierarchy();
         rebuildInspectorExtras(go);
         markProjectDirty();
     }
 
-    private void openAddComponentDialog(GameObject go) {
+    void openAddComponentDialog(GameObject go) {
         if (!requireProject()) return;
         try {
             com.ignis.core.ScriptManager sm = game.getScriptManager();
@@ -3619,39 +3541,10 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    // Seccao de migracao do collider legado (GameObject.colliderType/collisionMode,
-    // aposentado no item 8c). So aparece para objetos que ainda usam o par legado e
-    // nao tem ColliderComponent. Converte para um ColliderComponent equivalente.
-    @SuppressWarnings("deprecation") // le a API legada de collider para migra-la
-    private javafx.scene.Node buildLegacyColliderMigrationSection(GameObject go) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Collider (legado)"));
-
-        Label info = new Label("Este objeto usa o sistema de collider antigo ("
-                + go.getColliderType() + " / " + go.getCollisionMode()
-                + "). Migre para o ColliderComponent para editar a hitbox no viewport.");
-        info.setWrapText(true);
-        info.setStyle("-fx-text-fill: #c8a45a; -fx-font-style: italic;");
-
-        Button migrate = new Button("Migrar para ColliderComponent");
-        migrate.setOnAction(e -> {
-            ColliderComponent cc = convertLegacyCollider(go);
-            go.addComponent(cc);
-            selectedComponentName = null;
-            markProjectDirty();
-            refreshHierarchy();
-            rebuildInspectorExtras(go);
-            setStatus("Collider migrado para ColliderComponent.");
-        });
-
-        sec.getChildren().addAll(info, migrate);
-        return sec;
-    }
-
     // Cria um ColliderComponent equivalente ao collider legado do objeto, preservando
     // forma, modo (trigger) e tamanho/offset quando disponiveis.
     @SuppressWarnings("deprecation") // le/aposenta a API legada de collider ao migrar
-    private ColliderComponent convertLegacyCollider(GameObject go) {
+    ColliderComponent convertLegacyCollider(GameObject go) {
         ColliderComponent cc = new ColliderComponent();
         com.ignis.core.IgnisSampleCollisions.ColliderType type = go.getColliderType();
         cc.setShape(type == com.ignis.core.IgnisSampleCollisions.ColliderType.CIRCLE ? "Sphere" : "Box");
@@ -3677,493 +3570,12 @@ public class IgnisEditorApp extends Application {
         return cc;
     }
 
-    // Seção Tags & Camadas: tag livre (busca/gameplay) + camada nomeada (agrupamento).
-    private javafx.scene.Node buildTagsLayersSection(GameObject go) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Tags & Camadas"));
-
-        TextField tagField = new TextField(go.getTag());
-        tagField.setPromptText("(sem tag)");
-        tagField.textProperty().addListener((o, a, b) -> { go.setTag(b); markProjectDirty(); });
-
-        ComboBox<String> layerBox = new ComboBox<>();
-        layerBox.setEditable(true);
-        java.util.LinkedHashSet<String> layers = new java.util.LinkedHashSet<>(java.util.Arrays.asList(
-                "Default", "Background", "Foreground", "Player", "Enemy", "UI"));
-        // Inclui camadas ja usadas na cena para reaproveitar.
-        for (GameObject e : game.getEntities()) {
-            if (e.getLayer() != null && !e.getLayer().isEmpty()) layers.add(e.getLayer());
-        }
-        layerBox.getItems().addAll(layers);
-        layerBox.setValue(go.getLayer());
-        layerBox.setMaxWidth(Double.MAX_VALUE);
-        Runnable applyLayer = () -> {
-            String v = layerBox.getValue();
-            go.setLayer(v);
-            markProjectDirty();
-        };
-        layerBox.setOnAction(e -> applyLayer.run());
-        layerBox.getEditor().focusedProperty().addListener((o, a, focused) -> { if (!focused) applyLayer.run(); });
-
-        sec.getChildren().addAll(labeledInspectorRow("Tag", tagField),
-                labeledInspectorRow("Camada", layerBox));
-        return sec;
-    }
-
-    private javafx.scene.Node buildCameraSection(com.ignis.core.Camera cam) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Camera"));
-
-        TextField zoom = new TextField(String.valueOf(cam.getZoom()));
-        Runnable applyZoom = () -> { cam.setZoom(parseD(zoom.getText(), cam.getZoom())); markProjectDirty(); };
-        zoom.setOnAction(e -> applyZoom.run());
-        zoom.focusedProperty().addListener((o, a, focused) -> { if (!focused) applyZoom.run(); });
-
-        CheckBox active = new CheckBox("Camera ativa");
-        active.setSelected(cam.isActiveCamera());
-        active.selectedProperty().addListener((o, a, b) -> { cam.setActive(b); markProjectDirty(); });
-
-        sec.getChildren().addAll(labeledInspectorRow("Zoom", zoom), active);
-        return sec;
-    }
-
     // ---- Helpers de campo do Inspector (commit no Enter e ao perder o foco) ----
     // Evitam repetir o boilerplate TextField + parse + markProjectDirty em cada
     // propriedade das secoes da Fase C (fundo, particulas, tilemap).
 
-    private HBox doubleRow(String label, java.util.function.DoubleSupplier get,
-                           java.util.function.DoubleConsumer set) {
-        TextField tf = new TextField(String.valueOf(get.getAsDouble()));
-        Runnable apply = () -> { set.accept(parseD(tf.getText(), get.getAsDouble())); markProjectDirty(); };
-        tf.setOnAction(e -> apply.run());
-        tf.focusedProperty().addListener((o, a, focused) -> { if (!focused) apply.run(); });
-        return labeledInspectorRow(label, tf);
-    }
-
-    private HBox intRow(String label, java.util.function.IntSupplier get,
-                        java.util.function.IntConsumer set) {
-        TextField tf = new TextField(String.valueOf(get.getAsInt()));
-        Runnable apply = () -> { set.accept(parseI(tf.getText(), get.getAsInt())); markProjectDirty(); };
-        tf.setOnAction(e -> apply.run());
-        tf.focusedProperty().addListener((o, a, focused) -> { if (!focused) apply.run(); });
-        return labeledInspectorRow(label, tf);
-    }
-
-    private CheckBox checkRow(String label, boolean initial, java.util.function.Consumer<Boolean> set) {
-        CheckBox cb = new CheckBox(label);
-        cb.setSelected(initial);
-        cb.selectedProperty().addListener((o, a, b) -> { set.accept(b); markProjectDirty(); });
-        return cb;
-    }
-
-    /** Secao do Inspector para camadas de fundo com parallax (Fase C). */
-    private javafx.scene.Node buildBackgroundLayerSection(com.ignis.core.BackgroundLayer bg) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Camada de Fundo (Parallax)"));
-
-        TextField path = new TextField(bg.getImagePath() != null ? bg.getImagePath() : "");
-        path.setPromptText("assets/sprites/ceu.png");
-        Runnable applyPath = () -> { bg.setImagePath(path.getText().trim()); markProjectDirty(); };
-        path.setOnAction(e -> applyPath.run());
-        path.focusedProperty().addListener((o, a, f) -> { if (!f) applyPath.run(); });
-
-        sec.getChildren().addAll(
-                labeledInspectorRow("Sprite", path),
-                doubleRow("Parallax X", bg::getParallaxX, bg::setParallaxX),
-                doubleRow("Parallax Y", bg::getParallaxY, bg::setParallaxY),
-                checkRow("Repetir em X", bg.isRepeatX(), bg::setRepeatX),
-                checkRow("Repetir em Y", bg.isRepeatY(), bg::setRepeatY));
-        Label dica = new Label("0 = fixo no mundo · 1 = preso à câmera");
-        dica.getStyleClass().add("toolbar-label");
-        sec.getChildren().add(dica);
-        return sec;
-    }
-
-    /** Secao do Inspector para emissores de particulas (Fase C). */
-    private javafx.scene.Node buildParticleEmitterSection(com.ignis.core.ParticleEmitter pe) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Emissor de Partículas"));
-
-        Button burst = new Button("Disparar rajada (50)");
-        burst.setOnAction(e -> pe.burst(50));
-
-        sec.getChildren().addAll(
-                checkRow("Emitindo", pe.isEmitting(), pe::setEmitting),
-                doubleRow("Taxa (part/s)", pe::getEmissionRate, pe::setEmissionRate),
-                intRow("Máx. partículas", pe::getMaxParticles, pe::setMaxParticles),
-                doubleRow("Vida (s)", pe::getLifetime, pe::setLifetime),
-                doubleRow("Velocidade X", pe::getVelX, pe::setVelX),
-                doubleRow("Velocidade Y", pe::getVelY, pe::setVelY),
-                doubleRow("Gravidade Y", pe::getGravityY, pe::setGravityY),
-                doubleRow("Tamanho inicial", pe::getSizeStart, pe::setSizeStart),
-                doubleRow("Tamanho final", pe::getSizeEnd, pe::setSizeEnd),
-                burst);
-        return sec;
-    }
-
-    /** Secao do Inspector para tilemaps (Fase C). Pintura fica no viewport/MCP. */
-    private javafx.scene.Node buildTilemapSection(com.ignis.core.TilemapObject tm) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Tilemap"));
-
-        Label info = new Label(String.format("%d x %d células de %dx%d px · %d camada(s)",
-                tm.getCols(), tm.getRows(), tm.getTileW(), tm.getTileH(), tm.getLayerCount()));
-        info.getStyleClass().add("toolbar-label");
-
-        TextField tileset = new TextField(tm.getTilesetPath() != null ? tm.getTilesetPath() : "");
-        tileset.setPromptText("assets/tilesets/dungeon.png");
-        Runnable applyTs = () -> { tm.setTilesetPath(tileset.getText().trim()); markProjectDirty(); };
-        tileset.setOnAction(e -> applyTs.run());
-        tileset.focusedProperty().addListener((o, a, f) -> { if (!f) applyTs.run(); });
-
-        Button addLayer = new Button("Adicionar camada");
-        addLayer.setOnAction(e -> {
-            tm.addLayer();
-            markProjectDirty();
-            rebuildInspectorExtras(selected);
-        });
-        Button clearLayer = new Button("Limpar camada 0");
-        clearLayer.setOnAction(e -> {
-            tm.fillTiles(0, 0, 0, tm.getCols() - 1, tm.getRows() - 1, com.ignis.core.TilemapObject.EMPTY);
-            markProjectDirty();
-        });
-
-        // Pintura no viewport: escolhe o indice do tile e a camada, e ativa a
-        // ferramenta TILE_PAINT sobre ESTE tilemap. Ctrl+clique/arraste apaga.
-        TextField tileIdx = new TextField("0");
-        TextField layerIdx = new TextField("0");
-        ToggleButton paint = new ToggleButton("Pintar Tiles");
-        paint.setTooltip(new Tooltip("Clique/arraste no viewport para pintar; Ctrl apaga"));
-        paint.selectedProperty().addListener((o, a, on) -> {
-            if (on) {
-                game.setActiveTilemap(tm);
-                game.setActiveTileIndex(parseI(tileIdx.getText(), 0));
-                game.setActiveTileLayer(parseI(layerIdx.getText(), 0));
-                game.setCurrentTool(com.ignis.core.Game.ToolType.TILE_PAINT);
-                setStatus("Pintando tiles em " + tm.getName() + " — Ctrl apaga. Escolha 'Mover' para sair.");
-            } else if (game.getCurrentTool() == com.ignis.core.Game.ToolType.TILE_PAINT) {
-                game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE);
-            }
-        });
-        tileIdx.textProperty().addListener((o, a, b) -> game.setActiveTileIndex(parseI(b, 0)));
-        layerIdx.textProperty().addListener((o, a, b) -> game.setActiveTileLayer(parseI(b, 0)));
-
-        sec.getChildren().addAll(labeledInspectorRow("Tileset", tileset), info,
-                new HBox(6, addLayer, clearLayer),
-                labeledInspectorRow("Tile a pintar", tileIdx),
-                labeledInspectorRow("Camada de pintura", layerIdx),
-                paint);
-        return sec;
-    }
-
-    /** Secao do Inspector para texto no mundo (Fase D, item 3.9). */
-    private javafx.scene.Node buildTextObjectSection(com.ignis.core.TextObject txt) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Texto no Mundo"));
-
-        // Conteudo multilinha (\n cria varias linhas). Aplica ao perder foco/Enter+Ctrl.
-        javafx.scene.control.TextArea content = new javafx.scene.control.TextArea(txt.getText());
-        content.setPrefRowCount(2);
-        content.setWrapText(true);
-        Runnable applyText = () -> { txt.setText(content.getText()); markProjectDirty(); };
-        content.focusedProperty().addListener((o, a, f) -> { if (!f) applyText.run(); });
-
-        ColorPicker colorPicker = new ColorPicker(awtToFx(txt.getColor()));
-        colorPicker.setOnAction(e -> { txt.setColor(fxToAwt(colorPicker.getValue())); markProjectDirty(); });
-
-        ComboBox<com.ignis.core.TextObject.TextAlign> align = new ComboBox<>();
-        align.getItems().setAll(com.ignis.core.TextObject.TextAlign.values());
-        align.setValue(txt.getAlign());
-        align.setOnAction(e -> { txt.setAlign(align.getValue()); markProjectDirty(); });
-
-        sec.getChildren().addAll(
-                labeledInspectorRow("Texto", content),
-                intRow("Tamanho (px)", txt::getFontSize, txt::setFontSize),
-                labeledInspectorRow("Cor", colorPicker),
-                labeledInspectorRow("Alinhamento", align),
-                checkRow("Negrito", txt.isBold(), txt::setBold),
-                checkRow("Itálico", txt.isItalic(), txt::setItalic));
-
-        TextField family = new TextField(txt.getFontFamily());
-        family.setPromptText("SansSerif / Serif / Monospaced");
-        Runnable applyFamily = () -> { txt.setFontFamily(family.getText().trim()); markProjectDirty(); };
-        family.setOnAction(e -> applyFamily.run());
-        family.focusedProperty().addListener((o, a, f) -> { if (!f) applyFamily.run(); });
-        sec.getChildren().add(labeledInspectorRow("Fonte", family));
-        return sec;
-    }
-
-    /** Secao do Inspector para luzes 2D (Fase D, item 3.11). */
-    private javafx.scene.Node buildLightObjectSection(com.ignis.core.LightObject light) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Luz 2D"));
-
-        ColorPicker colorPicker = new ColorPicker(awtToFx(light.getLightColor()));
-        colorPicker.setOnAction(e -> { light.setLightColor(fxToAwt(colorPicker.getValue())); markProjectDirty(); });
-
-        sec.getChildren().addAll(
-                labeledInspectorRow("Cor", colorPicker),
-                doubleRow("Raio (px)", light::getRadius, light::setRadius),
-                doubleRow("Intensidade (0-1)", light::getIntensity, light::setIntensity));
-
-        // Luz ambiente da cena (global): sem ela as luzes nao tem efeito visivel.
-        sec.getChildren().add(sectionTitle("Luz Ambiente da Cena"));
-        java.awt.Color amb = game.getAmbientLight();
-        ColorPicker ambPicker = new ColorPicker(amb != null ? awtToFx(amb) : javafx.scene.paint.Color.rgb(5, 5, 16, 0.88));
-        ambPicker.setOnAction(e -> { game.setAmbientLight(fxToAwt(ambPicker.getValue())); markProjectDirty(); });
-        Button ambOff = new Button("Desligar luz ambiente");
-        ambOff.setOnAction(e -> { game.setAmbientLight(null); markProjectDirty(); });
-        Label dica = new Label("O alpha da cor ambiente = intensidade da escuridão.");
-        dica.getStyleClass().add("toolbar-label");
-        sec.getChildren().addAll(labeledInspectorRow("Ambiente", ambPicker), ambOff, dica);
-        return sec;
-    }
-
-    /** Secao do Inspector com o vinculo pai-filho do objeto (Fase C). */
-    private javafx.scene.Node buildHierarchySection(GameObject go) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Hierarquia"));
-        GameObject parent = go.getParent();
-        Label info = new Label(parent != null ? "Pai: " + parent.getName() : "Sem pai (raiz)");
-        info.getStyleClass().add("toolbar-label");
-        sec.getChildren().add(info);
-        if (parent != null) {
-            Button clear = new Button("Remover pai");
-            clear.setOnAction(e -> {
-                go.clearParent();
-                markProjectDirty();
-                rebuildInspectorExtras(go);
-            });
-            sec.getChildren().add(clear);
-        }
-        return sec;
-    }
-
-    private javafx.scene.Node buildScriptsSection(GameObject go) {
-        VBox sec = new VBox(6);
-        sec.getChildren().add(sectionTitle("Componentes / Scripts"));
-
-        ListView<String> list = new ListView<>();
-        java.util.List<String> listItems = new java.util.ArrayList<>();
-        if (go.getComponent(SpriteComponent.class) != null) {
-            listItems.add("SpriteComponent");
-        }
-        if (go.getComponent(ColliderComponent.class) != null) {
-            listItems.add("ColliderComponent");
-        }
-        if (go.getComponent(HealthComponent.class) != null) {
-            listItems.add("HealthComponent");
-        }
-        listItems.addAll(go.getScriptNames());
-        list.getItems().setAll(listItems);
-        list.setPrefHeight(90);
-
-        Button attach = new Button("Adicionar Componente…");
-        attach.setOnAction(e -> { openAddComponentDialog(go); });
-        
-        Button remove = new Button("Remover");
-        remove.setOnAction(e -> {
-            String sel = list.getSelectionModel().getSelectedItem();
-            if (sel == null) return;
-            // Componente nativo: remove por referencia, com undo/redo.
-            com.ignis.core.Component comp = null;
-            if (sel.equals("SpriteComponent")) comp = go.getComponent(SpriteComponent.class);
-            else if (sel.equals("ColliderComponent")) comp = go.getComponent(ColliderComponent.class);
-            else if (sel.equals("HealthComponent")) comp = go.getComponent(HealthComponent.class);
-
-            if (comp != null) {
-                final com.ignis.core.Component removed = comp;
-                final String label = sel;
-                go.removeComponent(removed);
-                undoManager.push("Remover " + label,
-                        () -> { go.addComponent(removed); afterComponentChange(go); },
-                        () -> { go.removeComponent(removed); afterComponentChange(go); });
-            } else {
-                // Script anexado (por nome): captura a instancia viva, se houver.
-                final String scriptName = sel;
-                com.ignis.core.IgnisScript found = null;
-                for (com.ignis.core.IgnisScript s : go.getScripts()) {
-                    if (s.getScriptName().equals(scriptName)) { found = s; break; }
-                }
-                final com.ignis.core.IgnisScript inst = found;
-                go.removeScriptByName(scriptName);
-                undoManager.push("Remover " + scriptName,
-                        () -> {
-                            if (inst != null) go.addComponent(inst);
-                            if (!go.getScriptNames().contains(scriptName)) go.getScriptNames().add(scriptName);
-                            afterComponentChange(go);
-                        },
-                        () -> {
-                            if (inst != null) go.removeComponent(inst);
-                            go.removeScriptByName(scriptName);
-                            afterComponentChange(go);
-                        });
-            }
-            afterComponentChange(go);
-        });
-        
-        Button open = new Button("Abrir");
-        open.setOnAction(e -> {
-            String sel = list.getSelectionModel().getSelectedItem();
-            if (sel != null && !sel.equals("SpriteComponent") && !sel.equals("ColliderComponent") && !sel.equals("HealthComponent")) {
-                openScriptByName(sel);
-            }
-        });
-
-        // Habilita/Desabilita o botao Abrir dependendo do item selecionado
-        list.getSelectionModel().selectedItemProperty().addListener((o, oldV, newV) -> {
-            open.setDisable(newV == null || newV.equals("SpriteComponent") || newV.equals("ColliderComponent") || newV.equals("HealthComponent"));
-        });
-        String activeSel = list.getSelectionModel().getSelectedItem();
-        open.setDisable(activeSel == null || "SpriteComponent".equals(activeSel) || "ColliderComponent".equals(activeSel) || "HealthComponent".equals(activeSel));
-
-        sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
-
-        // Renderizar painel de variaveis para cada script instanciado (pulando SpriteComponent)
-        for (com.ignis.core.IgnisScript script : go.getScripts()) {
-            if (script instanceof SpriteComponent) continue;
-            javafx.scene.Node varsNode = createScriptVariablesNode(script);
-            if (varsNode != null) {
-                sec.getChildren().add(varsNode);
-            }
-        }
-
-        return sec;
-    }
-
-    private javafx.scene.Node buildColliderComponentSection(GameObject go, ColliderComponent comp) {
-        VBox box = new VBox(6);
-        box.getChildren().add(sectionTitle("Collider Component"));
-
-        GridPane grid = new GridPane();
-        grid.setHgap(6);
-        grid.setVgap(6);
-
-        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
-        labelCol.setMinWidth(90);
-        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
-        fieldCol.setHgrow(Priority.ALWAYS);
-        grid.getColumnConstraints().addAll(labelCol, fieldCol);
-
-        int r = 0;
-
-        // Campos de geometria (mostrados conforme a forma). Referencias finais para
-        // o handler da forma poder alternar a visibilidade sem reconstruir a secao.
-        final TextField widthField = new TextField(fmt(comp.effectiveWidth()));
-        final TextField heightField = new TextField(fmt(comp.effectiveHeight()));
-        final TextField radiusField = new TextField(fmt(comp.effectiveRadius()));
-        final Label widthLbl = new Label("Largura");
-        final Label heightLbl = new Label("Altura");
-        final Label radiusLbl = new Label("Raio");
-
-        // Shape type ComboBox
-        javafx.scene.control.ComboBox<String> shapeCombo = new javafx.scene.control.ComboBox<>();
-        shapeCombo.getItems().addAll("Box", "Sphere", "Capsule");
-        shapeCombo.setValue(comp.getShape());
-        shapeCombo.setOnAction(e -> {
-            comp.setShape(shapeCombo.getValue());
-            applyColliderShapeVisibility(comp.getShape(), widthLbl, widthField,
-                    heightLbl, heightField, radiusLbl, radiusField);
-            markProjectDirty();
-        });
-        grid.add(new Label("Forma"), 0, r);
-        grid.add(shapeCombo, 1, r++);
-
-        // Habilitado
-        CheckBox enabledCheck = new CheckBox("Habilitado");
-        enabledCheck.setSelected(comp.isEnabled());
-        enabledCheck.selectedProperty().addListener((o, a, b) -> {
-            comp.setEnabled(b);
-            markProjectDirty();
-        });
-        grid.add(enabledCheck, 1, r++);
-
-        // Largura (Box/Capsule)
-        widthField.textProperty().addListener((o, a, b) -> {
-            try { comp.setWidth(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(widthLbl, 0, r);
-        grid.add(widthField, 1, r++);
-
-        // Altura (Box/Capsule)
-        heightField.textProperty().addListener((o, a, b) -> {
-            try { comp.setHeight(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(heightLbl, 0, r);
-        grid.add(heightField, 1, r++);
-
-        // Raio (Sphere)
-        radiusField.textProperty().addListener((o, a, b) -> {
-            try { comp.setRadius(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(radiusLbl, 0, r);
-        grid.add(radiusField, 1, r++);
-
-        // Offset X
-        TextField offsetXField = new TextField(fmt(comp.getOffsetX()));
-        offsetXField.textProperty().addListener((o, a, b) -> {
-            try { comp.setOffsetX(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Offset X"), 0, r);
-        grid.add(offsetXField, 1, r++);
-
-        // Offset Y
-        TextField offsetYField = new TextField(fmt(comp.getOffsetY()));
-        offsetYField.textProperty().addListener((o, a, b) -> {
-            try { comp.setOffsetY(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Offset Y"), 0, r);
-        grid.add(offsetYField, 1, r++);
-
-        // Friction TextField
-        TextField frictionField = new TextField(fmt(comp.getFriction()));
-        frictionField.textProperty().addListener((o, a, b) -> {
-            try {
-                comp.setFriction(Double.parseDouble(b));
-                markProjectDirty();
-            } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Fricção"), 0, r);
-        grid.add(frictionField, 1, r++);
-
-        // Bounciness TextField
-        TextField bounceField = new TextField(fmt(comp.getBounciness()));
-        bounceField.textProperty().addListener((o, a, b) -> {
-            try {
-                comp.setBounciness(Double.parseDouble(b));
-                markProjectDirty();
-            } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Elasticidade"), 0, r);
-        grid.add(bounceField, 1, r++);
-
-        // IsTrigger CheckBox
-        CheckBox triggerCheck = new CheckBox("Is Trigger");
-        triggerCheck.setSelected(comp.isTrigger());
-        triggerCheck.selectedProperty().addListener((o, a, b) -> {
-            comp.setTrigger(b);
-            markProjectDirty();
-        });
-        grid.add(triggerCheck, 1, r++);
-
-        // Collision Layer TextField
-        TextField layerField = new TextField(comp.getCollisionLayer());
-        layerField.textProperty().addListener((o, a, b) -> {
-            comp.setCollisionLayer(b);
-            markProjectDirty();
-        });
-        grid.add(new Label("Layer"), 0, r);
-        grid.add(layerField, 1, r++);
-
-        applyColliderShapeVisibility(comp.getShape(), widthLbl, widthField,
-                heightLbl, heightField, radiusLbl, radiusField);
-
-        box.getChildren().add(grid);
-        return box;
-    }
-
     // Mostra Largura/Altura para Box/Capsule e Raio para Sphere (esconde os demais).
-    private void applyColliderShapeVisibility(String shape, Label widthLbl, TextField widthField,
+    void applyColliderShapeVisibility(String shape, Label widthLbl, TextField widthField,
             Label heightLbl, TextField heightField, Label radiusLbl, TextField radiusField) {
         boolean sphere = "Sphere".equalsIgnoreCase(shape);
         setNodeVisible(widthLbl, !sphere);
@@ -4180,126 +3592,14 @@ public class IgnisEditorApp extends Application {
     }
 
     // Formata um double sem casas desnecessarias (12.0 -> "12", 12.5 -> "12.5").
-    private static String fmt(double v) {
+    static String fmt(double v) {
         if (v == Math.floor(v) && !Double.isInfinite(v)) {
             return String.valueOf((long) v);
         }
         return String.valueOf(v);
     }
 
-    private javafx.scene.Node buildRigidbodyComponentSection(GameObject go, RigidbodyComponent comp) {
-        VBox box = new VBox(6);
-        box.getChildren().add(sectionTitle("Rigidbody Component"));
-
-        GridPane grid = new GridPane();
-        grid.setHgap(6);
-        grid.setVgap(6);
-
-        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
-        labelCol.setMinWidth(100);
-        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
-        fieldCol.setHgrow(Priority.ALWAYS);
-        grid.getColumnConstraints().addAll(labelCol, fieldCol);
-
-        int row = 0;
-
-        // Velocidade X
-        TextField velXField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityX()));
-        velXField.textProperty().addListener((o, a, b) -> {
-            try { comp.setVelocityX(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Velocidade X"), 0, row);
-        grid.add(velXField, 1, row); row++;
-
-        // Velocidade Y
-        TextField velYField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getVelocityY()));
-        velYField.textProperty().addListener((o, a, b) -> {
-            try { comp.setVelocityY(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Velocidade Y"), 0, row);
-        grid.add(velYField, 1, row); row++;
-
-        // Gravidade (useGravity)
-        CheckBox gravityCheck = new CheckBox("Usar gravidade global");
-        gravityCheck.setSelected(comp.isUseGravity());
-        gravityCheck.selectedProperty().addListener((o, a, b) -> {
-            comp.setUseGravity(b); markProjectDirty();
-        });
-        grid.add(gravityCheck, 0, row, 2, 1); row++;
-
-        // Gravidade global (estática)
-        TextField gravityField = new TextField(String.format(java.util.Locale.ROOT, "%.1f", RigidbodyComponent.getGlobalGravity()));
-        gravityField.textProperty().addListener((o, a, b) -> {
-            try { RigidbodyComponent.setGlobalGravity(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Gravidade Global"), 0, row);
-        grid.add(gravityField, 1, row); row++;
-
-        // Gravity scale
-        TextField gravScaleField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getGravityScale()));
-        gravScaleField.textProperty().addListener((o, a, b) -> {
-            try { comp.setGravityScale(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Escala Gravidade"), 0, row);
-        grid.add(gravScaleField, 1, row); row++;
-
-        // Massa
-        TextField massField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getMass()));
-        massField.textProperty().addListener((o, a, b) -> {
-            try { comp.setMass(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Massa"), 0, row);
-        grid.add(massField, 1, row); row++;
-
-        // Arrasto linear
-        TextField dragField = new TextField(String.format(java.util.Locale.ROOT, "%.2f", comp.getLinearDrag()));
-        dragField.textProperty().addListener((o, a, b) -> {
-            try { comp.setLinearDrag(Double.parseDouble(b)); markProjectDirty(); } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Arrasto Linear"), 0, row);
-        grid.add(dragField, 1, row); row++;
-
-        // Congelado
-        CheckBox frozenCheck = new CheckBox("Congelado (ignora forcas)");
-        frozenCheck.setSelected(comp.isFrozen());
-        frozenCheck.selectedProperty().addListener((o, a, b) -> {
-            comp.setFrozen(b); markProjectDirty();
-        });
-        grid.add(frozenCheck, 0, row, 2, 1); row++;
-
-        box.getChildren().add(grid);
-        return box;
-    }
-
-    private javafx.scene.Node buildHealthComponentSection(GameObject go, HealthComponent comp) {
-        VBox box = new VBox(6);
-        box.getChildren().add(sectionTitle("Health Component"));
-
-        GridPane grid = new GridPane();
-        grid.setHgap(6);
-        grid.setVgap(6);
-        
-        javafx.scene.layout.ColumnConstraints labelCol = new javafx.scene.layout.ColumnConstraints();
-        labelCol.setMinWidth(90);
-        javafx.scene.layout.ColumnConstraints fieldCol = new javafx.scene.layout.ColumnConstraints();
-        fieldCol.setHgrow(Priority.ALWAYS);
-        grid.getColumnConstraints().addAll(labelCol, fieldCol);
-
-        TextField healthField = new TextField(String.valueOf(comp.getHealth()));
-        healthField.textProperty().addListener((o, a, b) -> {
-            try {
-                comp.setHealth(Integer.parseInt(b));
-                markProjectDirty();
-            } catch (NumberFormatException ignore) {}
-        });
-        grid.add(new Label("Vida"), 0, 0);
-        grid.add(healthField, 1, 0);
-
-        box.getChildren().add(grid);
-        return box;
-    }
-
-    private javafx.scene.Node createScriptVariablesNode(com.ignis.core.IgnisScript script) {
+    javafx.scene.Node createScriptVariablesNode(com.ignis.core.IgnisScript script) {
         VBox panel = new VBox(4);
         panel.setPadding(new Insets(4, 4, 4, 10));
         panel.setStyle("-fx-border-color: #555; -fx-border-width: 0 0 0 2; -fx-background-color: rgba(255, 255, 255, 0.02);");
@@ -4688,7 +3988,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void openScriptByName(String scriptName) {
+    void openScriptByName(String scriptName) {
         if (!requireProject()) return;
         try {
             com.ignis.core.ScriptManager sm = game.getScriptManager();
@@ -4703,7 +4003,7 @@ public class IgnisEditorApp extends Application {
     // e retorna o caminho RELATIVO ao projeto — sprites passam a viver no projeto e
     // ficam portateis. Se ja estiver dentro, apenas relativiza. Fallback para
     // caminho absoluto se nao houver projeto ou a copia falhar.
-    private String importSpriteToProject(File src) {
+    String importSpriteToProject(File src) {
         try {
             String existingRel = com.ignis.core.AssetResolver.relativize(src);
             if (existingRel != null) return existingRel; // ja dentro do projeto
@@ -4734,7 +4034,7 @@ public class IgnisEditorApp extends Application {
         return dest;
     }
 
-    private File chooseSpriteFile() {
+    File chooseSpriteFile() {
         FileChooser fc = new FileChooser();
         fc.setTitle("Escolher sprite");
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(
@@ -4746,21 +4046,7 @@ public class IgnisEditorApp extends Application {
         return fc.showOpenDialog(primaryStage);
     }
 
-    private HBox labeledInspectorRow(String label, javafx.scene.Node control) {
-        Label l = new Label(label);
-        l.getStyleClass().add("field-label");
-        l.setMinWidth(70);
-        if (control instanceof javafx.scene.layout.Region) {
-            ((javafx.scene.layout.Region) control).setMaxWidth(Double.MAX_VALUE);
-        }
-        HBox.setHgrow(control, Priority.ALWAYS);
-        HBox row = new HBox(8, l, control);
-        row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        row.setMaxWidth(Double.MAX_VALUE);
-        return row;
-    }
-
-    private static String spriteLabel(String path) {
+    static String spriteLabel(String path) {
         return (path == null || path.isEmpty()) ? "(nenhum)" : path;
     }
 
@@ -4772,25 +4058,25 @@ public class IgnisEditorApp extends Application {
         try { return o.getClass().getMethod("setColor", java.awt.Color.class); } catch (Exception e) { return null; }
     }
 
-    private static javafx.scene.paint.Color awtToFx(java.awt.Color c) {
+    static javafx.scene.paint.Color awtToFx(java.awt.Color c) {
         return new javafx.scene.paint.Color(
                 c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0, c.getAlpha() / 255.0);
     }
 
-    private static java.awt.Color fxToAwt(javafx.scene.paint.Color c) {
+    static java.awt.Color fxToAwt(javafx.scene.paint.Color c) {
         return new java.awt.Color(
                 (float) c.getRed(), (float) c.getGreen(), (float) c.getBlue(), (float) c.getOpacity());
     }
 
-    private static double parseD(String s, double fallback) {
+    static double parseD(String s, double fallback) {
         try { return Double.parseDouble(s.trim()); } catch (Exception e) { return fallback; }
     }
 
-    private static int parseI(String s, int fallback) {
+    static int parseI(String s, int fallback) {
         try { return Integer.parseInt(s.trim()); } catch (Exception e) { return fallback; }
     }
 
-    private void setStatus(String text) {
+    void setStatus(String text) {
         if (status != null) status.setText(" " + text);
         com.ignis.core.IgnisLogger.info(text);
     }
