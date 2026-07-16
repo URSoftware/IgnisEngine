@@ -40,6 +40,10 @@ public final class TensuraGameController extends IgnisScript {
 
     private static final String SPRITES = "assets/sprites/";
     private static final String SOUNDS = "assets/sounds/";
+    // Icones simbolicos de INTERFACE (HUD, upgrade, painel, codex). Vivem na mesma
+    // pasta dos sprites, mas o alias deixa explicito que nao sao arte de arena:
+    // liga-los a entidades de mundo ja deu errado uma vez (16/07/2026).
+    private static final String ICONS = "assets/sprites/";
 
     private final Map<Long, GameObject> visuals = new HashMap<>();
 
@@ -93,6 +97,8 @@ public final class TensuraGameController extends IgnisScript {
     private UILabel objectiveLabel;
     private UILabel messageLabel;
     private UIImage weaponIcon;
+    private UIImage skillIcon;
+    private UIImage rangaIcon;
     private UIPanel leftPanel;
     private UIPanel formPanel;
     private UIPanel upgradePanel;
@@ -466,7 +472,15 @@ public final class TensuraGameController extends IgnisScript {
 
         formPanel = createPanel(0, 18, 360, 92);
         setUIColors(formPanel, new Color(17, 15, 31, 220), null, new Color(185, 103, 255));
-        weaponIcon = createImage(SPRITES + "predator_core.png", 0, 30, 56, 56);
+        weaponIcon = createImage(ICONS + "ability_hydrolance.png", 0, 30, 56, 56);
+        weaponIcon.setPreserveAspect(true);
+        // Habilidade da forma atual e status do Ranga: icones de interface, ao lado
+        // da arma no painel de forma. O do Ranga so aparece quando ele esta em campo.
+        skillIcon = createImage(ICONS + "ability_predator.png", 0, 34, 48, 48);
+        skillIcon.setPreserveAspect(true);
+        rangaIcon = createImage(ICONS + "ability_ranga_storm.png", 0, 34, 48, 48);
+        rangaIcon.setPreserveAspect(true);
+        rangaIcon.setVisible(false);
         formLabel = createLabel("", 0, 24, 280, 62);
         formLabel.setFont("SansSerif", Font.BOLD, 16);
         formLabel.setTextColor(new Color(242, 230, 255));
@@ -501,6 +515,11 @@ public final class TensuraGameController extends IgnisScript {
                 + snapshot.regenerationLevel() + "  KOs " + snapshot.kills());
         formLabel.setText(formDisplayName() + "\n" + weaponDisplayName());
         weaponIcon.setImagePath(weaponIconPath());
+        String skill = skillIconPath();
+        skillIcon.setVisible(skill != null);
+        if (skill != null) skillIcon.setImagePath(skill);
+        // Ranga no HUD so enquanto ele esta em campo.
+        rangaIcon.setVisible(snapshot.rangaSummoned());
 
         double width = Math.max(480, getGame().getWidth());
         double height = Math.max(360, getGame().getHeight());
@@ -522,6 +541,10 @@ public final class TensuraGameController extends IgnisScript {
             objectiveLabel.setSize(420, 30);
             objectiveLabel.setPosition((width - 420) / 2.0, 18);
         }
+        // Icones de habilidade/Ranga numa fileira logo abaixo do painel de forma
+        // (que termina em y=110), alinhados a direita como ele.
+        skillIcon.setPosition(width - 118, 116);
+        rangaIcon.setPosition(width - 64, 116);
         messageLabel.setPosition((width - 680) / 2.0, height - 92);
         pauseButton.setPosition(width - 62, height - 54);
         syncUpgradeOverlay(width, height);
@@ -536,10 +559,16 @@ public final class TensuraGameController extends IgnisScript {
         upgradeTitle.setFont("SansSerif", Font.BOLD, 19);
         upgradeTitle.setTextColor(new Color(223, 250, 255));
 
+        // Icones simbolicos nas escolhas do Grande Sabio — uso de interface, que e
+        // exatamente para onde os ability_* foram feitos.
         predatorButton = createUpgradeButton("PREDADOR", new Color(39, 118, 166),
                 () -> chooseUpgrade(UpgradeChoice.PREDATOR));
+        predatorButton.setIconPath(ICONS + "ability_predator.png");
         sageButton = createUpgradeButton("GRANDE SABIO", new Color(92, 76, 166),
                 () -> chooseUpgrade(UpgradeChoice.GREAT_SAGE));
+        sageButton.setIconPath(ICONS + "ability_great_sage.png");
+        // REGENERACAO ainda nao tem icone final: fica so com o texto (o botao lida
+        // com iconPath nulo) ate o Codex entregar um.
         regenerationButton = createUpgradeButton("REGENERACAO", new Color(48, 139, 91),
                 () -> chooseUpgrade(UpgradeChoice.REGENERATION));
 
@@ -750,11 +779,32 @@ public final class TensuraGameController extends IgnisScript {
         return "Predador + Hidrolamina";
     }
 
+    /**
+     * Icone da arma no HUD.
+     *
+     * <p>Aqui e o lugar CERTO dos ability_*: sao icones simbolicos de interface. O
+     * HUD vinha reaproveitando sprites de mundo como icone (predator_core.png) — o
+     * inverso do erro oposto, que foi por os icones na arena.</p>
+     *
+     * <p>As formas sem icone final (katana, Beelzebuth, vazio) seguem com o sprite
+     * antigo ate o Codex entregar os icones correspondentes.</p>
+     */
     private String weaponIconPath() {
         if (snapshot.azathothAwakened()) return SPRITES + "azathoth_void_blade.png";
         if (snapshot.form() == RimuruForm.DEMON_LORD) return SPRITES + "beelzebuth_blade.png";
         if (snapshot.form() == RimuruForm.HUMANOID) return SPRITES + "predator_katana.png";
-        return SPRITES + "predator_core.png";
+        // Slime: a arma primaria e a Hidrolamina (o proprio formLabel diz isso).
+        return ICONS + "ability_hydrolance.png";
+    }
+
+    /** Icone da habilidade da forma atual, ou null quando ainda nao ha arte. */
+    private String skillIconPath() {
+        return switch (snapshot.form()) {
+            case SLIME -> ICONS + "ability_predator.png";
+            case HUMANOID -> ICONS + "ability_black_lightning.png";
+            // Beelzebuth/Azathoth ainda nao tem icone final.
+            case DEMON_LORD -> null;
+        };
     }
 
     private void processEvents(List<RunEvent> events) {
