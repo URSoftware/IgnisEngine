@@ -9,6 +9,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -130,6 +132,41 @@ class McpCoordinationGateTest {
         // objectSchema() nao traz 'properties'; a injecao precisa cria-lo.
         JSONObject wideSchema = registry.get("stop_camera_follow").inputSchema;
         assertNotNull(wideSchema.getJSONObject("properties").optJSONObject("agent"));
+    }
+
+    /** Ultimo numero de sequencia do mural (o mural e um singleton compartilhado). */
+    private static long lastSeq(McpCoordination coord) {
+        String board = coord.readMessages("Bruno", 0);
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("lastSeq=(\\d+)").matcher(board);
+        assertTrue(matcher.find(), board);
+        return Long.parseLong(matcher.group(1));
+    }
+
+    @Test
+    void blankMessagesAreRejectedInsteadOfPostedToTheBoard() {
+        // Uma mensagem vazia no mural nao e inofensiva: o outro agente a le como
+        // instrucao perdida e fica sem saber se houve falha de transporte.
+        McpCoordination coord = McpCoordination.get();
+        long before = lastSeq(coord);
+
+        assertTrue(coord.sendMessage("Ana", "Bruno", "   ").startsWith("Erro"));
+        assertTrue(coord.sendMessage("Ana", "Bruno", "").startsWith("Erro"));
+        assertTrue(coord.sendMessage("Ana", "Bruno", null).startsWith("Erro"));
+
+        // Comparar o seq (e nao procurar texto) isola este teste do estado que os
+        // outros deixam no singleton.
+        assertEquals(before, lastSeq(coord),
+                "mensagem em branco nao pode consumir um seq do mural");
+    }
+
+    @Test
+    void realMessagesStillGoThrough() {
+        McpCoordination coord = McpCoordination.get();
+
+        assertTrue(coord.sendMessage("Ana", "Bruno", "Hero esta comigo")
+                .startsWith("Mensagem enviada"));
+        assertTrue(coord.readMessages("Bruno", 0).contains("Hero esta comigo"));
     }
 
     @Test

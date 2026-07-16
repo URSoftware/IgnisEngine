@@ -141,8 +141,18 @@ public final class McpCoordination {
     // Mensagens
     // ------------------------------------------------------------------
 
-    /** Posta uma mensagem no mural (to null/vazio = broadcast). */
+    /**
+     * Posta uma mensagem no mural (to null/vazio = broadcast).
+     *
+     * <p>Texto em branco e recusado: o mural mostraria uma linha vazia, e o agente
+     * do outro lado a le como <b>instrucao perdida</b> — sem saber se foi falha de
+     * transporte ou se o colega nao tinha nada a dizer. Aconteceu de verdade em
+     * 16/07/2026 (seq=13). Melhor um erro na cara de quem envia.</p>
+     */
     public synchronized String sendMessage(String from, String to, String text) {
+        if (text == null || text.isBlank()) {
+            return "Erro: 'text' vazio — nada foi postado no mural.";
+        }
         touch(from);
         String target = (to == null || to.isBlank()) ? null : to.trim();
         messages.add(new Message(++seqCounter, System.currentTimeMillis(), from, target, text));
