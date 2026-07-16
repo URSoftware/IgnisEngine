@@ -1,0 +1,12 @@
+{
+  "gameName": "Rimuru Survivors",
+  "version": "0.1.0",
+  "width": 1280,
+  "height": 720,
+  "fullscreen": false,
+  "resizable": true,
+  "fpsCap": 60,
+  "outputDir": "build",
+  "targets": ["WINDOWS"],
+  "platforms": {}
+}

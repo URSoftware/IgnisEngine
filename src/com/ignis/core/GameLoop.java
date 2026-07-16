@@ -85,7 +85,7 @@ final class GameLoop implements Runnable {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Throwable t) {
-                IgnisLogger.error("Erro na thread do loop do jogo: " + t.getMessage());
+                IgnisLogger.error("Erro na thread do loop do jogo: " + t.getMessage(), t);
                 // Avoid fast spinning if there's a persistent error
                 try {
                     Thread.sleep(100);

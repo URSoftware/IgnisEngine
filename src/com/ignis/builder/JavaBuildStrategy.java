@@ -1,8 +1,11 @@
 package com.ignis.builder;
 
+import com.fxutilities.fxevents.core.GameSignalBus;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -15,6 +18,7 @@ import java.util.Set;
  *
  *   engine/ignis-engine.jar   executable jar (Main-Class: GameRuntime)
  *   engine/json.jar           org.json dependency
+ *   engine/fxevents.jar       Ignis event-system dependency
  *   projects/[Project]/       full copy of the game project
  *   runtime.json              window/project configuration
  *   [GameName].bat|.sh        platform launcher (sets working dir)
@@ -27,6 +31,7 @@ import java.util.Set;
 public class JavaBuildStrategy implements BuildStrategy {
 
     private static final String MAIN_CLASS = "com.ignis.runtime.GameRuntime";
+    private static final String RUNTIME_CLASS_PATH = "json.jar fxevents.jar";
 
     @Override
     public BuildResult build(BuildRequest request, BuildTarget target, BuildLogger log) {
@@ -48,17 +53,11 @@ public class JavaBuildStrategy implements BuildStrategy {
 
             File engineSource = BuildIO.codeSourceOf(JavaBuildStrategy.class);
             File engineJar = new File(engineDir, "ignis-engine.jar");
-            BuildIO.createEngineJar(engineSource, engineJar, MAIN_CLASS, "json.jar");
+            BuildIO.createEngineJar(engineSource, engineJar, MAIN_CLASS, RUNTIME_CLASS_PATH);
 
-            File jsonSource = BuildIO.codeSourceOf(JSONObject.class);
-            File jsonJar = new File(engineDir, "json.jar");
-            if (jsonSource.isFile()) {
-                java.nio.file.Files.copy(jsonSource.toPath(), jsonJar.toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            } else {
+            packageDependency(JSONObject.class, new File(engineDir, "json.jar"));
+            packageDependency(GameSignalBus.class, new File(engineDir, "fxevents.jar"));
                 // org.json compiled into a classes dir — repackage it
-                BuildIO.createEngineJar(jsonSource, jsonJar, "org.json.JSONObject", null);
-            }
 
             // 2. Game project copy, preserving the projects/<Name>/ layout.
             //    The build output folder itself is excluded to avoid recursion.
@@ -101,6 +100,16 @@ public class JavaBuildStrategy implements BuildStrategy {
         } catch (Exception e) {
             log.error(target.getDisplayName() + ": " + e.getMessage());
             return BuildResult.fail(target, e.getMessage(), System.currentTimeMillis() - start);
+        }
+    }
+
+    private void packageDependency(Class<?> markerClass, File outputJar) throws Exception {
+        File source = BuildIO.codeSourceOf(markerClass);
+        if (source.isFile()) {
+            Files.copy(source.toPath(), outputJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            // Development builds may expose a classes directory instead of a jar.
+            BuildIO.createEngineJar(source, outputJar, markerClass.getName(), null);
         }
     }
 

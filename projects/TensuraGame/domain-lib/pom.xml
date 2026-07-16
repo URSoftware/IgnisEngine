@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.rimurusurvivors</groupId>
+    <artifactId>rimuru-survivors-domain</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.2</junit.version>
+    </properties>
+
+    <!--
+        Camada de dominio pura do jogo Rimuru Survivors, portada de
+        mods/vampire-survivors-rimuru/src/RimuruRuntimeRules.cs e RimuruContent.cs
+        (repo Brain-main, projeto vampire-survivors-rimuru). Zero dependencia do
+        IgnisEngine ou de qualquer motor - so aqui os testes de fidelidade fazem
+        sentido rodar isolados, sem precisar abrir o editor.
+
+        NAO e dependencia do pom.xml raiz do IgnisEngine-main - isso acoplaria a
+        engine a este jogo especifico e faria outros projetos carregarem codigo do
+        Tensura sem necessidade. Em vez disso, o jar gerado (mvn package) e copiado
+        manualmente para project/libs/rimuru-survivors-domain.jar, que o
+        ScriptManager da engine agora inclui automaticamente no classpath de
+        compilacao de scripts e no ClassLoader de runtime (ver
+        com.ignis.core.ScriptManager#discoverLibJars) - um mecanismo generico,
+        disponivel para qualquer projeto que precise de uma biblioteca privada.
+    -->
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

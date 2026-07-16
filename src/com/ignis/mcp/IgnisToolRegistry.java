@@ -90,6 +90,7 @@ public final class IgnisToolRegistry {
 
     private final File projectFolder;
     private final Map<String, ToolDef> tools = new LinkedHashMap<>();
+    private ScriptManager projectScriptManager;
 
     // Ferramentas que MUTAM a cena/mundo/camera: quando o editor e convidado numa
     // sessao de colaboracao, sao encaminhadas ao host (host-autoritativo). As
@@ -141,6 +142,11 @@ public final class IgnisToolRegistry {
      */
     public void attachLiveEditor(Game game, Runnable play, Runnable stop, Runnable refresh, Runnable save) {
         this.liveGame = game;
+        ScriptManager manager = scriptManager();
+        game.setScriptManager(manager);
+        if (game.getPrefabManager() == null) {
+            game.setPrefabManager(new PrefabManager(projectFolder, game, manager));
+        }
         this.playHook = play;
         this.stopHook = stop;
         this.refreshHook = refresh;
@@ -243,8 +249,11 @@ public final class IgnisToolRegistry {
         return schema;
     }
 
-    private ScriptManager scriptManager() {
-        return new ScriptManager(projectFolder);
+    ScriptManager scriptManager() {
+        if (projectScriptManager == null) {
+            projectScriptManager = new ScriptManager(projectFolder);
+        }
+        return projectScriptManager;
     }
 
     // Coordenacao multi-agente: se 'agent' foi informado e o recurso esta reservado
@@ -331,7 +340,14 @@ public final class IgnisToolRegistry {
             "Compila todos os scripts do projeto e retorna o total compilado.",
             objectSchema(),
             args -> {
-                int compiled = scriptManager().compileAllScripts();
+                ScriptManager manager = scriptManager();
+                int compiled = manager.compileAllScripts();
+                if (liveGame != null) {
+                    liveGame.setScriptManager(manager);
+                    if (liveGame.getPrefabManager() == null) {
+                        liveGame.setPrefabManager(new PrefabManager(projectFolder, liveGame, manager));
+                    }
+                }
                 return "Compilacao concluida. Scripts compilados: " + compiled;
             });
 

@@ -1,5 +1,6 @@
 package com.ignis.core.ui;
 
+import com.ignis.core.AssetResolver;
 import com.ignis.core.IgnisLogger;
 
 import java.awt.*;
@@ -121,7 +122,7 @@ public class UIImage extends UIComponent {
         }
         
         try {
-            File file = new File(imagePath);
+            File file = AssetResolver.resolve(imagePath);
             if (file.exists()) {
                 image = ImageIO.read(file);
                 

@@ -1,0 +1,14 @@
+{
+  "prefabName": "RuntimeVisual",
+  "prefabVersion": "1.0",
+  "type": "Square",
+  "name": "RuntimeVisual",
+  "transform": {
+    "x": 0,
+    "y": 0,
+    "rotation": 0,
+    "width": 32,
+    "height": 32
+  },
+  "properties": {}
+}
