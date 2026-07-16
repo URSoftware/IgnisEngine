@@ -34,6 +34,7 @@ public final class RunSimulation {
     private double elapsed;
     private double playerX;
     private double playerY;
+    private boolean playerMoving;
     private double health = 120.0;
     private double maxHealth = 120.0;
     private double spawnTimer;
@@ -123,7 +124,7 @@ public final class RunSimulation {
         return new RunSnapshot(
                 elapsed, playerX, playerY, health, maxHealth, level, experience,
                 experienceToNext, kills, weaponLevel, passiveLevel, regenerationLevel,
-                pendingUpgrades, rimuru.getForm(),
+                pendingUpgrades, rimuru.getForm(), playerMoving,
                 rimuru.isRangaSummoned(), rimuru.isCiel(), rimuru.hasAzathoth(),
                 gameOver, victory, List.copyOf(visible), List.copyOf(events));
     }
@@ -134,6 +135,11 @@ public final class RunSimulation {
             case HUMANOID -> 175.0;
             case DEMON_LORD -> 195.0;
         };
+        // Locomocao e ESTADO continuo, nao um pulso: fica no snapshot e nao na lista
+        // de eventos. Emitir SLIME_MOVING/SLIME_IDLE a cada tick geraria lixo 60x/s
+        // — justo o que o trabalho de estabilidade removeu. O apresentador le este
+        // booleano e escolhe entre o clipe de andar e o de repouso.
+        playerMoving = input.horizontal() != 0 || input.vertical() != 0;
         playerX = clamp(playerX + input.horizontal() * speed * dt, -ARENA_LIMIT, ARENA_LIMIT);
         playerY = clamp(playerY + input.vertical() * speed * dt, -ARENA_LIMIT, ARENA_LIMIT);
     }
@@ -232,7 +238,7 @@ public final class RunSimulation {
         if (target != null) {
             double multiplier = rimuru.hasAzathoth() ? 1.5 : 1.0;
             damageEnemy(target, (18 + level * 0.8) * multiplier);
-            events.add(new RunEvent(RunEventType.ATTACK, "Ranga: Presa Tempestuosa", target.x, target.y));
+            events.add(new RunEvent(RunEventType.RANGA_ATTACK, "Ranga: Presa Tempestuosa", target.x, target.y));
         }
         rangaTimer = 0.72;
     }
@@ -313,7 +319,7 @@ public final class RunSimulation {
         projectiles.add(new Projectile(nextId++, WorldEntityKind.PREDATOR_MAW,
                 playerX, playerY, 0, 0, 24 + level, 99, 0.32));
         damageEnemiesInRadius(playerX, playerY, 105, 24 + level, false);
-        events.add(new RunEvent(RunEventType.ATTACK, "Predador", playerX, playerY));
+        events.add(new RunEvent(RunEventType.PREDATOR_CAST, "Predador", playerX, playerY));
     }
 
     private void blackLightning() {
