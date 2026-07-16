@@ -157,7 +157,10 @@ public final class TensuraGameController extends IgnisScript {
         if (isKeyJustPressed("F8")) simulation.grantExperience(4_000);
 
         snapshot = simulation.update(getDeltaTime(),
-                new RunInput(getHorizontalAxis(), getVerticalAxis()));
+                // fromScreenAxes converte o eixo de TELA da engine (cima = -1) para o
+                // mundo Y-para-cima da simulacao. Sem essa conversao, W/Seta-cima
+                // moviam o Rimuru para baixo.
+                RunInput.fromScreenAxes(getHorizontalAxis(), getVerticalAxis()));
         syncWorld();
         syncHud();
         processEvents(snapshot.events());
@@ -417,9 +420,16 @@ public final class TensuraGameController extends IgnisScript {
         specs.put(WorldEntityKind.FLAME_SPIRIT, new VisualSpec(SPRITES + "flame_spirit.png", 38, 44, 11));
         specs.put(WorldEntityKind.RED_REAPER, new VisualSpec(SPRITES + "red_reaper.png", 78, 78, 15));
         specs.put(WorldEntityKind.MAGICULE_ORB, new VisualSpec(SPRITES + "magicule_orb.png", 14, 14, 5));
-        specs.put(WorldEntityKind.WATER_BLADE, new VisualSpec(SPRITES + "water_blade.png", 32, 14, 20));
-        specs.put(WorldEntityKind.BLACK_LIGHTNING, new VisualSpec(SPRITES + "black_lightning.png", 42, 14, 21));
-        specs.put(WorldEntityKind.PREDATOR_MAW, new VisualSpec(SPRITES + "predator_maw.png", 110, 110, 18));
+        // Arte final de habilidade (ability_*): pixel art detalhada que substitui os
+        // sprites antigos, conforme a direcao visual aprovada em 16/07/2026.
+        // As medidas viraram QUADRADAS de proposito: a arte antiga era achatada
+        // (water_blade 24x12, black_lightning 30x10) e as specs copiavam esse formato;
+        // a arte nova e 128x128 com a lamina na diagonal, entao exibi-la em 32x14
+        // esmagaria o desenho. Tamanho logico dentro da faixa 32-48px do contrato.
+        specs.put(WorldEntityKind.WATER_BLADE, new VisualSpec(SPRITES + "ability_hydrolance.png", 32, 32, 20));
+        specs.put(WorldEntityKind.BLACK_LIGHTNING, new VisualSpec(SPRITES + "ability_black_lightning.png", 42, 42, 21));
+        // Ja era quadrado (52x52 -> 128x128): proporcao preservada, medida mantida.
+        specs.put(WorldEntityKind.PREDATOR_MAW, new VisualSpec(SPRITES + "ability_predator.png", 110, 110, 18));
         specs.put(WorldEntityKind.VOID_CUT, new VisualSpec(SPRITES + "azathoth_void_blade.png", 52, 26, 22));
         specs.put(WorldEntityKind.RANGA, new AnimatedVisualSpec(SPRITES + "ranga_", 48, 38, 25, 0.10));
         return specs;
