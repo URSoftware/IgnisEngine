@@ -96,17 +96,17 @@ public class IgnisEditorApp extends Application {
      boolean suppressSelectionEvents = false;
     private File projectFolder;
     private File currentIgnisFile;
-    private Project currentProject;
+    Project currentProject;
     // Prefabs: gerenciador lazy, recriado quando a pasta do projeto muda.
     private com.ignis.core.PrefabManager prefabManager;
     private File prefabManagerFolder;
-    private Stage primaryStage;
+    Stage primaryStage;
      Menu recentMenu;
     private boolean projectDirty = false;
     private javafx.animation.Timeline projectAutoSaveTimer;
-    private Button playButton;
-    private Button stopButton;
-    private boolean playing = false;
+    Button playButton;
+    Button stopButton;
+    boolean playing = false;
     private Canvas viewportCanvas;
     private SplitPane mainSplit;
     private SplitPane leftSplit;
@@ -156,21 +156,20 @@ public class IgnisEditorApp extends Application {
     // reconstruídas a cada seleção (ver rebuildInspectorExtras).
     private VBox inspectorExtras;
 
-    private Label cameraPosLabel;
+    Label cameraPosLabel;
      ToggleButton cameraPreviewToggle;
-    private Label cameraZoomLabel;
+    Label cameraZoomLabel;
     // Seletor de cena ativa na toolbar (organizador de cenários). 'updatingSceneSelector'
     // evita que a repopulação programática dispare o handler de troca de cena.
-    private ComboBox<String> sceneSelector;
-    private boolean updatingSceneSelector = false;
+    ComboBox<String> sceneSelector;
     private GameObject clipboardObject;
     // Multi-selecao: lista de objetos selecionados secundariamente (alem do primario 'selected').
     // O primario recebe gizmo/drag; os secundarios recebem contorno tracejado (editorHighlights).
      final java.util.List<GameObject> secondarySelection = new java.util.ArrayList<>();
-    private ToggleButton btnMove;
-    private ToggleButton btnRotate;
-    private ToggleButton btnScale;
-    private ToggleButton btnWorldPaint;
+    ToggleButton btnMove;
+    ToggleButton btnRotate;
+    ToggleButton btnScale;
+    ToggleButton btnWorldPaint;
 
     @Override
         public void start(Stage stage) {
@@ -189,85 +188,9 @@ public class IgnisEditorApp extends Application {
 
         BorderPane root = new BorderPane();
 
-        // Menu + ToolBar (Fase 3)
-        Button btnOpen = new Button("Abrir");
-        btnOpen.setOnAction(e -> openProjectViaChooser(stage));
-        Button btnBuild = new Button("Build");
-        btnBuild.setOnAction(e -> openBuildDialog());
-        playButton = new Button("▶ Play");
-        playButton.setOnAction(e -> playWorld());
-        stopButton = new Button("⏹ Stop");
-        stopButton.setOnAction(e -> stopWorld());
-        stopButton.setDisable(true);
-
-        btnMove = new ToggleButton("Mover (W)");
-        btnRotate = new ToggleButton("Rotacionar (E)");
-        btnScale = new ToggleButton("Redimensionar (R)");
-        btnWorldPaint = new ToggleButton("Pintar Mundo");
-        btnWorldPaint.setTooltip(new Tooltip("Pinta barreiras na grade do mundo. Ctrl+arraste apaga."));
-        ToggleGroup toolGroup = new ToggleGroup();
-        btnMove.setToggleGroup(toolGroup);
-        btnRotate.setToggleGroup(toolGroup);
-        btnScale.setToggleGroup(toolGroup);
-        btnWorldPaint.setToggleGroup(toolGroup);
-        btnMove.setSelected(true);
-
-        btnMove.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.MOVE));
-        btnRotate.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.ROTATE));
-        btnScale.setOnAction(e -> game.setCurrentTool(com.ignis.core.Game.ToolType.SCALE));
-        btnWorldPaint.setOnAction(e -> {
-            // Requer um World na cena; se nao houver, cria um (limites default) para pintar.
-            if (currentProject != null && currentProject.getCurrentScene() != null
-                    && currentProject.getCurrentScene().getWorld() == null) {
-                createWorldForScene(currentProject.getCurrentScene());
-            }
-            game.setCurrentTool(com.ignis.core.Game.ToolType.WORLD_PAINT);
-            setStatus("Pincel de mundo: clique/arraste para bloquear; Ctrl para apagar.");
-        });
-
-        Button btnZoomIn = new Button("Zoom In");
-        btnZoomIn.setOnAction(e -> zoomCamera(1.25));
-        Button btnZoomOut = new Button("Zoom Out");
-        btnZoomOut.setOnAction(e -> zoomCamera(0.8));
-        Button btnResetCam = new Button("Reset Cam");
-        btnResetCam.setOnAction(e -> resetCamera());
-        Button btnFocusSelected = new Button("Focus Selected");
-        btnFocusSelected.setOnAction(e -> focusCameraOnSelected());
-        Button btnFrameAll = new Button("Enquadrar Tudo");
-        btnFrameAll.setTooltip(new Tooltip("Centraliza e ajusta o zoom para mostrar todos os objetos da cena (Shift+F)"));
-        btnFrameAll.setOnAction(e -> frameAllObjects());
-
-        // Preview da camera do jogo: ligado, a Scene View mostra exatamente o que a
-        // camera ativa da cena ve; desligado (padrao), navega-se livre pela cena com
-        // a camera do editor, sem mexer na camera do jogo.
-        cameraPreviewToggle = new ToggleButton("Ver Câmera do Jogo");
-        cameraPreviewToggle.setTooltip(new Tooltip(
-                "Alterna entre a visão livre do editor e a visão da câmera ativa do jogo"));
-        cameraPreviewToggle.setOnAction(e -> setCameraPreview(cameraPreviewToggle.isSelected()));
-
-        cameraPosLabel = new Label("Cam Pos: (0.0, 0.0)");
-        cameraPosLabel.getStyleClass().add("toolbar-label");
-        cameraZoomLabel = new Label("Zoom: 100%");
-        cameraZoomLabel.getStyleClass().add("toolbar-label");
-
-        // Organizador de cenários: seletor de cena ativa + gerenciador.
-        sceneSelector = new ComboBox<>();
-        sceneSelector.setTooltip(new Tooltip("Cena ativa"));
-        sceneSelector.setPrefWidth(160);
-        sceneSelector.setOnAction(e -> onSceneSelectorChanged());
-        Button btnScenes = new Button("Cenários…");
-        btnScenes.setTooltip(new Tooltip("Criar, organizar e definir a cena inicial; criar mundos"));
-        btnScenes.setOnAction(e -> openSceneManager());
-
-        ToolBar toolBar = new ToolBar(
-            btnOpen, btnBuild, new Separator(),
-            playButton, stopButton, new Separator(),
-            btnMove, btnRotate, btnScale, btnWorldPaint, new Separator(),
-            btnZoomIn, btnZoomOut, btnResetCam, btnFocusSelected, btnFrameAll,
-            cameraPreviewToggle, new Separator(),
-            new Label("Cena:"), sceneSelector, btnScenes, new Separator(),
-            cameraPosLabel, cameraZoomLabel
-        );
+        // Menu + ToolBar (Fase 3). toolbar.build() inicializa os campos de controle
+        // do editor (playButton, btnMove, sceneSelector, ...) — ver EditorToolBarBuilder.
+        ToolBar toolBar = toolbar.build(stage);
         root.setTop(new VBox(menus.buildMenuBar(stage), toolBar));
 
         // Configure selection listener from Game
@@ -288,7 +211,7 @@ public class IgnisEditorApp extends Application {
 
         // Transicao de cenas por script: fora do Play troca a cena do editor; em Play
         // carrega uma copia fresca no game (sem tocar na cena salva).
-        game.setSceneLoader(this::onScriptSceneChange);
+        game.setSceneLoader(scenes::onScriptSceneChange);
 
         // ---- Viewport central ----
         Pane viewportPane = new Pane();
@@ -515,7 +438,7 @@ public class IgnisEditorApp extends Application {
     }
 
     // Adiciona/remove uma entidade tratando o caso especial de Camera (lista propria).
-    private void addEntityTracked(GameObject o) {
+    void addEntityTracked(GameObject o) {
         game.addEntity(o);
         if (o instanceof com.ignis.core.Camera) game.addCamera((com.ignis.core.Camera) o);
     }
@@ -531,9 +454,9 @@ public class IgnisEditorApp extends Application {
      Menu buildSceneMenu() {
         Menu scene = new Menu("Cena");
         MenuItem gerenciarCenarios = new MenuItem("Gerenciar Cenários…");
-        gerenciarCenarios.setOnAction(e -> openSceneManager());
+        gerenciarCenarios.setOnAction(e -> scenes.openSceneManager());
         MenuItem novaCena = new MenuItem("Nova Cena…");
-        novaCena.setOnAction(e -> createNewScene());
+        novaCena.setOnAction(e -> scenes.createNewScene());
         MenuItem criarObjeto = new MenuItem("Criar Objeto de Cena");
         criarObjeto.setOnAction(e -> createEntity("GameObject"));
         MenuItem criarCamera = new MenuItem("Criar Câmera");
@@ -663,7 +586,7 @@ public class IgnisEditorApp extends Application {
                 reloadAllScriptInstances();
             }
             refreshHierarchy();
-            refreshSceneSelector();
+            scenes.refreshSceneSelector();
             refreshAssetBrowser();
             undoManager.clear();
             boolean sessionCopy = isCollabSessionProject();
@@ -728,7 +651,7 @@ public class IgnisEditorApp extends Application {
             } catch (Exception ignore) { /* scripts opcionais */ }
             maybeAutoStartMcp();
             refreshHierarchy();
-            refreshSceneSelector();
+            scenes.refreshSceneSelector();
             refreshAssetBrowser();
             undoManager.clear();
             EditorPrefs.addRecent(this.currentIgnisFile);
@@ -812,7 +735,7 @@ public class IgnisEditorApp extends Application {
     // Remove as cameras residuais do Game ao trocar/fechar projeto. Scene.fromJSON
     // registra cada camera carregada via game.addCamera; sem isto elas acumulam entre
     // projetos e getActiveCamera() poderia retornar uma camera de outro projeto.
-    private void clearGameCameras() {
+    void clearGameCameras() {
         try {
             game.getCameras().clear();
             // Recoloca a mainCamera na lista: sem isso ela vira "fantasma"
@@ -826,7 +749,7 @@ public class IgnisEditorApp extends Application {
     // Espelha doSaveProject() do Swing: reescreve as entidades da cena com as do game.
     // Usa scene.clear() (limpa entities + cameras + activeCamera) para nao deixar
     // cameras orfas, e reconstroi via addEntity (que re-registra cameras).
-    private void syncEntitiesToScene() {
+    void syncEntitiesToScene() {
         if (currentProject == null) return;
         Scene scene = currentProject.getCurrentScene();
         if (scene == null) return;
@@ -838,367 +761,6 @@ public class IgnisEditorApp extends Application {
         scene.setAmbientLight(game.getAmbientLight());
     }
 
-    // ==================== ORGANIZADOR DE CENÁRIOS ====================
-
-    // (Re)popula o seletor de cena da toolbar a partir do projeto, marcando a cena
-    // inicial com ⭐. Programatico: nao dispara a troca de cena (updatingSceneSelector).
-    private void refreshSceneSelector() {
-        if (sceneSelector == null) return;
-        updatingSceneSelector = true;
-        try {
-            sceneSelector.getItems().clear();
-            if (currentProject == null) {
-                sceneSelector.setDisable(true);
-                return;
-            }
-            sceneSelector.setDisable(false);
-            String start = currentProject.getMainScene();
-            String currentLabel = null;
-            for (Scene s : currentProject.getScenes()) {
-                String label = sceneLabel(s, start);
-                sceneSelector.getItems().add(label);
-                if (s == currentProject.getCurrentScene()) currentLabel = label;
-            }
-            if (currentLabel != null) sceneSelector.setValue(currentLabel);
-        } finally {
-            updatingSceneSelector = false;
-        }
-    }
-
-    // Rotulo de cena: nome + prefixo ⭐ quando e a cena inicial (mainScene).
-    private String sceneLabel(Scene s, String startSceneName) {
-        boolean isStart = s.getSceneName().equals(startSceneName);
-        return (isStart ? "⭐ " : "") + s.getSceneName();
-    }
-
-    private String sceneNameFromLabel(String label) {
-        if (label == null) return null;
-        return label.startsWith("⭐ ") ? label.substring(2) : label;
-    }
-
-    private void onSceneSelectorChanged() {
-        if (updatingSceneSelector || currentProject == null || sceneSelector == null) return;
-        String label = sceneSelector.getValue();
-        if (label == null) return;
-        Scene target = currentProject.getSceneByName(sceneNameFromLabel(label));
-        if (target != null && target != currentProject.getCurrentScene()) {
-            switchEditorToScene(target);
-        }
-    }
-
-    // Carrega uma cena no game vivo (limpa entidades/cameras e recarrega scripts).
-    private void loadSceneIntoGame(Scene target) {
-        setSelected(null);
-        clearSecondarySelection();
-        game.getEntities().clear();
-        clearGameCameras();
-        if (target != null) {
-            for (GameObject e : target.getEntities()) {
-                e.setGame(game);
-                addEntityTracked(e);
-            }
-            game.setWorld(target.getWorld());
-        }
-        try {
-            if (game.getScriptManager() != null) reloadAllScriptInstances();
-        } catch (Exception ignore) { /* scripts opcionais */ }
-        refreshHierarchy();
-    }
-
-    // Troca a cena ativa do editor: persiste a cena atual no projeto e carrega a nova.
-    private void switchEditorToScene(Scene target) {
-        if (currentProject == null || target == null) return;
-        if (target == currentProject.getCurrentScene()) return;
-        if (playing) {
-            setStatus("Pare o Play (Stop) antes de trocar de cena.");
-            refreshSceneSelector(); // reverte o seletor para a cena atual
-            return;
-        }
-        syncEntitiesToScene();                    // game -> cena atual
-        currentProject.setCurrentScene(target);
-        loadSceneIntoGame(target);                // cena nova -> game
-        refreshSceneSelector();
-        markProjectDirty();
-        setStatus("Cena ativa: " + target.getSceneName());
-    }
-
-    // SceneLoader para scripts (IgnisScript.loadScene). Fora do Play delega para a
-    // troca normal do editor; durante o Play carrega uma cópia fresca da cena de
-    // destino no game vivo (para não corromper a cena salva com o estado de runtime).
-    private boolean onScriptSceneChange(String sceneName) {
-        if (currentProject == null || sceneName == null) return false;
-        Scene target = currentProject.getSceneByName(sceneName);
-        if (target == null) return false;
-        if (playing) {
-            Scene copy = Scene.fromJSON(target.toJSON(), game);
-            setSelected(null);
-            clearSecondarySelection();
-            game.getEntities().clear();
-            clearGameCameras();
-            for (GameObject e : copy.getEntities()) {
-                e.setGame(game);
-                addEntityTracked(e);
-            }
-            game.setWorld(copy.getWorld());
-            game.refreshColliders();
-            // Reinicia os scripts da nova cena (start()), como numa transição real.
-            try {
-                if (game.getScriptManager() != null) reloadAllScriptInstances();
-            } catch (Exception ignore) { /* scripts opcionais */ }
-            Platform.runLater(this::refreshHierarchy);
-        } else {
-            Platform.runLater(() -> switchEditorToScene(target));
-        }
-        return true;
-    }
-
-    // Cria uma nova cena vazia e a torna ativa.
-    private void createNewScene() {
-        if (!requireProject()) return;
-        String name = promptSceneName("Nova cena", "Cena" + (currentProject.getScenes().size() + 1), null);
-        if (name == null) return;
-        Scene s = new Scene(name);
-        currentProject.addScene(s);
-        switchEditorToScene(s);
-        setStatus("Cena criada: " + name);
-    }
-
-    private void renameScene(Scene s) {
-        if (s == null || currentProject == null) return;
-        String name = promptSceneName("Renomear cena", s.getSceneName(), s);
-        if (name == null) return;
-        boolean wasStart = s.getSceneName().equals(currentProject.getMainScene());
-        s.setSceneName(name);
-        if (wasStart) currentProject.setMainScene(name);
-        refreshSceneSelector();
-        markProjectDirty();
-    }
-
-    private void duplicateScene(Scene s) {
-        if (s == null || currentProject == null) return;
-        if (s == currentProject.getCurrentScene()) syncEntitiesToScene();
-        Scene copy = Scene.fromJSON(s.toJSON(), game);
-        copy.setSceneName(uniqueSceneName(s.getSceneName() + " (cópia)"));
-        currentProject.addScene(copy);
-        refreshSceneSelector();
-        markProjectDirty();
-        setStatus("Cena duplicada: " + copy.getSceneName());
-    }
-
-    private void deleteScene(Scene s) {
-        if (s == null || currentProject == null) return;
-        if (currentProject.getScenes().size() <= 1) {
-            setStatus("Não é possível remover a única cena do projeto.");
-            return;
-        }
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "Remover a cena \"" + s.getSceneName() + "\"? Esta ação não pode ser desfeita.",
-                ButtonType.YES, ButtonType.NO);
-        confirm.setHeaderText(null);
-        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
-
-        boolean isCurrent = (s == currentProject.getCurrentScene());
-        boolean isStart = s.getSceneName().equals(currentProject.getMainScene());
-        currentProject.removeScene(s); // troca currentScene se necessario
-        if (isStart && currentProject.getCurrentScene() != null) {
-            currentProject.setMainScene(currentProject.getCurrentScene().getSceneName());
-        }
-        if (isCurrent) {
-            loadSceneIntoGame(currentProject.getCurrentScene());
-        }
-        refreshSceneSelector();
-        markProjectDirty();
-        setStatus("Cena removida: " + s.getSceneName());
-    }
-
-    private void setStartScene(Scene s) {
-        if (s == null || currentProject == null) return;
-        currentProject.setMainScene(s.getSceneName());
-        refreshSceneSelector();
-        markProjectDirty();
-        setStatus("Cena inicial definida: " + s.getSceneName());
-    }
-
-    // Cria/garante um World para a cena com limites default (1920x1080 centrado na origem).
-    private void createWorldForScene(Scene s) {
-        if (s == null) return;
-        World w = s.getWorld();
-        if (w == null) {
-            w = new World(s.getSceneName() + " World");
-            s.setWorld(w);
-        }
-        if (!w.hasBounds()) {
-            w.setBounds(-960, -540, 960, 540);
-        }
-        if (s == currentProject.getCurrentScene()) game.setWorld(w);
-        markProjectDirty();
-        setStatus("Mundo criado para a cena: " + s.getSceneName());
-    }
-
-    // Dialogo de nome de cena com validacao de unicidade. 'editing' e a cena sendo
-    // renomeada (para permitir manter o proprio nome); null ao criar.
-    private String promptSceneName(String title, String suggested, Scene editing) {
-        while (true) {
-            TextInputDialog dlg = new TextInputDialog(suggested);
-            dlg.setTitle(title);
-            dlg.setHeaderText(null);
-            dlg.setContentText("Nome da cena:");
-            java.util.Optional<String> opt = dlg.showAndWait();
-            if (opt.isEmpty()) return null;
-            String name = opt.get().trim();
-            if (name.isEmpty()) return null;
-            Scene existing = currentProject.getSceneByName(name);
-            if (existing != null && existing != editing) {
-                new Alert(Alert.AlertType.WARNING, "Já existe uma cena com esse nome.").showAndWait();
-                suggested = name;
-                continue;
-            }
-            return name;
-        }
-    }
-
-    // Gera um nome unico a partir de uma base (base, base 2, base 3, ...).
-    private String uniqueSceneName(String base) {
-        if (currentProject.getSceneByName(base) == null) return base;
-        int i = 2;
-        while (currentProject.getSceneByName(base + " " + i) != null) i++;
-        return base + " " + i;
-    }
-
-    // Abre o gerenciador de cenários (organizar cenas + cena inicial + mundos).
-    private void openSceneManager() {
-        if (!requireProject()) return;
-        Stage dialog = new Stage();
-        dialog.initOwner(primaryStage);
-        dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
-        dialog.setTitle("Gerenciar Cenários");
-
-        ListView<String> list = new ListView<>();
-        Runnable reload = () -> {
-            String prev = list.getSelectionModel().getSelectedItem();
-            list.getItems().clear();
-            for (Scene s : currentProject.getScenes()) {
-                list.getItems().add(sceneLabel(s, currentProject.getMainScene()));
-            }
-            if (prev != null && list.getItems().contains(prev)) {
-                list.getSelectionModel().select(prev);
-            } else if (!list.getItems().isEmpty()) {
-                list.getSelectionModel().select(0);
-            }
-        };
-        reload.run();
-        list.setPrefHeight(220);
-
-        java.util.function.Supplier<Scene> selected = () -> {
-            String label = list.getSelectionModel().getSelectedItem();
-            return label == null ? null : currentProject.getSceneByName(sceneNameFromLabel(label));
-        };
-
-        Button btnNova = new Button("Nova…");
-        btnNova.setOnAction(e -> { createNewScene(); reload.run(); });
-        Button btnAtivar = new Button("Ativar");
-        btnAtivar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { switchEditorToScene(s); reload.run(); } });
-        Button btnRenomear = new Button("Renomear…");
-        btnRenomear.setOnAction(e -> { Scene s = selected.get(); if (s != null) { renameScene(s); reload.run(); } });
-        Button btnDuplicar = new Button("Duplicar");
-        btnDuplicar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { duplicateScene(s); reload.run(); } });
-        Button btnInicial = new Button("Definir como inicial ⭐");
-        btnInicial.setOnAction(e -> { Scene s = selected.get(); if (s != null) { setStartScene(s); reload.run(); } });
-        Button btnDeletar = new Button("Deletar");
-        btnDeletar.setOnAction(e -> { Scene s = selected.get(); if (s != null) { deleteScene(s); reload.run(); } });
-
-        VBox sceneButtons = new VBox(6, btnNova, btnAtivar, btnRenomear, btnDuplicar, btnInicial, btnDeletar);
-        sceneButtons.setMinWidth(180);
-
-        // --- Seção de Mundo da cena selecionada ---
-        Label worldTitle = new Label("Mundo da cena");
-        worldTitle.getStyleClass().add("panel-title");
-        Label worldStatus = new Label();
-        worldStatus.setWrapText(true);
-        TextField minXf = new TextField();
-        TextField minYf = new TextField();
-        TextField maxXf = new TextField();
-        TextField maxYf = new TextField();
-        for (TextField tf : new TextField[]{minXf, minYf, maxXf, maxYf}) tf.setPrefColumnCount(6);
-        GridPane worldGrid = new GridPane();
-        worldGrid.setHgap(6); worldGrid.setVgap(4);
-        worldGrid.addRow(0, new Label("Min X"), minXf, new Label("Min Y"), minYf);
-        worldGrid.addRow(1, new Label("Max X"), maxXf, new Label("Max Y"), maxYf);
-
-        Button btnCriarMundo = new Button("Criar Mundo");
-        Button btnAplicarMundo = new Button("Aplicar limites");
-        Button btnRemoverMundo = new Button("Remover Mundo");
-
-        Runnable refreshWorld = () -> {
-            Scene s = selected.get();
-            World w = (s != null) ? s.getWorld() : null;
-            boolean hasWorld = (w != null);
-            boolean hasBounds = hasWorld && w.hasBounds();
-            worldStatus.setText(s == null ? "Selecione uma cena."
-                    : hasWorld ? ("Mundo: " + w.getName() + (hasBounds ? "" : " (sem limites)"))
-                    : "Esta cena não tem mundo.");
-            btnCriarMundo.setDisable(s == null || hasWorld);
-            btnAplicarMundo.setDisable(!hasBounds);
-            btnRemoverMundo.setDisable(!hasWorld);
-            minXf.setDisable(!hasBounds); minYf.setDisable(!hasBounds);
-            maxXf.setDisable(!hasBounds); maxYf.setDisable(!hasBounds);
-            if (hasBounds) {
-                minXf.setText(fmt(w.getMinX())); minYf.setText(fmt(w.getMinY()));
-                maxXf.setText(fmt(w.getMaxX())); maxYf.setText(fmt(w.getMaxY()));
-            } else {
-                minXf.clear(); minYf.clear(); maxXf.clear(); maxYf.clear();
-            }
-        };
-        list.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> refreshWorld.run());
-
-        btnCriarMundo.setOnAction(e -> { Scene s = selected.get(); if (s != null) { createWorldForScene(s); refreshWorld.run(); } });
-        btnAplicarMundo.setOnAction(e -> {
-            Scene s = selected.get();
-            World w = (s != null) ? s.getWorld() : null;
-            if (w == null) return;
-            try {
-                final World world = w;
-                final double[] antes = { world.getMinX(), world.getMinY(), world.getMaxX(), world.getMaxY() };
-                final double[] depois = { Double.parseDouble(minXf.getText()), Double.parseDouble(minYf.getText()),
-                        Double.parseDouble(maxXf.getText()), Double.parseDouble(maxYf.getText()) };
-                world.setBounds(depois[0], depois[1], depois[2], depois[3]);
-                if (s == currentProject.getCurrentScene()) game.setWorld(world);
-                undoManager.push("Limites do mundo",
-                        () -> { world.setBounds(antes[0], antes[1], antes[2], antes[3]); game.repaint(); },
-                        () -> { world.setBounds(depois[0], depois[1], depois[2], depois[3]); game.repaint(); });
-                markProjectDirty();
-                setStatus("Limites do mundo atualizados.");
-            } catch (NumberFormatException ex) {
-                new Alert(Alert.AlertType.WARNING, "Valores de limite inválidos.").showAndWait();
-            }
-        });
-        btnRemoverMundo.setOnAction(e -> {
-            Scene s = selected.get();
-            if (s == null) return;
-            s.setWorld(null);
-            if (s == currentProject.getCurrentScene()) game.setWorld(null);
-            markProjectDirty();
-            refreshWorld.run();
-            setStatus("Mundo removido da cena.");
-        });
-        refreshWorld.run();
-
-        VBox worldBox = new VBox(6, worldTitle, worldStatus, worldGrid,
-                new HBox(6, btnCriarMundo, btnAplicarMundo, btnRemoverMundo));
-        worldBox.setMinWidth(320);
-
-        Button btnFechar = new Button("Fechar");
-        btnFechar.setOnAction(e -> dialog.close());
-
-        HBox body = new HBox(12, list, sceneButtons, new Separator(javafx.geometry.Orientation.VERTICAL), worldBox);
-        VBox rootBox = new VBox(10, body, btnFechar);
-        rootBox.setPadding(new Insets(12));
-        javafx.scene.Scene dlgScene = new javafx.scene.Scene(rootBox);
-        FxTheme.apply(dlgScene);
-        dialog.setScene(dlgScene);
-        dialog.showAndWait();
-        refreshSceneSelector();
-    }
 
     // Fecha o projeto atual e volta para a tela de selecao (espelha o ramo sem-projeto
     // de updateProjectRoot() do Swing: libera ScriptManager e limpa o estado).
@@ -1215,7 +777,7 @@ public class IgnisEditorApp extends Application {
         clearGameCameras();
         setSelected(null);
         refreshHierarchy();
-        refreshSceneSelector();
+        scenes.refreshSceneSelector();
         refreshAssetBrowser();
         undoManager.clear();
         stage.setTitle("IgnisEngine — Editor (JavaFX)");
@@ -1362,7 +924,7 @@ public class IgnisEditorApp extends Application {
 
     // ---------------- Ferramentas (janelas JavaFX) ----------------
 
-    private boolean requireProject() {
+    boolean requireProject() {
         if (projectFolder == null) {
             new Alert(Alert.AlertType.INFORMATION,
                     "Abra um projeto primeiro (Arquivo > Abrir projeto).").showAndWait();
@@ -1538,7 +1100,7 @@ public class IgnisEditorApp extends Application {
     // esta em tela) e o tick() avanca a simulacao; a ponte JavaFX desenha cada frame.
     // Limitacao atual: input de teclado/mouse do jogo ainda nao roteado para o viewport FX.
 
-    private void playWorld() {
+    void playWorld() {
         if (playing) return;
         try {
             clearSecondarySelection();
@@ -1561,7 +1123,7 @@ public class IgnisEditorApp extends Application {
         }
     }
 
-    private void stopWorld() {
+    void stopWorld() {
         if (!playing) return;
         stopGameLoop();
         // Recarregar os scripts para restaurar o estado do editor e suas variáveis
@@ -2642,6 +2204,8 @@ public class IgnisEditorApp extends Application {
     private final InspectorSectionBuilder inspector = new InspectorSectionBuilder(this);
      final EditorMenuBuilder menus = new EditorMenuBuilder(this);
     private final EditorPanelBuilder panels = new EditorPanelBuilder(this);
+    private final EditorToolBarBuilder toolbar = new EditorToolBarBuilder(this);
+    final EditorSceneOrganizer scenes = new EditorSceneOrganizer(this);
 
     private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
