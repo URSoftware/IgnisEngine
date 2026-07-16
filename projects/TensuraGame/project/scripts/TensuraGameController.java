@@ -39,6 +39,20 @@ public final class TensuraGameController extends IgnisScript {
     private static final String SOUNDS = "assets/sounds/";
 
     private final Map<Long, GameObject> visuals = new HashMap<>();
+
+    // ---- Estabilidade de sessao longa (16/07/2026) ----
+    // Pool de visuais: um orbe coletado devolve o GameObject aqui em vez de destruir,
+    // e o proximo spawn o reusa. Sem isso, cada orbe nascia por instantiatePrefab e
+    // morria por destroy — churn constante que aparecia como milhares de linhas de
+    // "Prefab RuntimeVisual instanciada" no log da sessao que estourou a memoria.
+    private final java.util.Deque<GameObject> visualPool = new java.util.ArrayDeque<>();
+    private static final int MAX_POOLED_VISUALS = 256;
+
+    // Coleções de trabalho reusadas: syncWorld roda 60x/s e alocava um HashSet e uma
+    // lista de stream() a cada tick.
+    private final Set<Long> activeIds = new HashSet<>();
+    private final List<Long> staleIds = new ArrayList<>();
+
     private RunSimulation simulation;
     private RunSnapshot snapshot;
     private GameObject player;
@@ -174,11 +188,16 @@ public final class TensuraGameController extends IgnisScript {
 
     private void syncWorld() {
         syncPlayer();
-        Set<Long> activeIds = new HashSet<>();
+        activeIds.clear();
         for (WorldEntitySnapshot entity : snapshot.entities()) {
             activeIds.add(entity.id());
-            GameObject visual = visuals.computeIfAbsent(entity.id(), ignored ->
-                    spawnRuntimeVisual(entity.kind().name(), entity.x(), entity.y()));
+            // get/put em vez de computeIfAbsent: a lambda capturava 'entity', entao
+            // alocava um objeto por entidade por tick mesmo quando o visual ja existia.
+            GameObject visual = visuals.get(entity.id());
+            if (visual == null) {
+                visual = spawnRuntimeVisual(entity.kind().name(), entity.x(), entity.y());
+                visuals.put(entity.id(), visual);
+            }
             VisualSpec spec = specFor(entity.kind());
             visual.setWidth(spec.width());
             visual.setHeight(spec.height());
@@ -189,27 +208,45 @@ public final class TensuraGameController extends IgnisScript {
             setSpriteIfChanged(visual, spec.sprite(snapshot.elapsedSeconds()));
         }
 
-        List<Long> stale = visuals.keySet().stream()
-                .filter(id -> !activeIds.contains(id))
-                .toList();
-        for (Long id : stale) destroy(visuals.remove(id));
+        // Sem stream()/toList() por tick: itera o keySet e reusa a lista de trabalho.
+        staleIds.clear();
+        for (Long id : visuals.keySet()) {
+            if (!activeIds.contains(id)) staleIds.add(id);
+        }
+        for (Long id : staleIds) recycle(visuals.remove(id));
+    }
+
+    // Quadros de cada forma do Rimuru, prontos: syncPlayer roda todo tick e montava
+    // o caminho do sprite na hora (switch + concatenacao).
+    private static final Map<RimuruForm, String[]> PLAYER_FRAMES = buildPlayerFrames();
+
+    private static Map<RimuruForm, String[]> buildPlayerFrames() {
+        Map<RimuruForm, String[]> frames = new java.util.EnumMap<>(RimuruForm.class);
+        frames.put(RimuruForm.SLIME, playerFrames("slime"));
+        frames.put(RimuruForm.HUMANOID, playerFrames("humanoid"));
+        frames.put(RimuruForm.DEMON_LORD, playerFrames("demon_lord"));
+        return frames;
+    }
+
+    private static String[] playerFrames(String formName) {
+        String[] paths = new String[4];
+        for (int i = 0; i < paths.length; i++) {
+            paths[i] = SPRITES + "rimuru_" + formName + "_0" + (i + 1) + ".png";
+        }
+        return paths;
     }
 
     private void syncPlayer() {
         if (player == null) return;
-        int frame = (int) (snapshot.elapsedSeconds() / frameDuration(snapshot.form())) % 4 + 1;
-        String formName = switch (snapshot.form()) {
-            case SLIME -> "slime";
-            case HUMANOID -> "humanoid";
-            case DEMON_LORD -> "demon_lord";
-        };
+        String[] frames = PLAYER_FRAMES.get(snapshot.form());
+        int frame = (int) (snapshot.elapsedSeconds() / frameDuration(snapshot.form())) % frames.length;
         int width = snapshot.form() == RimuruForm.SLIME ? 48 : 46;
         int height = snapshot.form() == RimuruForm.SLIME ? 42 : 62;
         player.setWidth(width);
         player.setHeight(height);
         player.setX(snapshot.playerX() - width / 2.0);
         player.setY(snapshot.playerY() - height / 2.0);
-        setSpriteIfChanged(player, SPRITES + "rimuru_" + formName + "_0" + frame + ".png");
+        setSpriteIfChanged(player, frames[frame]);
         if (lastForm != snapshot.form()) {
             lastForm = snapshot.form();
             player.setOpacity(1.0);
@@ -225,10 +262,17 @@ public final class TensuraGameController extends IgnisScript {
     }
 
     private GameObject spawnRuntimeVisual(String name, double x, double y) {
-        GameObject object = getGame().instantiatePrefab("RuntimeVisual", x, y);
+        // 1) Reusa um visual aposentado antes de criar qualquer coisa.
+        GameObject object = visualPool.poll();
         if (object == null) {
-            object = new GameObject(name, getGame(), x, y, 32, 32);
-            getGame().addEntity(object);
+            object = getGame().instantiatePrefab("RuntimeVisual", x, y);
+            if (object == null) {
+                object = new GameObject(name, getGame(), x, y, 32, 32);
+                getGame().addEntity(object);
+            }
+        } else {
+            object.setX(x);
+            object.setY(y);
         }
         object.setName(name);
         object.setTag("tensura_runtime");
@@ -237,26 +281,57 @@ public final class TensuraGameController extends IgnisScript {
         return object;
     }
 
+    /**
+     * Aposenta um visual: some da tela e volta para o pool, pronto para o proximo
+     * spawn. Acima do teto o objeto e destruido de fato — o pool nao pode virar um
+     * vazamento com outro nome numa run muito longa.
+     */
+    private void recycle(GameObject visual) {
+        if (visual == null) return;
+        if (visualPool.size() >= MAX_POOLED_VISUALS) {
+            destroy(visual);
+            return;
+        }
+        visual.setVisible(false);
+        visualPool.push(visual);
+    }
+
     private void setSpriteIfChanged(GameObject object, String path) {
         if (!path.equals(object.getSpritePath())) object.setSpritePath(path);
     }
 
+    // VisualSpec e imutavel, mas specFor() montava uma instancia nova (com
+    // concatenacao de string junto) para CADA entidade a CADA tick — 60x/s por
+    // entidade, puro lixo para o GC. Pre-computados uma unica vez.
+    private static final Map<WorldEntityKind, VisualSpec> SPECS = buildSpecs();
+
+    // KATANA_CUT depende da forma atual do Rimuru: as duas variantes prontas.
+    private static final VisualSpec KATANA_DEMON_LORD =
+            new VisualSpec(SPRITES + "beelzebuth_blade.png", 42, 22, 20);
+    private static final VisualSpec KATANA_PREDATOR =
+            new VisualSpec(SPRITES + "predator_katana.png", 42, 22, 20);
+
+    private static Map<WorldEntityKind, VisualSpec> buildSpecs() {
+        Map<WorldEntityKind, VisualSpec> specs = new java.util.EnumMap<>(WorldEntityKind.class);
+        specs.put(WorldEntityKind.GOBLIN, new VisualSpec(SPRITES + "goblin_scout.png", 32, 32, 10));
+        specs.put(WorldEntityKind.ORC, new VisualSpec(SPRITES + "orc_warrior.png", 42, 42, 10));
+        specs.put(WorldEntityKind.DIRE_WOLF, new VisualSpec(SPRITES + "dire_wolf.png", 40, 30, 10));
+        specs.put(WorldEntityKind.FLAME_SPIRIT, new VisualSpec(SPRITES + "flame_spirit.png", 38, 44, 11));
+        specs.put(WorldEntityKind.RED_REAPER, new VisualSpec(SPRITES + "red_reaper.png", 78, 78, 15));
+        specs.put(WorldEntityKind.MAGICULE_ORB, new VisualSpec(SPRITES + "magicule_orb.png", 14, 14, 5));
+        specs.put(WorldEntityKind.WATER_BLADE, new VisualSpec(SPRITES + "water_blade.png", 32, 14, 20));
+        specs.put(WorldEntityKind.BLACK_LIGHTNING, new VisualSpec(SPRITES + "black_lightning.png", 42, 14, 21));
+        specs.put(WorldEntityKind.PREDATOR_MAW, new VisualSpec(SPRITES + "predator_maw.png", 110, 110, 18));
+        specs.put(WorldEntityKind.VOID_CUT, new VisualSpec(SPRITES + "azathoth_void_blade.png", 52, 26, 22));
+        specs.put(WorldEntityKind.RANGA, new AnimatedVisualSpec(SPRITES + "ranga_", 48, 38, 25, 0.10));
+        return specs;
+    }
+
     private VisualSpec specFor(WorldEntityKind kind) {
-        return switch (kind) {
-            case GOBLIN -> new VisualSpec(SPRITES + "goblin_scout.png", 32, 32, 10);
-            case ORC -> new VisualSpec(SPRITES + "orc_warrior.png", 42, 42, 10);
-            case DIRE_WOLF -> new VisualSpec(SPRITES + "dire_wolf.png", 40, 30, 10);
-            case FLAME_SPIRIT -> new VisualSpec(SPRITES + "flame_spirit.png", 38, 44, 11);
-            case RED_REAPER -> new VisualSpec(SPRITES + "red_reaper.png", 78, 78, 15);
-            case MAGICULE_ORB -> new VisualSpec(SPRITES + "magicule_orb.png", 14, 14, 5);
-            case WATER_BLADE -> new VisualSpec(SPRITES + "water_blade.png", 32, 14, 20);
-            case KATANA_CUT -> new VisualSpec(snapshot.form() == RimuruForm.DEMON_LORD
-                    ? SPRITES + "beelzebuth_blade.png" : SPRITES + "predator_katana.png", 42, 22, 20);
-            case BLACK_LIGHTNING -> new VisualSpec(SPRITES + "black_lightning.png", 42, 14, 21);
-            case PREDATOR_MAW -> new VisualSpec(SPRITES + "predator_maw.png", 110, 110, 18);
-            case VOID_CUT -> new VisualSpec(SPRITES + "azathoth_void_blade.png", 52, 26, 22);
-            case RANGA -> new AnimatedVisualSpec(SPRITES + "ranga_", 48, 38, 25, 0.10);
-        };
+        if (kind == WorldEntityKind.KATANA_CUT) {
+            return snapshot.form() == RimuruForm.DEMON_LORD ? KATANA_DEMON_LORD : KATANA_PREDATOR;
+        }
+        return SPECS.get(kind);
     }
 
     private void createHud() {
@@ -681,16 +756,21 @@ public final class TensuraGameController extends IgnisScript {
 
     private static final class AnimatedVisualSpec extends VisualSpec {
         private final double frameDuration;
+        // Caminhos dos quadros prontos: sprite() e chamado a cada tick e montava a
+        // string do caminho na hora (path + "0" + frame + ".png").
+        private final String[] frames;
 
         private AnimatedVisualSpec(String path, int width, int height, int zIndex, double frameDuration) {
             super(path, width, height, zIndex);
             this.frameDuration = frameDuration;
+            this.frames = new String[] {
+                path + "01.png", path + "02.png", path + "03.png", path + "04.png"
+            };
         }
 
         @Override
         String sprite(double elapsed) {
-            int frame = (int) (elapsed / frameDuration) % 4 + 1;
-            return path() + "0" + frame + ".png";
+            return frames[(int) (elapsed / frameDuration) % frames.length];
         }
     }
 }

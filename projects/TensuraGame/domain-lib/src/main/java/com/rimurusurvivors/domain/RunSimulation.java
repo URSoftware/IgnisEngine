@@ -16,6 +16,12 @@ public final class RunSimulation {
     private static final double PLAYER_RADIUS = 16.0;
     private static final double REAPER_SPAWN_SECONDS = 300.0;
 
+    // Teto de orbes simultaneos na arena e distancia em que dois orbes viram um so.
+    // Ambos preservam a experiencia total (ver spawnOrb): limitam quantos OBJETOS
+    // representam a mesma experiencia, nao quanta experiencia existe.
+    private static final int MAX_ORBS = 120;
+    private static final double ORB_MERGE_DISTANCE = 18;
+
     private final WeaponProgression progression;
     private final RimuruRunState rimuru = new RimuruRunState();
     private final Random random;
@@ -389,9 +395,88 @@ public final class RunSimulation {
             if (enemy.health > 0) continue;
             iterator.remove();
             kills++;
-            orbs.add(new Orb(nextId++, enemy.x, enemy.y, enemy.experience));
+            spawnOrb(enemy.x, enemy.y, enemy.experience);
             events.add(new RunEvent(RunEventType.ENEMY_DEFEATED, enemy.familyId, enemy.x, enemy.y));
             if (enemy.kind == WorldEntityKind.RED_REAPER) victory = true;
+        }
+    }
+
+    /**
+     * Cria o orbe de um inimigo derrotado, coalescendo com um orbe vizinho quando
+     * houver e respeitando o teto de orbes na arena.
+     *
+     * <p>Orbes so somem quando o jogador encosta neles (raio de coleta 20); os que
+     * caem longe do ima ficam na arena para sempre. Numa run longa isso crescia sem
+     * limite — e cada orbe custa um GameObject visual no motor, um dos fatores da
+     * pressao de memoria que derrubou o editor em 15/07/2026.</p>
+     *
+     * <p><b>O valor total e sempre conservado:</b> coalescer soma o valor no orbe que
+     * fica. O jogador nao perde experiencia — muda so quantos objetos representam a
+     * mesma experiencia na tela.</p>
+     */
+    void spawnOrb(double x, double y, int value) {
+        for (Orb orb : orbs) {
+            double dx = orb.x - x;
+            double dy = orb.y - y;
+            if (dx * dx + dy * dy <= ORB_MERGE_DISTANCE * ORB_MERGE_DISTANCE) {
+                orb.value += value;
+                return;
+            }
+        }
+        orbs.add(new Orb(nextId++, x, y, value));
+        enforceOrbCap();
+    }
+
+    /** Quantos orbes existem na arena (o que o teto limita). */
+    int orbCount() {
+        return orbs.size();
+    }
+
+    /**
+     * Experiencia total ainda no chao, somando todos os orbes. E o invariante que o
+     * teto e a coalescencia NAO podem violar: eles mudam quantos objetos existem,
+     * nunca quanta experiencia eles valem.
+     */
+    int totalOrbValue() {
+        int total = 0;
+        for (Orb orb : orbs) total += orb.value;
+        return total;
+    }
+
+    /**
+     * Mantem o numero de orbes no teto: o orbe mais distante do jogador (o que menos
+     * chance tem de ser coletado logo) cede o valor ao vizinho mais proximo dele.
+     */
+    private void enforceOrbCap() {
+        while (orbs.size() > MAX_ORBS) {
+            int farthestIndex = 0;
+            double farthestDistance = -1;
+            for (int i = 0; i < orbs.size(); i++) {
+                Orb orb = orbs.get(i);
+                double dx = playerX - orb.x;
+                double dy = playerY - orb.y;
+                double distance = dx * dx + dy * dy;
+                if (distance > farthestDistance) {
+                    farthestDistance = distance;
+                    farthestIndex = i;
+                }
+            }
+            Orb victim = orbs.remove(farthestIndex);
+
+            int hostIndex = -1;
+            double hostDistance = Double.MAX_VALUE;
+            for (int i = 0; i < orbs.size(); i++) {
+                Orb orb = orbs.get(i);
+                double dx = orb.x - victim.x;
+                double dy = orb.y - victim.y;
+                double distance = dx * dx + dy * dy;
+                if (distance < hostDistance) {
+                    hostDistance = distance;
+                    hostIndex = i;
+                }
+            }
+            // Com MAX_ORBS >= 1 e size > MAX_ORBS sempre sobra pelo menos um host.
+            orbs.get(hostIndex).value += victim.value;
         }
     }
 
@@ -582,7 +667,9 @@ public final class RunSimulation {
 
     private static final class Orb {
         private final long id;
-        private final int value;
+        // Nao e final: orbes coalescem (um absorve o valor do outro) para o numero de
+        // orbes na arena nao crescer sem limite numa run longa. Ver spawnOrb.
+        private int value;
         private double x;
         private double y;
 
