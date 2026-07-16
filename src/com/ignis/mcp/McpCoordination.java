@@ -16,7 +16,10 @@ import java.util.Map;
  *   <li><b>Mural de mensagens:</b> chat compartilhado (broadcast ou direcionado),
  *       com numero de sequencia para polling incremental;</li>
  *   <li><b>Claims (locks):</b> reserva de um recurso (script, objeto...) por um
- *       agente, com expiracao — para dois agentes nao editarem a mesma coisa;</li>
+ *       agente, com expiracao — para dois agentes nao editarem a mesma coisa.
+ *       Os claims sao <b>aplicados</b> pelo gate central do
+ *       {@link IgnisToolRegistry#call}: toda ferramenta que muta cena, objeto,
+ *       camera, mundo ou script e barrada se o alvo pertencer a outro agente;</li>
  *   <li><b>Tarefas:</b> quadro simples para o usuario dividir o trabalho e os
  *       agentes reivindicarem/concluirem.</li>
  * </ul>
@@ -84,6 +87,16 @@ public final class McpCoordination {
     // ------------------------------------------------------------------
     // Presenca
     // ------------------------------------------------------------------
+
+    /**
+     * Marca presenca sem entrar no mural. Chamado pelo {@link IgnisToolRegistry} a
+     * cada ferramenta executada com 'agent' — assim um agente que trabalha sem
+     * chamar agent_join ainda aparece em agent_list e nao "some" da presenca
+     * enquanto trabalha.
+     */
+    public synchronized void touchAgent(String agent) {
+        touch(agent);
+    }
 
     /** Registra/atualiza a presenca de um agente. Retorna a lista de ativos. */
     public synchronized String join(String agent, String role) {
@@ -217,6 +230,28 @@ public final class McpCoordination {
         if (c == null) return null;
         if ((System.currentTimeMillis() - c.millis) > CLAIM_TTL_MS) { claims.remove(resource); return null; }
         return c.agent;
+    }
+
+    /**
+     * Primeiro recurso reservado por um agente DIFERENTE de {@code agent}, no formato
+     * {@code "recurso (dono)"}; null se ninguem mais segura nada.
+     *
+     * <p>Serve as operacoes destrutivas de escopo amplo (limpar a cena, iniciar o
+     * Play): elas nao miram um recurso especifico, entao a checagem por chave nao
+     * as pegaria — mas atropelam o trabalho de quem quer que esteja editando.</p>
+     */
+    public synchronized String anyHolderExcept(String agent) {
+        long now = System.currentTimeMillis();
+        List<String> stale = new ArrayList<>();
+        String found = null;
+        for (Map.Entry<String, Claim> e : claims.entrySet()) {
+            Claim c = e.getValue();
+            if ((now - c.millis) > CLAIM_TTL_MS) { stale.add(e.getKey()); continue; }
+            if (agent != null && c.agent.equalsIgnoreCase(agent)) continue;
+            if (found == null) found = e.getKey() + " (" + c.agent + ")";
+        }
+        for (String s : stale) claims.remove(s);
+        return found;
     }
 
     // ------------------------------------------------------------------

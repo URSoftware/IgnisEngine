@@ -114,6 +114,88 @@ public final class IgnisToolRegistry {
             "create_light_object", "set_light_properties", "set_scene_ambient_light",
             "set_parent", "clear_parent");
 
+    // ------------------------------------------------------------------
+    // Coordenacao multi-agente: escopo de claim por ferramenta
+    // ------------------------------------------------------------------
+
+    /**
+     * Escopo de coordenacao de uma ferramenta que MUTA algo: qual recurso ela toca,
+     * para o gate central checar o claim de {@link McpCoordination} antes de executar.
+     */
+    private static final class Guard {
+        /** Prefixo do recurso ("objeto", "camera", "script", "mundo", "cena"). */
+        final String prefix;
+        /** Argumento que identifica o alvo; null = recurso fixo (o proprio prefixo). */
+        final String arg;
+        /** Operacao destrutiva ampla: conflita com QUALQUER claim de outro agente. */
+        final boolean wide;
+
+        Guard(String prefix, String arg, boolean wide) {
+            this.prefix = prefix;
+            this.arg = arg;
+            this.wide = wide;
+        }
+    }
+
+    // Ferramenta -> recurso que ela disputa. Um agente que informa 'agent' e barrado
+    // se o recurso estiver reservado (claim) por OUTRO agente. Chamadas sem 'agent'
+    // passam direto: a coordenacao e opt-in e nao quebra clientes existentes.
+    private static final Map<String, Guard> GUARDS = buildGuards();
+
+    private static Map<String, Guard> buildGuards() {
+        Map<String, Guard> m = new LinkedHashMap<>();
+        // Objetos de cena identificados pelo argumento 'name'.
+        for (String t : List.of(
+                "create_object", "delete_object", "set_object_transform", "set_object_sprite",
+                "set_sprite_region", "set_object_visual", "set_object_visible",
+                "set_object_name_color", "reorder_object_z", "set_object_world_collision",
+                "clear_parent", "create_text_object", "set_text",
+                "create_light_object", "set_light_properties",
+                "create_background_layer", "set_parallax_factor",
+                "create_particle_emitter", "particle_burst", "set_particle_emitting",
+                "create_tilemap", "add_tilemap_layer", "clear_tilemap_layer",
+                "set_tile", "paint_tiles")) {
+            m.put(t, new Guard("objeto", "name", false));
+        }
+        // Objetos de cena identificados por 'objectName'.
+        for (String t : List.of(
+                "attach_script", "remove_script_from_object", "set_object_collider",
+                "attach_animation", "play_animation", "stop_animation")) {
+            m.put(t, new Guard("objeto", "objectName", false));
+        }
+        // Reparentar: o filho e quem muda de lugar na hierarquia.
+        m.put("set_parent", new Guard("objeto", "child", false));
+
+        // Scripts (o claim historico: 'script:PlayerController').
+        m.put("write_script", new Guard("script", "scriptName", false));
+        m.put("create_script", new Guard("script", "scriptName", false));
+
+        // Cameras nomeadas.
+        for (String t : List.of("create_camera", "set_camera_transform", "set_active_camera")) {
+            m.put(t, new Guard("camera", "name", false));
+        }
+        // Camera ativa (sem alvo nomeado): recurso fixo 'camera'.
+        for (String t : List.of("set_camera_follow", "stop_camera_follow", "camera_shake",
+                "set_camera_bounds", "clear_camera_bounds")) {
+            m.put(t, new Guard("camera", null, false));
+        }
+        // Mundo: limites, grade e barreiras sao um recurso so.
+        for (String t : List.of("set_world_bounds", "clear_world_bounds", "set_world_grid",
+                "block_rect", "unblock_rect", "block_cell", "unblock_cell",
+                "clear_barriers", "set_world_property")) {
+            m.put(t, new Guard("mundo", null, false));
+        }
+        // Cena inteira.
+        m.put("set_scene_ambient_light", new Guard("cena", null, false));
+        m.put("instantiate_prefab", new Guard("cena", null, false));
+        // Destrutivas/disruptivas amplas: nao miram um alvo, mas atropelam quem edita.
+        m.put("clear_scene", new Guard("cena", null, true));
+        m.put("play_game", new Guard("cena", null, true));
+        m.put("stop_game", new Guard("cena", null, true));
+
+        return java.util.Collections.unmodifiableMap(m);
+    }
+
     // Contexto vivo do editor (opcional): presente quando o bridge roda dentro do
     // editor JavaFX, habilitando ferramentas de cena e de Play. Nulo no modo headless.
     Game liveGame;
@@ -202,6 +284,27 @@ public final class IgnisToolRegistry {
             return "[colaboracao] '" + name + "' encaminhado ao host (aplicado na cena autoritativa).";
         }
 
+        // Identidade do chamador: o bridge HTTP nao tem sessao por conexao, entao o
+        // agente se identifica pelo argumento 'agent'. E opcional — sem ele a chamada
+        // roda como anonima, sem coordenacao (retrocompatibilidade).
+        final String agent = safeArgs.optString("agent", "").trim();
+        // Para o LOG, aceita tambem 'from' (as ferramentas de mural usam esse nome),
+        // senao send_message/read_messages apareceriam sem dono no Console. So o
+        // 'agent' vale para o gate de claims — 'from' nao autoriza escrita.
+        String caller = agent.isEmpty() ? safeArgs.optString("from", "").trim() : agent;
+        final String who = caller.isEmpty() ? "" : caller + ": ";
+
+        // Gate de coordenacao: barra a escrita num recurso reservado por outro agente
+        // ANTES de executar, para o conflito nunca chegar a tocar a cena.
+        String conflict = coordConflict(name, safeArgs, agent);
+        if (conflict != null) {
+            IgnisLogger.warn("[MCP] " + who + name + " -> CONFLITO");
+            return conflict;
+        }
+        if (!agent.isEmpty()) {
+            McpCoordination.get().touchAgent(agent);
+        }
+
         long startNanos = System.nanoTime();
         String result = IgnisMcpBridge.runOnFxThread(() -> {
             try {
@@ -216,7 +319,7 @@ public final class IgnisToolRegistry {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         String argsPreview = safeArgs.isEmpty() ? "" : " " + truncate(safeArgs.toString(), 120);
         boolean isError = result != null && result.startsWith("Erro");
-        IgnisLogger.info("[MCP] " + name + argsPreview + " -> "
+        IgnisLogger.info("[MCP] " + who + name + argsPreview + " -> "
                 + (isError ? "ERRO" : "ok") + " (" + ms + "ms)");
         return result;
     }
@@ -243,6 +346,21 @@ public final class IgnisToolRegistry {
     // ----------------------------------------------------------------------
 
     void add(String name, String description, JSONObject schema, ToolHandler handler) {
+        // Ponto unico de registro: toda ferramenta guardada ganha o parametro 'agent'
+        // e a nota de coordenacao no schema, sem que cada classe de dominio precise
+        // declara-lo. Assim o catalogo (/mcp/tools) ensina o protocolo por si so.
+        if (GUARDS.containsKey(name)) {
+            JSONObject properties = schema.optJSONObject("properties");
+            if (properties == null) {
+                properties = new JSONObject();
+                schema.put("properties", properties);
+            }
+            properties.put("agent", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Seu nome de agente (opcional). Identifica voce no Console do "
+                            + "editor e faz esta chamada respeitar os claims dos outros agentes."));
+            description = description + " Informe 'agent' para se identificar e respeitar claims.";
+        }
         tools.put(name, new ToolDef(name, description, schema, handler));
     }
 
@@ -268,13 +386,38 @@ public final class IgnisToolRegistry {
         return projectScriptManager;
     }
 
-    // Coordenacao multi-agente: se 'agent' foi informado e o recurso esta reservado
-    // por OUTRO agente, retorna a mensagem de conflito (a ferramenta deve abortar).
-    // Retorna null quando pode prosseguir (sem agente, recurso livre, ou dono e voce).
-    private String coordConflict(String resource, String agent) {
-        if (agent == null || agent.trim().isEmpty()) return null;
+    /**
+     * Gate de coordenacao multi-agente, aplicado a TODA ferramenta guardada (ver
+     * {@link #GUARDS}) antes da execucao.
+     *
+     * <p>Retorna a mensagem de conflito quando o recurso alvo esta reservado por
+     * OUTRO agente, ou null quando pode prosseguir: chamada anonima (sem 'agent'),
+     * ferramenta nao guardada (leitura), recurso livre, ou o dono do claim e voce.</p>
+     */
+    String coordConflict(String tool, JSONObject args, String agent) {
+        if (agent.isEmpty()) return null; // anonimo: sem coordenacao (opt-in)
+        Guard guard = GUARDS.get(tool);
+        if (guard == null) return null;  // leitura ou ferramenta fora do escopo
+
+        if (guard.wide) {
+            // Destrutiva ampla: qualquer claim de terceiro basta para barrar.
+            String other = McpCoordination.get().anyHolderExcept(agent);
+            if (other != null) {
+                return "CONFLITO: '" + tool + "' afeta a cena inteira e ha recurso reservado"
+                        + " por outro agente: " + other
+                        + ". Combine pelo mural (send_message) antes de prosseguir.";
+            }
+            return null;
+        }
+
+        String resource = guard.prefix;
+        if (guard.arg != null) {
+            String id = args.optString(guard.arg, "").trim();
+            if (id.isEmpty()) return null; // sem alvo identificavel: nada a checar
+            resource = guard.prefix + ":" + id;
+        }
         String holder = McpCoordination.get().holderOf(resource);
-        if (holder != null && !holder.equalsIgnoreCase(agent.trim())) {
+        if (holder != null && !holder.equalsIgnoreCase(agent)) {
             return "CONFLITO: '" + resource + "' esta reservado por " + holder
                     + ". Combine pelo mural (send_message) antes de editar.";
         }
@@ -317,16 +460,13 @@ public final class IgnisToolRegistry {
         Map<String, String> writeScriptProps = new LinkedHashMap<>();
         writeScriptProps.put("scriptName", "Nome do script (ex: PlayerController)");
         writeScriptProps.put("content", "Conteudo Java completo do script");
-        writeScriptProps.put("agent", "Seu nome de agente (opcional; respeita claim de outro agente)");
         add("write_script",
-            "Sobrescreve o conteudo-fonte de um script existente. Respeita claim (coordenacao multi-agente) se 'agent' for informado.",
+            "Sobrescreve o conteudo-fonte de um script existente.",
             schemaWith(writeScriptProps, List.of("scriptName", "content")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
                 String content = args.optString("content", "");
                 if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
-                String conflict = coordConflict("script:" + name, args.optString("agent", ""));
-                if (conflict != null) return conflict;
                 boolean ok = scriptManager().saveScriptContent(name, content);
                 return ok ? "Script salvo: " + name : "Erro ao salvar script: " + name;
             });
@@ -334,15 +474,12 @@ public final class IgnisToolRegistry {
         // create_script
         Map<String, String> createScriptProps = new LinkedHashMap<>();
         createScriptProps.put("scriptName", "Nome do novo script (ex: EnemyAI)");
-        createScriptProps.put("agent", "Seu nome de agente (opcional; respeita claim de outro agente)");
         add("create_script",
             "Cria um novo script Java a partir do template padrao do motor.",
             schemaWith(createScriptProps, List.of("scriptName")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
                 if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
-                String conflict = coordConflict("script:" + name, args.optString("agent", ""));
-                if (conflict != null) return conflict;
                 boolean ok = scriptManager().createNewScript(name);
                 return ok ? "Script criado: " + name : "Erro: script ja existe ou nome invalido: " + name;
             });
