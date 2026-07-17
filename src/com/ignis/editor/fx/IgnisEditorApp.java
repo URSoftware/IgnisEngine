@@ -1068,7 +1068,8 @@ public class IgnisEditorApp extends Application {
             // independentemente de o bridge estar ligado agora (o toggle das
             // Configuracoes tambem se beneficia).
             com.ignis.mcp.McpService.setEditorContext(game,
-                    this::playWorld, this::stopWorld, this::refreshHierarchy, this::saveProjectSilently);
+                    this::playWorld, this::stopWorld, this::refreshHierarchy, this::saveProjectSilently,
+                    mcpSceneHost);
             // Captura da janela inteira para a ferramenta MCP capture_editor_window
             // (validacao visual da GUI por agentes). O snapshot FX vive aqui; o
             // registry so conhece o Supplier<BufferedImage>.
@@ -1220,7 +1221,7 @@ public class IgnisEditorApp extends Application {
             double deltaY = e.getDeltaY();
             if (deltaY != 0) {
                 double factor = deltaY > 0 ? 1.15 : 0.85;
-                zoomCamera(factor);
+                zoomCameraAtScreenPoint(factor, e.getX(), e.getY());
             }
         });
 
@@ -2206,6 +2207,17 @@ public class IgnisEditorApp extends Application {
     private final EditorPanelBuilder panels = new EditorPanelBuilder(this);
     private final EditorToolBarBuilder toolbar = new EditorToolBarBuilder(this);
     final EditorSceneOrganizer scenes = new EditorSceneOrganizer(this);
+
+    // Ponte para o MCP (com.ignis.mcp.SceneHost): so encaminha para EditorSceneOrganizer,
+    // que e package-private e por isso invisivel ao pacote com.ignis.mcp.
+    private final com.ignis.mcp.SceneHost mcpSceneHost = new com.ignis.mcp.SceneHost() {
+        @Override public java.util.List<String> listScenes() { return scenes.listSceneNamesForMcp(); }
+        @Override public String createScene(String sceneName) { return scenes.createSceneForMcp(sceneName); }
+        @Override public String switchScene(String sceneName) { return scenes.switchSceneForMcp(sceneName); }
+        @Override public String copyObjectToScene(String objectName, String targetSceneName, String newName) {
+            return scenes.copyObjectToSceneForMcp(objectName, targetSceneName, newName);
+        }
+    };
 
     private javafx.scene.Node buildInspector() {
         VBox box = new VBox(8);
@@ -3424,6 +3436,18 @@ public class IgnisEditorApp extends Application {
             cam.setZoom(cam.getZoom() * factor);
             updateCameraLabels();
         }
+    }
+
+    // Zoom que mantem o ponto do MUNDO sob (screenX,screenY) parado na tela — o
+    // scroll do mouse usa este em vez de zoomCamera() para dar zoom na direcao de
+    // onde o cursor esta apontando, nao no centro fixo da Scene View.
+    // Camera.zoomToPoint ja existia pronta e nunca era chamada por ninguem.
+     void zoomCameraAtScreenPoint(double factor, double screenX, double screenY) {
+        com.ignis.core.Camera cam = game.getViewCamera();
+        if (cam == null) return;
+        java.awt.geom.Point2D.Double worldPoint = cam.screenToWorld(screenX, screenY);
+        cam.zoomToPoint(worldPoint.x, worldPoint.y, cam.getZoom() * factor);
+        updateCameraLabels();
     }
 
      void resetCamera() {

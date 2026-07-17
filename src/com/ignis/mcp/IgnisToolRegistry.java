@@ -112,7 +112,8 @@ public final class IgnisToolRegistry {
             "create_tilemap", "add_tilemap_layer", "set_tile", "paint_tiles", "clear_tilemap_layer",
             "create_text_object", "set_text",
             "create_light_object", "set_light_properties", "set_scene_ambient_light",
-            "set_parent", "clear_parent");
+            "set_parent", "clear_parent",
+            "create_scene", "switch_scene", "copy_object_to_scene");
 
     // ------------------------------------------------------------------
     // Coordenacao multi-agente: escopo de claim por ferramenta
@@ -192,6 +193,11 @@ public final class IgnisToolRegistry {
         m.put("clear_scene", new Guard("cena", null, true));
         m.put("play_game", new Guard("cena", null, true));
         m.put("stop_game", new Guard("cena", null, true));
+        // Cria/troca a cena ATIVA do editor inteiro, ou copia um objeto para outra
+        // cena: tao amplas quanto clear_scene, mesmo tratamento.
+        m.put("create_scene", new Guard("cena", null, true));
+        m.put("switch_scene", new Guard("cena", null, true));
+        m.put("copy_object_to_scene", new Guard("cena", null, true));
 
         return java.util.Collections.unmodifiableMap(m);
     }
@@ -201,6 +207,9 @@ public final class IgnisToolRegistry {
     Game liveGame;
     Runnable playHook, stopHook, saveHook;
     Runnable refreshHook;
+    // Ponte para criar/listar/trocar de cena e copiar objetos entre cenas (nulo se o
+    // editor nao a injetou ainda — ver SceneHost). Ferramentas de SceneTools checam.
+    SceneHost sceneHost;
 
     // Captura da janela inteira do editor, injetada pelo IgnisEditorApp (inversao de
     // dependencia: o registry nao conhece JavaFX — o snapshot FX vive no editor).
@@ -222,7 +231,8 @@ public final class IgnisToolRegistry {
      * Os hooks (play/stop/refresh/save) invocam os metodos reais do editor e sao
      * executados na thread de UI (o {@link #call} ja envolve tudo em runOnFxThread).
      */
-    public void attachLiveEditor(Game game, Runnable play, Runnable stop, Runnable refresh, Runnable save) {
+    public void attachLiveEditor(Game game, Runnable play, Runnable stop, Runnable refresh, Runnable save,
+            SceneHost sceneHost) {
         this.liveGame = game;
         ScriptManager manager = scriptManager();
         game.setScriptManager(manager);
@@ -233,6 +243,7 @@ public final class IgnisToolRegistry {
         this.stopHook = stop;
         this.refreshHook = refresh;
         this.saveHook = save;
+        this.sceneHost = sceneHost;
         registerEditorTools();
     }
 
@@ -246,6 +257,7 @@ public final class IgnisToolRegistry {
         new WorldTools(this).registerAll();
         new ContentTools(this).registerAll();
         new EditorWorkflowTools(this).registerCaptureTools();
+        new SceneTools(this).registerAll();
     }
 
     public boolean hasLiveEditor() {

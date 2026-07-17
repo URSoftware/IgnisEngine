@@ -22,6 +22,7 @@ public final class McpService {
     // Contexto vivo do editor, registrado uma vez no carregamento do projeto.
     private static Game editorGame;
     private static Runnable editorPlay, editorStop, editorRefresh, editorSave;
+    private static SceneHost editorSceneHost;
 
     // Capturador da janela do editor (snapshot JavaFX -> BufferedImage), injetado
     // pelo IgnisEditorApp. Propagado a cada registry novo criado no start().
@@ -44,14 +45,15 @@ public final class McpService {
      * ativo, o contexto passa a valer no proximo start.
      */
     public static synchronized void setEditorContext(Game game, Runnable play, Runnable stop,
-                                                     Runnable refresh, Runnable save) {
+                                                     Runnable refresh, Runnable save, SceneHost sceneHost) {
         editorGame = game;
         editorPlay = play;
         editorStop = stop;
         editorRefresh = refresh;
         editorSave = save;
+        editorSceneHost = sceneHost;
         if (registry != null && game != null) {
-            registry.attachLiveEditor(game, play, stop, refresh, save);
+            registry.attachLiveEditor(game, play, stop, refresh, save, sceneHost);
         }
     }
 
@@ -72,7 +74,7 @@ public final class McpService {
         activeProject = projectFolder;
         registry = new IgnisToolRegistry(projectFolder);
         if (editorGame != null) {
-            registry.attachLiveEditor(editorGame, editorPlay, editorStop, editorRefresh, editorSave);
+            registry.attachLiveEditor(editorGame, editorPlay, editorStop, editorRefresh, editorSave, editorSceneHost);
         }
         if (windowCaptureSupplier != null) {
             registry.setWindowCaptureSupplier(windowCaptureSupplier);

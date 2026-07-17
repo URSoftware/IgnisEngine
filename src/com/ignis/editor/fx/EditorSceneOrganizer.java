@@ -3,6 +3,8 @@ package com.ignis.editor.fx;
 import com.ignis.core.GameObject;
 import com.ignis.core.Scene;
 import com.ignis.core.World;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
@@ -261,6 +263,91 @@ final class EditorSceneOrganizer {
         int i = 2;
         while (app.currentProject.getSceneByName(base + " " + i) != null) i++;
         return base + " " + i;
+    }
+
+    // ------------------------------------------------------------------
+    // Ponte para o MCP (com.ignis.mcp.SceneHost, injetada pelo IgnisEditorApp).
+    // Reaproveita switchEditorToScene/createNewScene ja testados pelo menu
+    // "Cenarios..." — nenhuma logica nova de troca/criacao de cena vive aqui.
+    // ------------------------------------------------------------------
+
+    /** Nomes das cenas do projeto, com marcadores [inicial]/[ativa]. Vazio se nao houver projeto. */
+    java.util.List<String> listSceneNamesForMcp() {
+        java.util.List<String> result = new java.util.ArrayList<>();
+        if (app.currentProject == null) return result;
+        String start = app.currentProject.getMainScene();
+        Scene current = app.currentProject.getCurrentScene();
+        for (Scene s : app.currentProject.getScenes()) {
+            StringBuilder sb = new StringBuilder(s.getSceneName());
+            if (s.getSceneName().equals(start)) sb.append(" [inicial]");
+            if (s == current) sb.append(" [ativa]");
+            result.add(sb.toString());
+        }
+        return result;
+    }
+
+    /** Cria uma cena vazia com o nome dado e a torna ativa. Retorna null em sucesso, ou o erro. */
+    String createSceneForMcp(String sceneName) {
+        if (app.currentProject == null) return "Nenhum projeto aberto.";
+        if (sceneName == null || sceneName.isBlank()) return "Nome de cena obrigatorio.";
+        if (app.currentProject.getSceneByName(sceneName) != null) {
+            return "Ja existe uma cena com esse nome: " + sceneName;
+        }
+        Scene s = new Scene(sceneName);
+        app.currentProject.addScene(s);
+        switchEditorToScene(s);
+        app.setStatus("Cena criada (MCP): " + sceneName);
+        return null;
+    }
+
+    /** Troca a cena ativa do editor pelo nome. Retorna null em sucesso, ou o erro. */
+    String switchSceneForMcp(String sceneName) {
+        if (app.currentProject == null) return "Nenhum projeto aberto.";
+        Scene target = app.currentProject.getSceneByName(sceneName);
+        if (target == null) return "Cena nao encontrada: " + sceneName;
+        if (target == app.currentProject.getCurrentScene()) return null; // ja e a atual
+        if (app.playing) return "Pare o Play (Stop) antes de trocar de cena.";
+        switchEditorToScene(target);
+        return null;
+    }
+
+    /**
+     * Copia um objeto nomeado da cena ATIVA (game vivo) para outra cena do projeto.
+     * Por serializacao/desserializacao via {@link Scene#toJSON()}/{@link Scene#fromJSON}
+     * (as MESMAS rotinas ja usadas por duplicateScene) — nenhuma logica nova de
+     * clonagem de GameObject. O objeto original permanece intacto na cena de origem.
+     */
+    String copyObjectToSceneForMcp(String objectName, String targetSceneName, String newName) {
+        if (app.currentProject == null) return "Nenhum projeto aberto.";
+        if (objectName == null || objectName.isBlank()) return "Nome do objeto obrigatorio.";
+        Scene target = app.currentProject.getSceneByName(targetSceneName);
+        if (target == null) return "Cena de destino nao encontrada: " + targetSceneName;
+        if (target == app.currentProject.getCurrentScene()) {
+            return "A cena de destino e a propria cena ativa.";
+        }
+        GameObject source = null;
+        for (GameObject e : app.game.getEntities()) {
+            if (objectName.equals(e.getName())) { source = e; break; }
+        }
+        if (source == null) return "Objeto nao encontrado na cena ativa: " + objectName;
+
+        // Serializa SO este objeto usando uma cena descartavel como envelope (reaproveita
+        // Scene.toJSON inalterado em vez de duplicar a logica de serializacao por campo).
+        Scene sourceWrapper = new Scene("temp-source");
+        sourceWrapper.addEntity(source);
+        JSONObject entityJson = sourceWrapper.toJSON().getJSONArray("entities").getJSONObject(0);
+
+        JSONObject copyWrapperJson = new JSONObject()
+                .put("sceneName", "temp-copy")
+                .put("entities", new JSONArray().put(entityJson));
+        Scene decoded = Scene.fromJSON(copyWrapperJson, app.game);
+        GameObject copy = decoded.getEntities().get(0);
+        copy.setId(java.util.UUID.randomUUID().toString()); // id novo: independente do original
+        if (newName != null && !newName.isBlank()) copy.setName(newName);
+        target.addEntity(copy);
+        app.markProjectDirty();
+        app.setStatus("Objeto '" + source.getName() + "' copiado para a cena: " + targetSceneName);
+        return null;
     }
 
     // Abre o gerenciador de cenários (organizar cenas + cena inicial + mundos).

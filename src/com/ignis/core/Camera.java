@@ -216,9 +216,14 @@ public class Camera extends GameObject {
         // Calculate the screen position of the target point after zoom
         Point2D.Double after = worldToScreen(worldX, worldY);
 
-        // Adjust camera position to keep the point stationary
+        // Adjust camera position to keep the point stationary. Nota: o eixo Y do
+        // mundo e invertido em relacao a tela (updateViewMatrix aplica scale(1,-1)
+        // antes do zoom), entao mover a camera em +Y desloca a tela em +zoom (nao
+        // -zoom como no eixo X) — por isso o sinal de dy e oposto ao de dx. Sem essa
+        // inversao o ponto sob o cursor "escorrega" verticalmente a cada zoom em vez
+        // de ficar parado.
         double dx = (after.x - before.x) / zoom;
-        double dy = (after.y - before.y) / zoom;
+        double dy = -(after.y - before.y) / zoom;
         translate(dx, dy);
     }
 
