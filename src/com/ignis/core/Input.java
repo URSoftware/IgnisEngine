@@ -1,5 +1,7 @@
 package com.ignis.core;
 
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -65,6 +67,30 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
         game.addMouseListener(input);
         game.addMouseMotionListener(input);
         game.setFocusable(true);
+        game.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                input.clearAll();
+            }
+        });
+    }
+
+    /**
+     * Limpa todo o estado de teclado e mouse. Chamado ao perder foco da janela
+     * para evitar que uma tecla solta fora da janela fique "presa" como pressionada
+     * (ex.: Alt-Tab enquanto segura W, ou perda de foco durante recompilacao/restart).
+     */
+    private void clearAll() {
+        keysPressed.clear();
+        keysToAdd.clear();
+        keysToRemove.clear();
+        keysJustPressed.clear();
+        keysJustReleased.clear();
+        for (int i = 0; i < mouseButtons.length; i++) {
+            mouseButtons[i] = false;
+            mouseJustPressed[i] = false;
+            mouseJustReleased[i] = false;
+        }
     }
 
     /**
