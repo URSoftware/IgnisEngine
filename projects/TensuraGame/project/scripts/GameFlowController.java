@@ -123,6 +123,10 @@ public final class GameFlowController extends IgnisScript {
             return;
         }
         if (state != FlowState.EXPLORATION) return;
+        // Guarda defensiva: se beginExploration() foi interrompida entre marcar o
+        // estado e configurar o controlador (ex.: excecao no meio da montagem), o
+        // loop do jogo nao pode quebrar com NPE — so espera o proximo tick tentar de novo.
+        if (!explorationController.isReady()) return;
 
         boolean interactPressed = isKeyJustPressed("E");
         ExplorationSnapshot snapshot = explorationController.update(getDeltaTime(), interactPressed);
@@ -189,7 +193,6 @@ public final class GameFlowController extends IgnisScript {
         double worldSpawnY = startOffset[1] + spawnY;
 
         clearUI();
-        state = FlowState.EXPLORATION;
         setCaveSceneObjectsVisible(true);
         if (player == null) {
             player = getGame().instantiatePrefab("RuntimeVisual", worldSpawnX, worldSpawnY);
@@ -216,6 +219,11 @@ public final class GameFlowController extends IgnisScript {
         debugHintLabel.setFont("SansSerif", Font.PLAIN, 11);
         debugHintLabel.setTextColor(new Color(140, 170, 180));
         layoutHud();
+        // So entra em EXPLORATION depois que TUDO acima deu certo — se algo no meio
+        // lancar excecao, o tick() continua no MENU em vez de rodar update() sobre um
+        // ExplorationController que nunca foi configurado (era o NPE que derrubava o
+        // loop do jogo: "this.simulation is null").
+        state = FlowState.EXPLORATION;
     }
 
     private void layoutHud() {
@@ -400,6 +408,11 @@ public final class GameFlowController extends IgnisScript {
             this.player = player;
             this.areaOffsets = areaOffsets == null ? Map.of() : areaOffsets;
             attachClips(player, CLIP_IDLE, CLIP_MOVE);
+        }
+
+        /** Falso ate configure() rodar — guarda usada pelo GameFlowController antes de chamar update(). */
+        boolean isReady() {
+            return simulation != null && player != null;
         }
 
         ExplorationSnapshot update(double deltaTime, boolean interactPressed) {
