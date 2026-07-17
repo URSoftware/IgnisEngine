@@ -1,0 +1,121 @@
+{
+  "contractVersion": 1,
+  "status": "authorial-pt-BR-design-contract",
+  "rules": {
+    "maxVisibleLines": 3,
+    "greatSagePortrait": false,
+    "greatSageIndicator": "assets/ui/icon_great_sage_indicator.png",
+    "copyFromLicensedDialogue": false,
+    "movementBlockedDuringDialogue": true,
+    "environmentAnimationContinues": true
+  },
+  "dialogues": {
+    "awakening_intro": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Percep\u00e7\u00e3o confirmada. O corpo responde a est\u00edmulos externos.",
+        "audioCue": "great_sage_scan_short.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "Ent\u00e3o... eu realmente virei uma criatura gelatinosa.",
+        "audioCue": null
+      },
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "An\u00e1lise cont\u00ednua. Movimento b\u00e1sico dispon\u00edvel.",
+        "audioCue": "ui_confirm_soft.wav"
+      }
+    ],
+    "cave_crystal_first_analysis": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Estrutura mineral saturada de magiaules. Contato prolongado n\u00e3o oferece risco imediato.",
+        "audioCue": "crystal_resonance_01.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "Brilha bonito. Melhor lembrar onde encontrei.",
+        "audioCue": null
+      }
+    ],
+    "cave_water_body_analysis": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Seu corpo absorve \u00e1gua sem comprometer a forma. Pequenas perdas podem ser recompostas.",
+        "audioCue": "cave_water_ripple_01.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "\u00datil. Ser um slime tem suas vantagens.",
+        "audioCue": null
+      }
+    ],
+    "cave_mineral_codex": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Amostra registrada. O material poder\u00e1 servir \u00e0 fabrica\u00e7\u00e3o quando houver ferramentas adequadas.",
+        "audioCue": "magicule_collect_soft.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "Ent\u00e3o vale levar um pouco.",
+        "audioCue": null
+      }
+    ],
+    "cave_veldora_foreshadow": [
+      {
+        "speaker": "Rimuru",
+        "text": "Essa vibra\u00e7\u00e3o veio do outro lado...",
+        "audioCue": "veldora_distant_rumble.wav"
+      },
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Massa energ\u00e9tica colossal detectada al\u00e9m da galeria. Recomenda-se cautela.",
+        "audioCue": "great_sage_scan_short.wav"
+      }
+    ],
+    "cave_magicule_recovery": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Magiaules absorvidos. Integridade restaurada.",
+        "audioCue": "magicule_collect_soft.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "\u00c9 como respirar fundo, s\u00f3 que sem pulm\u00f5es.",
+        "audioCue": null
+      }
+    ],
+    "cave_seal_analysis": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "A barreira \u00e0 frente possui m\u00faltiplas camadas. A fonte permanece ativa h\u00e1 muito tempo.",
+        "audioCue": "seal_energy_loop.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "E tem algu\u00e9m l\u00e1 dentro. Consigo sentir.",
+        "audioCue": null
+      }
+    ],
+    "cave_first_slice_complete": [
+      {
+        "speaker": "Grande S\u00e1bio",
+        "text": "Rota segura registrada. An\u00e1lise aprofundada dispon\u00edvel na pr\u00f3xima c\u00e2mara.",
+        "audioCue": "ui_confirm_soft.wav"
+      },
+      {
+        "speaker": "Rimuru",
+        "text": "Certo. Sem pressa... mas tamb\u00e9m n\u00e3o vou fugir agora.",
+        "audioCue": null
+      }
+    ]
+  },
+  "integration": {
+    "sourceOfText": "data",
+    "controllerLongStringsAllowed": false,
+    "missingDialogueBehavior": "log-clear-error-and-keep-control",
+    "skipCutsceneFinalEvent": "awakening_control_handoff"
+  }
+}

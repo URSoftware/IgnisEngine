@@ -1,0 +1,71 @@
+{
+  "contractVersion": 1,
+  "status": "design-contract-not-runtime-schema",
+  "coordinateSystem": {
+    "tileSize": 32,
+    "origin": "bottom-left",
+    "positiveX": "right",
+    "positiveY": "up",
+    "presenterRule": "Convert screen Y to domain Y with RunInput.fromScreenAxes; W/up must increase domain Y and S/down must decrease it."
+  },
+  "areas": [
+    {
+      "id": "cave_awakening",
+      "sizeTiles": { "cols": 64, "rows": 36 },
+      "playerSpawnTileCenter": { "x": 10.5, "y": 17.5 },
+      "camera": {
+        "viewportTilesAt1280x720": { "cols": 40, "rows": 22.5 },
+        "clampToArea": true,
+        "deadZonePixels": { "width": 160, "height": 96 },
+        "smoothingSeconds": 0.16
+      },
+      "collisionZones": [
+        { "id": "border", "shape": "perimeter", "thicknessTiles": 2 },
+        { "id": "central_rock", "shape": "rect", "minTile": { "x": 24, "y": 12 }, "maxTileInclusive": { "x": 29, "y": 23 } },
+        { "id": "deep_water", "shape": "rect", "minTile": { "x": 15, "y": 4 }, "maxTileInclusive": { "x": 22, "y": 8 } },
+        { "id": "north_east_wall", "shape": "rect", "minTile": { "x": 43, "y": 25 }, "maxTileInclusive": { "x": 58, "y": 30 } }
+      ],
+      "walkableZones": [
+        { "id": "shallow_water", "shape": "rect", "minTile": { "x": 8, "y": 5 }, "maxTileInclusive": { "x": 14, "y": 11 }, "movementMultiplier": 0.9 },
+        { "id": "east_passage", "shape": "rect", "minTile": { "x": 54, "y": 16 }, "maxTileInclusive": { "x": 63, "y": 20 }, "movementMultiplier": 1.0 }
+      ],
+      "interactables": [
+        { "id": "cave_crystal_cyan", "verb": "EXAMINE", "tileCenter": { "x": 16.5, "y": 27.5 }, "radiusPixels": 18, "dialogueId": "cave_crystal_first_analysis" },
+        { "id": "shallow_water", "verb": "EXAMINE", "tileCenter": { "x": 11.5, "y": 8.5 }, "radiusPixels": 22, "dialogueId": "cave_water_body_analysis" },
+        { "id": "mineral_vein", "verb": "COLLECT", "tileCenter": { "x": 41.5, "y": 28.5 }, "radiusPixels": 18, "dialogueId": "cave_mineral_codex", "collectible": true },
+        { "id": "vibrating_wall", "verb": "EXAMINE", "tileCenter": { "x": 47.5, "y": 23.5 }, "radiusPixels": 20, "dialogueId": "cave_veldora_foreshadow" },
+        { "id": "magicule_cluster", "verb": "COLLECT", "tileCenter": { "x": 37.5, "y": 13.5 }, "radiusPixels": 18, "dialogueId": "cave_magicule_recovery", "collectible": true },
+        { "id": "cave_gallery_exit", "verb": "ENTER", "tileCenter": { "x": 61.0, "y": 18.5 }, "radiusPixels": 20, "targetAreaId": "cave_seal_gallery", "targetSpawnTileCenter": { "x": 3.5, "y": 8.5 } }
+      ]
+    },
+    {
+      "id": "cave_seal_gallery",
+      "sizeTiles": { "cols": 40, "rows": 52 },
+      "playerSpawnTileCenter": { "x": 3.5, "y": 8.5 },
+      "camera": {
+        "viewportTilesAt1280x720": { "cols": 40, "rows": 22.5 },
+        "clampToArea": true,
+        "deadZonePixels": { "width": 144, "height": 96 },
+        "smoothingSeconds": 0.16
+      },
+      "collisionZones": [
+        { "id": "border", "shape": "perimeter", "thicknessTiles": 2 },
+        { "id": "deep_channel_west", "shape": "rect", "minTile": { "x": 2, "y": 18 }, "maxTileInclusive": { "x": 13, "y": 35 } },
+        { "id": "deep_channel_east", "shape": "rect", "minTile": { "x": 26, "y": 16 }, "maxTileInclusive": { "x": 37, "y": 34 } },
+        { "id": "sealed_gate", "shape": "rect", "minTile": { "x": 13, "y": 48 }, "maxTileInclusive": { "x": 26, "y": 50 } }
+      ],
+      "interactables": [
+        { "id": "seal_fragment", "verb": "EXAMINE", "tileCenter": { "x": 20.5, "y": 42.5 }, "radiusPixels": 24, "dialogueId": "cave_seal_analysis" },
+        { "id": "technical_slice_end", "verb": "EXAMINE", "tileCenter": { "x": 20.5, "y": 46.5 }, "radiusPixels": 26, "dialogueId": "cave_first_slice_complete" },
+        { "id": "cave_awakening_return", "verb": "ENTER", "tileCenter": { "x": 3.0, "y": 7.5 }, "radiusPixels": 20, "targetAreaId": "cave_awakening", "targetSpawnTileCenter": { "x": 59.5, "y": 18.5 } }
+      ]
+    }
+  ],
+  "acceptance": [
+    "All spawns are inside the destination area and on walkable cells.",
+    "The camera never reveals outside either map.",
+    "The two collectible interactions are idempotent.",
+    "The conceptual ASCII diagram is not used as runtime dimensions.",
+    "The final runtime map may use a different data schema but must preserve these semantic IDs."
+  ]
+}

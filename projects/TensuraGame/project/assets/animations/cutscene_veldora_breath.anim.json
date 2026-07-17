@@ -1,0 +1,31 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.36,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_01.png"
+    },
+    {
+      "duration": 0.36,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_02.png"
+    },
+    {
+      "duration": 0.44,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_03.png"
+    },
+    {
+      "duration": 0.36,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_04.png"
+    },
+    {
+      "duration": 0.24,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_05.png"
+    },
+    {
+      "duration": 0.48,
+      "sprite": "assets/sprites/cutscenes/veldora/veldora_breath_06.png"
+    }
+  ],
+  "loop": true,
+  "name": "cutscene_veldora_breath"
+}

@@ -1,0 +1,39 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/vfx/predator_absorption_01.png"
+    },
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/vfx/predator_absorption_02.png"
+    },
+    {
+      "duration": 0.1,
+      "sprite": "assets/sprites/vfx/predator_absorption_03.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/vfx/predator_absorption_04.png"
+    },
+    {
+      "duration": 0.16,
+      "sprite": "assets/sprites/vfx/predator_absorption_05.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/vfx/predator_absorption_06.png"
+    },
+    {
+      "duration": 0.16,
+      "sprite": "assets/sprites/vfx/predator_absorption_07.png"
+    },
+    {
+      "duration": 0.24,
+      "sprite": "assets/sprites/vfx/predator_absorption_08.png"
+    }
+  ],
+  "loop": false,
+  "name": "vfx_predator_absorption"
+}

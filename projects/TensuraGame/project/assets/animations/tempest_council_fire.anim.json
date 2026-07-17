@@ -1,0 +1,11 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    { "duration": 0.11, "sprite": "assets/sprites/buildings/tempest_council_fire_01.png" },
+    { "duration": 0.11, "sprite": "assets/sprites/buildings/tempest_council_fire_02.png" },
+    { "duration": 0.11, "sprite": "assets/sprites/buildings/tempest_council_fire_03.png" },
+    { "duration": 0.11, "sprite": "assets/sprites/buildings/tempest_council_fire_04.png" }
+  ],
+  "loop": true,
+  "name": "tempest_council_fire"
+}

@@ -1,0 +1,39 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/vfx/great_sage_scan_01.png"
+    },
+    {
+      "duration": 0.1,
+      "sprite": "assets/sprites/vfx/great_sage_scan_02.png"
+    },
+    {
+      "duration": 0.1,
+      "sprite": "assets/sprites/vfx/great_sage_scan_03.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/vfx/great_sage_scan_04.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/great_sage_scan_05.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/vfx/great_sage_scan_06.png"
+    },
+    {
+      "duration": 0.16,
+      "sprite": "assets/sprites/vfx/great_sage_scan_07.png"
+    },
+    {
+      "duration": 0.22,
+      "sprite": "assets/sprites/vfx/great_sage_scan_08.png"
+    }
+  ],
+  "loop": false,
+  "name": "vfx_great_sage_scan"
+}

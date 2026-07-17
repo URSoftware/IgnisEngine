@@ -1,0 +1,45 @@
+{
+  "startArea": "cave_awakening",
+  "areas": [
+    {
+      "id": "cave_awakening",
+      "cols": 20,
+      "rows": 12,
+      "cellSize": 32,
+      "spawnX": 80,
+      "spawnY": 208,
+      "walls": [
+        { "col0": 0, "row0": 0, "col1": 19, "row1": 0 },
+        { "col0": 0, "row0": 11, "col1": 19, "row1": 11 },
+        { "col0": 0, "row0": 0, "col1": 0, "row1": 11 },
+        { "col0": 19, "row0": 0, "col1": 19, "row1": 11 },
+        { "col0": 9, "row0": 4, "col1": 11, "row1": 7 }
+      ],
+      "interactables": [
+        { "id": "cave_crystal_cyan", "x": 144, "y": 80, "radius": 16, "verb": "EXAMINE", "dialogueId": "dlg_crystal", "collectible": false },
+        { "id": "shallow_water", "x": 112, "y": 304, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_water", "collectible": false },
+        { "id": "mineral_vein", "x": 496, "y": 112, "radius": 16, "verb": "COLLECT", "dialogueId": "dlg_vein", "collectible": true },
+        { "id": "vibrating_wall", "x": 560, "y": 208, "radius": 16, "verb": "EXAMINE", "dialogueId": "dlg_wall", "collectible": false },
+        { "id": "magicule_cluster", "x": 432, "y": 304, "radius": 18, "verb": "COLLECT", "dialogueId": "dlg_magicule", "collectible": true },
+        { "id": "cave_gallery_exit", "x": 592, "y": 208, "radius": 20, "verb": "ENTER", "targetAreaId": "cave_gallery", "targetSpawnX": 176, "targetSpawnY": 432 }
+      ]
+    },
+    {
+      "id": "cave_gallery",
+      "cols": 10,
+      "rows": 16,
+      "cellSize": 32,
+      "spawnX": 176,
+      "spawnY": 432,
+      "walls": [
+        { "col0": 0, "row0": 0, "col1": 9, "row1": 0 },
+        { "col0": 0, "row0": 15, "col1": 9, "row1": 15 },
+        { "col0": 0, "row0": 0, "col1": 0, "row1": 15 },
+        { "col0": 9, "row0": 0, "col1": 9, "row1": 15 }
+      ],
+      "interactables": [
+        { "id": "cave_gallery_seal", "x": 176, "y": 80, "radius": 24, "verb": "TALK", "dialogueId": "dlg_gallery_seal", "collectible": false }
+      ]
+    }
+  ]
+}

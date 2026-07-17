@@ -1,0 +1,11 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    { "duration": 0.32, "sprite": "assets/sprites/buildings/tempest_tent_collective_01.png" },
+    { "duration": 0.32, "sprite": "assets/sprites/buildings/tempest_tent_collective_02.png" },
+    { "duration": 0.32, "sprite": "assets/sprites/buildings/tempest_tent_collective_03.png" },
+    { "duration": 0.32, "sprite": "assets/sprites/buildings/tempest_tent_collective_04.png" }
+  ],
+  "loop": true,
+  "name": "tempest_tent_collective"
+}

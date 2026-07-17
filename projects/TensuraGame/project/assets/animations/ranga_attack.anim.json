@@ -1,0 +1,23 @@
+{
+  "curveType": "EASE_IN",
+  "frames": [
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/ranga_02.png"
+    },
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/ranga_03.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/ranga_charge.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/ranga_04.png"
+    }
+  ],
+  "loop": false,
+  "name": "ranga_attack"
+}

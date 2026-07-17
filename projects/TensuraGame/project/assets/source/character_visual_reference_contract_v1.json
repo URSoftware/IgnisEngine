@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "purpose": "Non-runtime visual identity checklist for canonical characters.",
+  "referencePolicy": {
+    "primary": "Official anime character sheets and official Tensura portal",
+    "secondary": "Tensura Wiki galleries and licensed game art for poses/effects",
+    "projectUse": "References stay outside the repository; only original pixel-art adaptations ship",
+    "forbidden": [
+      "copying an anime frame pixel by pixel",
+      "using a wiki or game image directly as a runtime sprite",
+      "changing canonical eye color or unique markings without a story reason",
+      "using ability HUD icons as world VFX"
+    ]
+  },
+  "characters": [
+    {
+      "id": "veldora_dragon_sealed",
+      "storyGate": "sealed_cave_first_meeting",
+      "preferredClip": "cutscene_veldora_breath_canon_v2",
+      "reserveClip": "cutscene_veldora_breath",
+      "officialReference": "https://www.ten-sura.com/character/veldora",
+      "wikiGallery": "https://tensura.fandom.com/wiki/Veldora_Tempest/Gallery",
+      "licensedGameReference": "https://ten-sura-m.bn-ent.net/en/",
+      "mustPreserve": [
+        "deep golden eyes",
+        "black steel-like scales",
+        "cold blue-gray plated underside and wing membranes",
+        "long angular dragon head",
+        "four main swept-back head horns/spikes",
+        "layered characteristic wing silhouette",
+        "long segmented tail",
+        "catastrophe-class scale relative to Rimuru"
+      ],
+      "mustAvoid": [
+        "purple or red eyes",
+        "bright purple body palette",
+        "small generic wyvern silhouette",
+        "human-form clothing in the sealed-cave scene"
+      ]
+    },
+    {
+      "id": "ranga_tempest_wolf",
+      "storyGate": "after_dire_wolf_conflict_and_naming",
+      "preferredClip": "cutscene_ranga_arrival_canon_v2",
+      "reserveClip": "cutscene_ranga_arrival",
+      "officialReference": "https://www.ten-sura.com/character/ranga",
+      "wikiGallery": "https://tensura.fandom.com/wiki/Ranga/Gallery",
+      "licensedGameReference": "https://ten-sura-m.bn-ent.net/en/",
+      "mustPreserve": [
+        "amber or golden eyes",
+        "single pale tan forehead horn",
+        "dark slate-blue coat",
+        "large white mane and white muzzle",
+        "white paws and claws",
+        "muted green wraps on all four lower legs",
+        "heavy curled tail with white tip",
+        "loyal and expressive wolf posture"
+      ],
+      "mustAvoid": [
+        "cyan or blue eyes",
+        "multiple horns",
+        "white body with small dark patches",
+        "appearing before the wolf conflict and naming"
+      ]
+    }
+  ]
+}

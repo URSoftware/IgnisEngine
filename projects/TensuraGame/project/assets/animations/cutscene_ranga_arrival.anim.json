@@ -1,0 +1,31 @@
+{
+  "curveType": "EASE_OUT",
+  "frames": [
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_01.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_02.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_03.png"
+    },
+    {
+      "duration": 0.22,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_04.png"
+    },
+    {
+      "duration": 0.42,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_05.png"
+    },
+    {
+      "duration": 0.5,
+      "sprite": "assets/sprites/cutscenes/ranga/ranga_arrival_06.png"
+    }
+  ],
+  "loop": false,
+  "name": "cutscene_ranga_arrival"
+}

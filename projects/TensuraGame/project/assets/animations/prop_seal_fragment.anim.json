@@ -1,0 +1,11 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    { "duration": 0.14, "sprite": "assets/sprites/props/prop_seal_fragment_01.png" },
+    { "duration": 0.14, "sprite": "assets/sprites/props/prop_seal_fragment_02.png" },
+    { "duration": 0.14, "sprite": "assets/sprites/props/prop_seal_fragment_03.png" },
+    { "duration": 0.14, "sprite": "assets/sprites/props/prop_seal_fragment_04.png" }
+  ],
+  "loop": true,
+  "name": "prop_seal_fragment"
+}

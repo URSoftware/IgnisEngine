@@ -1,0 +1,41 @@
+{
+  "dialogues": [
+    {
+      "id": "dlg_crystal",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Cristal com alta concentracao de magiaules. Mineral registrado no codex." }
+      ]
+    },
+    {
+      "id": "dlg_water",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Agua pura, compativel com a fisiologia atual. Nenhum risco de contaminacao." }
+      ]
+    },
+    {
+      "id": "dlg_vein",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Veio mineral analisado. Amostra coletada e adicionada ao codex de materiais." }
+      ]
+    },
+    {
+      "id": "dlg_wall",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Vibracao de baixa frequencia alem desta parede. Uma presenca se move la dentro." }
+      ]
+    },
+    {
+      "id": "dlg_magicule",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Magiaules dispersos coletados. Pequena recuperacao de energia registrada." }
+      ]
+    },
+    {
+      "id": "dlg_gallery_seal",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Uma barreira imensa esta adiante. Sua origem excede qualquer registro conhecido." },
+        { "speaker": "Grande Sabio", "text": "Recomendo cautela. Algo do outro lado esta desperto." }
+      ]
+    }
+  ]
+}

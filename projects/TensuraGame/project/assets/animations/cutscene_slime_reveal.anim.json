@@ -1,0 +1,23 @@
+{
+  "curveType": "EASE_OUT",
+  "frames": [
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/rimuru_slime_04.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/rimuru_slime_03.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/rimuru_slime_02.png"
+    },
+    {
+      "duration": 0.25,
+      "sprite": "assets/sprites/rimuru_slime_01.png"
+    }
+  ],
+  "loop": false,
+  "name": "cutscene_slime_reveal"
+}

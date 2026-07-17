@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "purpose": "Design contract for the canonical cave cutscenes. Runtime may adapt this schema.",
+  "rules": {
+    "dialogueIsOriginal": true,
+    "nearestNeighbor": true,
+    "storyboardsAreRuntimeAssets": false,
+    "abilityIconsAllowedAsWorldVfx": false,
+    "skipMustBeIdempotent": true
+  },
+  "clips": {
+    "cutscene_veldora_breath": "assets/animations/cutscene_veldora_breath.anim.json",
+    "cutscene_veldora_breath_canon_v2": "assets/animations/cutscene_veldora_breath_canon_v2.anim.json",
+    "vfx_great_sage_scan": "assets/animations/vfx_great_sage_scan.anim.json",
+    "vfx_predator_absorption": "assets/animations/vfx_predator_absorption.anim.json",
+    "vfx_infinite_prison_barrier": "assets/animations/vfx_infinite_prison_barrier.anim.json",
+    "cutscene_ranga_arrival": "assets/animations/cutscene_ranga_arrival.anim.json",
+    "cutscene_ranga_arrival_canon_v2": "assets/animations/cutscene_ranga_arrival_canon_v2.anim.json"
+  },
+  "sequences": [
+    {
+      "id": "cave_awakening",
+      "storyboard": "assets/source/cutscene_awakening_storyboard_v1.png",
+      "skippableAfterSeconds": 1.0,
+      "finalEvent": "awakening_control_handoff",
+      "shots": [
+        {
+          "id": "darkness_and_drops",
+          "durationSeconds": 0.85,
+          "camera": "locked_wide",
+          "events": ["cave_ambience_fade_in"]
+        },
+        {
+          "id": "magicule_convergence",
+          "durationSeconds": 1.25,
+          "camera": "locked_wide",
+          "events": ["magicule_particles_gather"]
+        },
+        {
+          "id": "slime_body_formation",
+          "durationSeconds": 1.45,
+          "camera": "slow_push_8_percent",
+          "events": ["rimuru_slime_reveal"]
+        },
+        {
+          "id": "great_sage_analysis",
+          "durationSeconds": 1.5,
+          "camera": "stable_medium",
+          "clips": ["vfx_great_sage_scan"],
+          "events": ["great_sage_scan_short", "dialogue_awakening_analysis"]
+        },
+        {
+          "id": "veldora_foreshadow",
+          "durationSeconds": 1.6,
+          "camera": "drift_toward_gallery",
+          "events": ["veldora_distant_rumble", "seal_violet_hint"]
+        },
+        {
+          "id": "control_handoff",
+          "durationSeconds": 0.4,
+          "camera": "match_exploration_rig",
+          "events": ["awakening_control_handoff"]
+        }
+      ]
+    },
+    {
+      "id": "veldora_first_meeting",
+      "storyboard": "assets/source/cutscene_veldora_first_meeting_storyboard_v1.png",
+      "skippableAfterSeconds": 1.0,
+      "finalEvent": "veldora_absorbed_exit_unlocked",
+      "shots": [
+        {
+          "id": "presence",
+          "camera": "low_wide_shake_subtle",
+          "events": ["dust_fall", "water_vibrate", "veldora_distant_rumble"]
+        },
+        {
+          "id": "partial_reveal",
+          "camera": "fragmented_closeups",
+          "clips": ["vfx_infinite_prison_barrier"],
+          "events": ["seal_energy_raise"]
+        },
+        {
+          "id": "scale_reveal",
+          "camera": "wide_show_scale",
+          "clips": ["cutscene_veldora_breath_canon_v2", "vfx_infinite_prison_barrier"]
+        },
+        {
+          "id": "conversation_and_friendship",
+          "camera": "alternating_original_portraits",
+          "clips": ["cutscene_veldora_breath_canon_v2", "vfx_infinite_prison_barrier"],
+          "events": ["dialogue_veldora_first_meeting"]
+        },
+        {
+          "id": "name_exchange",
+          "camera": "two_subject_wide",
+          "events": ["name_exchange_magicule_wave"]
+        },
+        {
+          "id": "predator_absorption",
+          "camera": "locked_on_seal_center",
+          "clips": ["vfx_predator_absorption"],
+          "events": ["predator_cast_start", "veldora_absorb_commit"]
+        },
+        {
+          "id": "quiet_aftermath",
+          "camera": "slow_return_to_rimuru",
+          "events": ["seal_loop_stop", "cave_exit_glow_enable", "veldora_absorbed_exit_unlocked"]
+        }
+      ]
+    },
+    {
+      "id": "ranga_alliance_arrival",
+      "storyArcGate": "after_dire_wolf_conflict_and_naming",
+      "skippableAfterSeconds": 0.5,
+      "finalEvent": "ranga_guard_state_ready",
+      "shots": [
+        {
+          "id": "storm_shadow_arrival",
+          "camera": "medium_two_subject",
+          "clips": ["cutscene_ranga_arrival_canon_v2"],
+          "events": ["ranga_storm_shadow", "ranga_bow_commit", "ranga_guard_state_ready"]
+        }
+      ]
+    }
+  ]
+}

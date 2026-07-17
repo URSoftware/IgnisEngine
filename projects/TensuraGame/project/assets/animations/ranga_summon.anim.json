@@ -1,0 +1,23 @@
+{
+  "curveType": "EASE_OUT",
+  "frames": [
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/ranga_charge.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/ranga_01.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/ranga_02.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/ranga_01.png"
+    }
+  ],
+  "loop": false,
+  "name": "ranga_summon"
+}

@@ -1,0 +1,39 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_01.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_02.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_03.png"
+    },
+    {
+      "duration": 0.2,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_04.png"
+    },
+    {
+      "duration": 0.22,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_05.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_06.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_07.png"
+    },
+    {
+      "duration": 0.2,
+      "sprite": "assets/sprites/vfx/infinite_prison_barrier_08.png"
+    }
+  ],
+  "loop": true,
+  "name": "vfx_infinite_prison_barrier"
+}
