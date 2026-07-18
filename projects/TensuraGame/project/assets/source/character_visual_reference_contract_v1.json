@@ -14,10 +14,33 @@
   },
   "characters": [
     {
+      "id": "rimuru_slime",
+      "storyGate": "reincarnation_awakening",
+      "preferredCastClip": "cutscene_rimuru_slime_predator_cast_canon_v2",
+      "portraitSetId": "rimuru_slime_dialogue_v1",
+      "officialReference": "https://www.ten-sura.com/character/rimuru",
+      "mustPreserve": [
+        "small translucent sky-cyan oval body",
+        "pale aqua and white highlights toward the upper left",
+        "medium blue inner shadow visible through the body",
+        "minimal dark navy eyes and mouth",
+        "soft squash and stretch with a stable bottom-center pivot",
+        "friendly silhouette even while focused"
+      ],
+      "mustAvoid": [
+        "human hair or clothing in slime form",
+        "opaque solid-blue body",
+        "giant monster mouth for Predator",
+        "green fringe from chroma-key removal",
+        "changing scale between dialogue expressions"
+      ]
+    },
+    {
       "id": "veldora_dragon_sealed",
       "storyGate": "sealed_cave_first_meeting",
       "preferredClip": "cutscene_veldora_breath_canon_v2",
       "reserveClip": "cutscene_veldora_breath",
+      "portraitSetId": "veldora_dragon_dialogue_v1",
       "officialReference": "https://www.ten-sura.com/character/veldora",
       "wikiGallery": "https://tensura.fandom.com/wiki/Veldora_Tempest/Gallery",
       "licensedGameReference": "https://ten-sura-m.bn-ent.net/en/",
@@ -61,6 +84,50 @@
         "multiple horns",
         "white body with small dark patches",
         "appearing before the wolf conflict and naming"
+      ]
+    },
+    {
+      "id": "goblin_scouts_pre_naming",
+      "storyGate": "after_cave_exit_before_village_alliance",
+      "preferredClip": "cutscene_goblin_scout_first_contact_canon_v1",
+      "officialReference": "https://www.ten-sura.com/anime/tensura/story/no2",
+      "gobtaOfficialReference": "https://www.ten-sura.com/character/gobta",
+      "wikiGallery": "https://tensura.fandom.com/wiki/Gobta/Gallery",
+      "mustPreserve": [
+        "short green bodies with varied faces",
+        "pale gray or white rough hair",
+        "large expressive eyes and rounded noses",
+        "worn brown, tan and gray cloth",
+        "rope wraps, simple wooden spears and one battered shield",
+        "fearful defensive posture that softens before the bow"
+      ],
+      "mustAvoid": [
+        "post-naming hobgoblin armor on the entire group",
+        "uniform polished weapons",
+        "aggressive attack before dialogue",
+        "direwolves appearing before the village conflict",
+        "copying an episode frame pose for pose"
+      ]
+    },
+    {
+      "id": "gobta_post_naming",
+      "storyGate": "after_goblin_naming",
+      "portraitSetId": "gobta_post_naming_dialogue_v1",
+      "officialReference": "https://www.ten-sura.com/character/gobta",
+      "wikiGallery": "https://tensura.fandom.com/wiki/Gobta/Gallery",
+      "mustPreserve": [
+        "short green hobgoblin body",
+        "light gray spiky hair",
+        "huge white eyes and rounded brown-gray nose",
+        "one small lower fang",
+        "white shirt and dark brown fur-trimmed outer layer",
+        "comic expressiveness that can turn focused when needed"
+      ],
+      "mustAvoid": [
+        "human proportions",
+        "extra fangs",
+        "changing nose or hair silhouette between expressions",
+        "using post-naming clothing before the naming event"
       ]
     }
   ]

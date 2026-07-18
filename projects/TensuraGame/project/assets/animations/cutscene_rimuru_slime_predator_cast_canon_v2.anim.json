@@ -1,0 +1,31 @@
+{
+  "curveType": "EASE_OUT",
+  "frames": [
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_01.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_02.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_03.png"
+    },
+    {
+      "duration": 0.16,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_04.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_05.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/cutscenes/rimuru/rimuru_slime_predator_cast_canon_v2_06.png"
+    }
+  ],
+  "loop": false,
+  "name": "cutscene_rimuru_slime_predator_cast_canon_v2"
+}

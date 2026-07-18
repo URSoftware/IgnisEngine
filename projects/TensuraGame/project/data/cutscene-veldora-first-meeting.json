@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "sequenceId": "veldora_first_meeting",
+  "locale": "pt-BR",
+  "dialogueIsOriginal": true,
+  "skippableAfterSeconds": 1.0,
+  "finalEvent": "veldora_absorbed_exit_unlocked",
+  "participants": {
+    "rimuru": {
+      "displayName": "Rimuru",
+      "portraitSetId": "rimuru_slime_dialogue_v1"
+    },
+    "veldora": {
+      "displayName": "Veldora",
+      "portraitSetId": "veldora_dragon_dialogue_v1"
+    },
+    "great_sage": {
+      "displayName": "Grande Sabio",
+      "portraitSetId": null
+    }
+  },
+  "rules": {
+    "advanceAction": "INTERACT",
+    "environmentContinuesDuringDialogue": true,
+    "greatSageUsesCyanIndicatorInsteadOfPortrait": true,
+    "skipUsesSameFinalizerAsFullPlayback": true,
+    "maxVisibleLines": 3
+  },
+  "beats": [
+    {
+      "id": "presence",
+      "cameraCue": "low_wide_shake_subtle",
+      "loopClips": ["vfx_infinite_prison_barrier"],
+      "audioCues": ["veldora_distant_rumble", "seal_energy_loop"],
+      "autoDurationSeconds": 2.4,
+      "lines": []
+    },
+    {
+      "id": "first_contact",
+      "cameraCue": "partial_reveal_to_two_subject_wide",
+      "loopClips": ["cutscene_veldora_breath_canon_v2", "vfx_infinite_prison_barrier"],
+      "lines": [
+        {
+          "id": "vfm_001",
+          "speaker": "veldora",
+          "portrait": "curious",
+          "text": "Uma criatura minuscula atravessou minha tempestade sem fugir. Curioso."
+        },
+        {
+          "id": "vfm_002",
+          "speaker": "rimuru",
+          "portrait": "skeptical",
+          "text": "Minuscula, sim. Sem medo... ainda estou decidindo."
+        },
+        {
+          "id": "vfm_003",
+          "speaker": "veldora",
+          "portrait": "proud",
+          "text": "Decida diante de Veldora, o Dragao da Tempestade!"
+        },
+        {
+          "id": "vfm_004",
+          "speaker": "rimuru",
+          "portrait": "curious",
+          "text": "Entao e voce que faz esta caverna inteira vibrar."
+        }
+      ]
+    },
+    {
+      "id": "prison_and_loneliness",
+      "cameraCue": "alternate_portrait_and_barrier_detail",
+      "lines": [
+        {
+          "id": "vfm_005",
+          "speaker": "rimuru",
+          "portrait": "determined",
+          "text": "Essa barreira prende ate a sua magia. Ha quanto tempo esta aqui?"
+        },
+        {
+          "id": "vfm_006",
+          "speaker": "veldora",
+          "portrait": "proud",
+          "text": "Tempo demais para uma prisao ousar contar."
+        },
+        {
+          "id": "vfm_007",
+          "speaker": "rimuru",
+          "portrait": "skeptical",
+          "text": "Resposta orgulhosa. Tambem parece uma resposta solitaria."
+        },
+        {
+          "id": "vfm_008",
+          "speaker": "veldora",
+          "portrait": "curious",
+          "text": "Voce fala comigo sem reverencia e sem crueldade. Isso e raro."
+        }
+      ]
+    },
+    {
+      "id": "friendship",
+      "cameraCue": "stable_two_subject_wide_warm_light",
+      "eventsOnEnter": ["barrier_intensity_soften"],
+      "lines": [
+        {
+          "id": "vfm_009",
+          "speaker": "rimuru",
+          "portrait": "friendly",
+          "text": "Que tal deixarmos de ser dois estranhos presos nesta conversa?"
+        },
+        {
+          "id": "vfm_010",
+          "speaker": "veldora",
+          "portrait": "amused",
+          "text": "Ha! Um slime oferece amizade a um dragao! Aceito esse desafio."
+        },
+        {
+          "id": "vfm_011",
+          "speaker": "rimuru",
+          "portrait": "skeptical",
+          "text": "Amizade nao costuma ser um desafio. Mas serve."
+        },
+        {
+          "id": "vfm_012",
+          "speaker": "veldora",
+          "portrait": "friendship",
+          "text": "Entao nao enfrentarei mais o silencio sozinho."
+        }
+      ]
+    },
+    {
+      "id": "name_exchange",
+      "cameraCue": "two_subject_wide_magicule_crossing",
+      "oneShotClips": ["vfx_name_exchange_magicule_wave"],
+      "eventsOnEnter": ["name_exchange_magicule_wave"],
+      "audioCues": ["magicule_collect_soft"],
+      "lines": [
+        {
+          "id": "vfm_013",
+          "speaker": "rimuru",
+          "portrait": "curious",
+          "text": "Se vamos ser amigos, precisamos de um nome que nos una. Tempest."
+        },
+        {
+          "id": "vfm_014",
+          "speaker": "veldora",
+          "portrait": "amused",
+          "text": "Tempest... digno da minha tempestade e da sua coragem."
+        },
+        {
+          "id": "vfm_015",
+          "speaker": "veldora",
+          "portrait": "proud",
+          "text": "E eu lhe concedo um nome: Rimuru. Rimuru Tempest."
+        },
+        {
+          "id": "vfm_016",
+          "speaker": "rimuru",
+          "portrait": "friendly",
+          "text": "Rimuru Tempest. Gostei. Vamos carregar esse nome juntos."
+        }
+      ]
+    },
+    {
+      "id": "predator_plan",
+      "cameraCue": "barrier_analysis_then_rimuru_close",
+      "eventsOnEnter": ["great_sage_scan_full"],
+      "audioCues": ["great_sage_scan_short"],
+      "lines": [
+        {
+          "id": "vfm_017",
+          "speaker": "great_sage",
+          "portrait": null,
+          "text": "Analise da barreira incompleta. Estimativa atual: indeterminada."
+        },
+        {
+          "id": "vfm_018",
+          "speaker": "rimuru",
+          "portrait": "determined",
+          "text": "Se eu levar voce e a barreira comigo, podemos analisar pelos dois lados."
+        },
+        {
+          "id": "vfm_019",
+          "speaker": "veldora",
+          "portrait": "curious",
+          "text": "Voce pretende devorar a Prisao Infinita?"
+        },
+        {
+          "id": "vfm_020",
+          "speaker": "rimuru",
+          "portrait": "skeptical",
+          "text": "Quando voce fala assim, o plano parece um pouco imprudente."
+        },
+        {
+          "id": "vfm_021",
+          "speaker": "veldora",
+          "portrait": "amused",
+          "text": "Por isso mesmo e excelente! Eu confiarei em voce, Rimuru."
+        }
+      ]
+    },
+    {
+      "id": "predator_absorption",
+      "cameraCue": "locked_on_seal_center",
+      "oneShotClips": [
+        "cutscene_rimuru_slime_predator_cast_canon_v2",
+        "vfx_predator_absorption"
+      ],
+      "eventsOnEnter": ["predator_cast_start"],
+      "audioCues": ["predator"],
+      "lines": [
+        {
+          "id": "vfm_022",
+          "speaker": "rimuru",
+          "portrait": "determined",
+          "text": "Espere por mim, Veldora. Predador!"
+        },
+        {
+          "id": "vfm_023",
+          "speaker": "veldora",
+          "portrait": "friendship",
+          "text": "Nos veremos novamente, meu amigo."
+        }
+      ],
+      "eventsAfterLastLine": ["veldora_absorb_commit"]
+    },
+    {
+      "id": "quiet_aftermath",
+      "cameraCue": "slow_return_to_rimuru",
+      "eventsOnEnter": ["seal_loop_stop", "cave_exit_glow_enable"],
+      "autoDurationSeconds": 2.0,
+      "lines": [
+        {
+          "id": "vfm_024",
+          "speaker": "great_sage",
+          "portrait": null,
+          "text": "Armazenamento concluido. Analise da Prisao Infinita iniciada."
+        }
+      ],
+      "eventsAfterLastLine": ["veldora_absorbed_exit_unlocked"]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "usage": "dialogue_ui_only",
+  "canvasPixels": { "width": 256, "height": 256 },
+  "filter": "nearest",
+  "defaultPivot": { "x": 0.5, "y": 1.0 },
+  "rules": {
+    "keepWorldAnimationRunning": true,
+    "allowAsWorldVfx": false,
+    "allowAsAbilityIcon": false,
+    "sourceSheetsInRuntime": false
+  },
+  "sets": [
+    {
+      "id": "rimuru_slime_dialogue_v1",
+      "characterId": "rimuru_slime",
+      "qaSheet": "sprites/portraits/rimuru/portrait_rimuru_slime_runtime_sheet_v1.png",
+      "expressions": {
+        "curious": "sprites/portraits/rimuru/portrait_rimuru_slime_curious.png",
+        "skeptical": "sprites/portraits/rimuru/portrait_rimuru_slime_skeptical.png",
+        "determined": "sprites/portraits/rimuru/portrait_rimuru_slime_determined.png",
+        "friendly": "sprites/portraits/rimuru/portrait_rimuru_slime_friendly.png"
+      }
+    },
+    {
+      "id": "veldora_dragon_dialogue_v1",
+      "characterId": "veldora_dragon",
+      "qaSheet": "sprites/portraits/veldora/portrait_veldora_dragon_runtime_sheet_v1.png",
+      "expressions": {
+        "proud": "sprites/portraits/veldora/portrait_veldora_dragon_proud.png",
+        "amused": "sprites/portraits/veldora/portrait_veldora_dragon_amused.png",
+        "curious": "sprites/portraits/veldora/portrait_veldora_dragon_curious.png",
+        "friendship": "sprites/portraits/veldora/portrait_veldora_dragon_friendship.png"
+      }
+    },
+    {
+      "id": "gobta_post_naming_dialogue_v1",
+      "characterId": "gobta_post_naming",
+      "storyGate": "after_goblin_naming",
+      "qaSheet": "sprites/portraits/gobta/portrait_gobta_post_naming_runtime_sheet_v1.png",
+      "expressions": {
+        "cheerful": "sprites/portraits/gobta/portrait_gobta_post_naming_cheerful.png",
+        "worried": "sprites/portraits/gobta/portrait_gobta_post_naming_worried.png",
+        "determined": "sprites/portraits/gobta/portrait_gobta_post_naming_determined.png",
+        "sleepy": "sprites/portraits/gobta/portrait_gobta_post_naming_sleepy.png"
+      }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.1,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_01.png"
+    },
+    {
+      "duration": 0.1,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_02.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_03.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_04.png"
+    },
+    {
+      "duration": 0.18,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_05.png"
+    },
+    {
+      "duration": 0.14,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_06.png"
+    },
+    {
+      "duration": 0.16,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_07.png"
+    },
+    {
+      "duration": 0.24,
+      "sprite": "assets/sprites/vfx/name_exchange_magicule_wave_08.png"
+    }
+  ],
+  "loop": false,
+  "name": "vfx_name_exchange_magicule_wave"
+}

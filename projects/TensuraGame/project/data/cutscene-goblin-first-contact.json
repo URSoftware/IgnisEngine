@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "sequenceId": "goblin_first_contact",
+  "locale": "pt-BR",
+  "dialogueIsOriginal": true,
+  "storyGate": "after_veldora_absorbed_and_cave_exit",
+  "skippableAfterSeconds": 1.0,
+  "finalEvent": "goblin_village_route_unlocked",
+  "participants": {
+    "rimuru": {
+      "displayName": "Rimuru",
+      "portraitSetId": "rimuru_slime_dialogue_v1"
+    },
+    "goblin_scout_leader": {
+      "displayName": "Goblin",
+      "portraitSetId": null
+    },
+    "great_sage": {
+      "displayName": "Grande Sabio",
+      "portraitSetId": null
+    }
+  },
+  "rules": {
+    "advanceAction": "INTERACT",
+    "environmentContinuesDuringDialogue": true,
+    "greatSageUsesCyanIndicatorInsteadOfPortrait": true,
+    "skipUsesSameFinalizerAsFullPlayback": true,
+    "maxVisibleLines": 3
+  },
+  "beats": [
+    {
+      "id": "forest_threshold",
+      "cameraCue": "cave_exit_to_forest_wide",
+      "audioCues": ["cave_ambience_fade_out", "tempest_forest_theme_fade_in"],
+      "autoDurationSeconds": 2.0,
+      "lines": []
+    },
+    {
+      "id": "scouts_emerge",
+      "cameraCue": "forest_edge_hold_group_right",
+      "oneShotClips": ["cutscene_goblin_scout_first_contact_canon_v1"],
+      "eventsOnEnter": ["goblin_scout_group_reveal"],
+      "lines": [
+        {
+          "id": "gfc_001",
+          "speaker": "goblin_scout_leader",
+          "portrait": null,
+          "text": "A presenca da caverna mudou... e algo pequeno saiu de la."
+        },
+        {
+          "id": "gfc_002",
+          "speaker": "rimuru",
+          "portrait": "skeptical",
+          "text": "Pequeno, sim. Mas podemos conversar sem essas cinco lancas?"
+        },
+        {
+          "id": "gfc_003",
+          "speaker": "goblin_scout_leader",
+          "portrait": null,
+          "text": "Ele fala! E a aura do grande dragao esta ao redor dele!"
+        }
+      ]
+    },
+    {
+      "id": "cautious_lowering",
+      "cameraCue": "two_subject_medium_with_group_depth",
+      "eventsOnEnter": ["goblin_weapons_lower"],
+      "lines": [
+        {
+          "id": "gfc_004",
+          "speaker": "great_sage",
+          "portrait": null,
+          "text": "Hostilidade reduzida. O grupo apresenta exaustao e ferimentos recentes."
+        },
+        {
+          "id": "gfc_005",
+          "speaker": "rimuru",
+          "portrait": "curious",
+          "text": "Voces vieram pedir ajuda ao dragao?"
+        },
+        {
+          "id": "gfc_006",
+          "speaker": "goblin_scout_leader",
+          "portrait": null,
+          "text": "Lobos cercam nossa aldeia. Sem protecao, nao sobreviveremos a proxima noite."
+        },
+        {
+          "id": "gfc_007",
+          "speaker": "rimuru",
+          "portrait": "determined",
+          "text": "Nao posso prometer uma vitoria sem conhecer o perigo."
+        }
+      ]
+    },
+    {
+      "id": "request_and_choice",
+      "cameraCue": "rimuru_foreground_group_soft_focus",
+      "lines": [
+        {
+          "id": "gfc_008",
+          "speaker": "goblin_scout_leader",
+          "portrait": null,
+          "text": "Entao venha ver com seus proprios olhos. Ouviremos qualquer condicao."
+        },
+        {
+          "id": "gfc_009",
+          "speaker": "rimuru",
+          "portrait": "friendly",
+          "text": "Certo. Primeiro me mostrem a aldeia e contem tudo no caminho."
+        },
+        {
+          "id": "gfc_010",
+          "speaker": "goblin_scout_leader",
+          "portrait": null,
+          "text": "Obrigado, grande viajante! Guiaremos o caminho."
+        }
+      ],
+      "eventsAfterLastLine": ["goblin_scout_bow"]
+    },
+    {
+      "id": "forest_handoff",
+      "cameraCue": "match_forest_exploration_rig",
+      "eventsOnEnter": ["goblin_village_route_unlocked"],
+      "autoDurationSeconds": 0.5,
+      "lines": []
+    }
+  ]
+}
