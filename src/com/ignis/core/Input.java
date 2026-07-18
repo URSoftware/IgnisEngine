@@ -24,6 +24,10 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
     // Singleton instance
     private static Input instance;
 
+    // Eventos AWT chegam pela Event Dispatch Thread, enquanto update() e os
+    // leitores rodam no loop do jogo. Um unico lock protege o snapshot inteiro.
+    private final Object stateLock = new Object();
+
     // Teclas atualmente pressionadas
     private Set<Integer> keysPressed = new HashSet<>();
     
@@ -81,15 +85,17 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * (ex.: Alt-Tab enquanto segura W, ou perda de foco durante recompilacao/restart).
      */
     private void clearAll() {
-        keysPressed.clear();
-        keysToAdd.clear();
-        keysToRemove.clear();
-        keysJustPressed.clear();
-        keysJustReleased.clear();
-        for (int i = 0; i < mouseButtons.length; i++) {
-            mouseButtons[i] = false;
-            mouseJustPressed[i] = false;
-            mouseJustReleased[i] = false;
+        synchronized (stateLock) {
+            keysPressed.clear();
+            keysToAdd.clear();
+            keysToRemove.clear();
+            keysJustPressed.clear();
+            keysJustReleased.clear();
+            for (int i = 0; i < mouseButtons.length; i++) {
+                mouseButtons[i] = false;
+                mouseJustPressed[i] = false;
+                mouseJustReleased[i] = false;
+            }
         }
     }
 
@@ -98,33 +104,34 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      */
     public static void update() {
         Input input = getInstance();
-        
-        // Limpar estados "just pressed" e "just released"
-        input.keysJustPressed.clear();
-        input.keysJustReleased.clear();
-        
-        // Processar teclas que foram pressionadas
-        for (Integer key : input.keysToAdd) {
-            if (!input.keysPressed.contains(key)) {
-                input.keysJustPressed.add(key);
+        synchronized (input.stateLock) {
+            // Limpar estados "just pressed" e "just released"
+            input.keysJustPressed.clear();
+            input.keysJustReleased.clear();
+
+            // Processar teclas que foram pressionadas
+            for (Integer key : input.keysToAdd) {
+                if (!input.keysPressed.contains(key)) {
+                    input.keysJustPressed.add(key);
+                }
+                input.keysPressed.add(key);
             }
-            input.keysPressed.add(key);
-        }
-        input.keysToAdd.clear();
-        
-        // Processar teclas que foram soltas
-        for (Integer key : input.keysToRemove) {
-            if (input.keysPressed.contains(key)) {
-                input.keysJustReleased.add(key);
+            input.keysToAdd.clear();
+
+            // Processar teclas que foram soltas
+            for (Integer key : input.keysToRemove) {
+                if (input.keysPressed.contains(key)) {
+                    input.keysJustReleased.add(key);
+                }
+                input.keysPressed.remove(key);
             }
-            input.keysPressed.remove(key);
-        }
-        input.keysToRemove.clear();
-        
-        // Limpar estados "just" do mouse
-        for (int i = 0; i < 4; i++) {
-            input.mouseJustPressed[i] = false;
-            input.mouseJustReleased[i] = false;
+            input.keysToRemove.clear();
+
+            // Limpar estados "just" do mouse
+            for (int i = 0; i < 4; i++) {
+                input.mouseJustPressed[i] = false;
+                input.mouseJustReleased[i] = false;
+            }
         }
     }
 
@@ -136,7 +143,10 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * @return true se a tecla estÃ¡ pressionada
      */
     public static boolean isKeyPressed(int keyCode) {
-        return getInstance().keysPressed.contains(keyCode);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysPressed.contains(keyCode);
+        }
     }
 
     /**
@@ -145,7 +155,10 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * @return true se a tecla acabou de ser pressionada
      */
     public static boolean isKeyJustPressed(int keyCode) {
-        return getInstance().keysJustPressed.contains(keyCode);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysJustPressed.contains(keyCode);
+        }
     }
 
     /**
@@ -154,35 +167,50 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * @return true se a tecla acabou de ser solta
      */
     public static boolean isKeyJustReleased(int keyCode) {
-        return getInstance().keysJustReleased.contains(keyCode);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysJustReleased.contains(keyCode);
+        }
     }
 
     /**
      * Verifica se a tecla de movimento para cima estÃ¡ pressionada (W ou UP)
      */
     public static boolean isUpPressed() {
-        return isKeyPressed(KeyEvent.VK_W) || isKeyPressed(KeyEvent.VK_UP);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysPressed.contains(KeyEvent.VK_W) || input.keysPressed.contains(KeyEvent.VK_UP);
+        }
     }
 
     /**
      * Verifica se a tecla de movimento para baixo estÃ¡ pressionada (S ou DOWN)
      */
     public static boolean isDownPressed() {
-        return isKeyPressed(KeyEvent.VK_S) || isKeyPressed(KeyEvent.VK_DOWN);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysPressed.contains(KeyEvent.VK_S) || input.keysPressed.contains(KeyEvent.VK_DOWN);
+        }
     }
 
     /**
      * Verifica se a tecla de movimento para esquerda estÃ¡ pressionada (A ou LEFT)
      */
     public static boolean isLeftPressed() {
-        return isKeyPressed(KeyEvent.VK_A) || isKeyPressed(KeyEvent.VK_LEFT);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysPressed.contains(KeyEvent.VK_A) || input.keysPressed.contains(KeyEvent.VK_LEFT);
+        }
     }
 
     /**
      * Verifica se a tecla de movimento para direita estÃ¡ pressionada (D ou RIGHT)
      */
     public static boolean isRightPressed() {
-        return isKeyPressed(KeyEvent.VK_D) || isKeyPressed(KeyEvent.VK_RIGHT);
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.keysPressed.contains(KeyEvent.VK_D) || input.keysPressed.contains(KeyEvent.VK_RIGHT);
+        }
     }
 
     /**
@@ -190,10 +218,13 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * -1 = esquerda, 0 = nenhum, 1 = direita
      */
     public static int getHorizontalAxis() {
-        int axis = 0;
-        if (isLeftPressed()) axis -= 1;
-        if (isRightPressed()) axis += 1;
-        return axis;
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            int axis = 0;
+            if (input.keysPressed.contains(KeyEvent.VK_A) || input.keysPressed.contains(KeyEvent.VK_LEFT)) axis -= 1;
+            if (input.keysPressed.contains(KeyEvent.VK_D) || input.keysPressed.contains(KeyEvent.VK_RIGHT)) axis += 1;
+            return axis;
+        }
     }
 
     /**
@@ -202,10 +233,13 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * Em coordenadas de tela, Y aumenta para baixo.
      */
     public static int getVerticalAxis() {
-        int axis = 0;
-        if (isUpPressed()) axis -= 1;
-        if (isDownPressed()) axis += 1;
-        return axis;
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            int axis = 0;
+            if (input.keysPressed.contains(KeyEvent.VK_W) || input.keysPressed.contains(KeyEvent.VK_UP)) axis -= 1;
+            if (input.keysPressed.contains(KeyEvent.VK_S) || input.keysPressed.contains(KeyEvent.VK_DOWN)) axis += 1;
+            return axis;
+        }
     }
 
     // ==================== MOUSE API ====================
@@ -214,61 +248,86 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
      * Retorna a posiÃ§Ã£o X do mouse
      */
     public static int getMouseX() {
-        return getInstance().mouseX;
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseX;
+        }
     }
 
     /**
      * Retorna a posiÃ§Ã£o Y do mouse
      */
     public static int getMouseY() {
-        return getInstance().mouseY;
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseY;
+        }
     }
 
     /**
      * Verifica se o botÃ£o esquerdo do mouse estÃ¡ pressionado
      */
     public static boolean isMouseLeftPressed() {
-        return getInstance().mouseButtons[1];
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseButtons[1];
+        }
     }
 
     /**
      * Verifica se o botÃ£o direito do mouse estÃ¡ pressionado
      */
     public static boolean isMouseRightPressed() {
-        return getInstance().mouseButtons[3];
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseButtons[3];
+        }
     }
 
     /**
      * Verifica se o botÃ£o do meio do mouse estÃ¡ pressionado
      */
     public static boolean isMouseMiddlePressed() {
-        return getInstance().mouseButtons[2];
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseButtons[2];
+        }
     }
 
     /**
      * Verifica se o botÃ£o esquerdo do mouse acabou de ser pressionado
      */
     public static boolean isMouseLeftJustPressed() {
-        return getInstance().mouseJustPressed[1];
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseJustPressed[1];
+        }
     }
 
     /**
      * Verifica se o botÃ£o direito do mouse acabou de ser pressionado
      */
     public static boolean isMouseRightJustPressed() {
-        return getInstance().mouseJustPressed[3];
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            return input.mouseJustPressed[3];
+        }
     }
 
     // ==================== KEY LISTENER IMPLEMENTATION ====================
 
     @Override
     public void keyPressed(KeyEvent e) {
-        keysToAdd.add(e.getKeyCode());
+        synchronized (stateLock) {
+            keysToAdd.add(e.getKeyCode());
+        }
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
-        keysToRemove.add(e.getKeyCode());
+        synchronized (stateLock) {
+            keysToRemove.add(e.getKeyCode());
+        }
     }
 
     @Override
@@ -282,8 +341,10 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
     public void mousePressed(MouseEvent e) {
         int button = e.getButton();
         if (button >= 1 && button <= 3) {
-            mouseButtons[button] = true;
-            mouseJustPressed[button] = true;
+            synchronized (stateLock) {
+                mouseButtons[button] = true;
+                mouseJustPressed[button] = true;
+            }
         }
     }
 
@@ -291,8 +352,10 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
     public void mouseReleased(MouseEvent e) {
         int button = e.getButton();
         if (button >= 1 && button <= 3) {
-            mouseButtons[button] = false;
-            mouseJustReleased[button] = true;
+            synchronized (stateLock) {
+                mouseButtons[button] = false;
+                mouseJustReleased[button] = true;
+            }
         }
     }
 
@@ -315,13 +378,17 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
 
     @Override
     public void mouseMoved(MouseEvent e) {
-        mouseX = e.getX();
-        mouseY = e.getY();
+        synchronized (stateLock) {
+            mouseX = e.getX();
+            mouseY = e.getY();
+        }
     }
 
     @Override
     public void mouseDragged(MouseEvent e) {
-        mouseX = e.getX();
-        mouseY = e.getY();
+        synchronized (stateLock) {
+            mouseX = e.getX();
+            mouseY = e.getY();
+        }
     }
 }

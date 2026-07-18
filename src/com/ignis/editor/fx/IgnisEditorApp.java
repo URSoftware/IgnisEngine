@@ -602,6 +602,15 @@ public class IgnisEditorApp extends Application {
                             + " (" + game.getEntities().size() + " objetos, copia temporaria do host)"
                     : "Projeto carregado: " + project.getProjectName()
                             + " (" + game.getEntities().size() + " objetos)");
+            // A camera livre nao e serializada. Em uma abertura nova ela pode estar
+            // na origem, ainda com o enquadramento da cena de exemplo ou deslocada
+            // por uma sessao anterior. Aguarda o layout calcular o viewport e mostra
+            // todo o conteudo imediatamente, sem depender do primeiro Play.
+            Platform.runLater(() -> {
+                if (currentProject == project && game.getGameState() == Game.GameState.EDITING) {
+                    frameAllObjects();
+                }
+            });
             return true;
         } catch (Exception ex) {
             new Alert(Alert.AlertType.ERROR, "Falha ao abrir projeto:\n" + ex.getMessage()).showAndWait();
@@ -3143,6 +3152,14 @@ public class IgnisEditorApp extends Application {
             }
         }
 
+        // As instancias da geracao anterior ja sairam da cena. So agora e seguro
+        // fechar os loaders que ainda podiam resolver tipos de forma preguicosa.
+        int releasedLoaders = sm.releaseRetiredClassLoaders();
+        if (releasedLoaders > 0) {
+            com.ignis.core.IgnisLogger.info("[ScriptManager] " + releasedLoaders
+                    + " classloader(s) aposentado(s) liberado(s) apos recarga da cena.");
+        }
+
         Platform.runLater(() -> {
             if (selected != null) {
                 rebuildInspectorExtras(selected);
@@ -3284,9 +3301,11 @@ public class IgnisEditorApp extends Application {
 
     private void startRenderBridge(Canvas canvas) {
         AnimationTimer timer = new AnimationTimer() {
+            private static final long EDITOR_UI_REFRESH_NANOS = 100_000_000L;
             private BufferedImage buffer;
             private WritableImage fxImage;
             private long lastPreviewNanos = 0;
+            private long lastEditorUiRefreshNanos = 0;
 
             @Override
             public void handle(long now) {
@@ -3324,8 +3343,14 @@ public class IgnisEditorApp extends Application {
                 gc.clearRect(0, 0, w, h);
                 gc.drawImage(fxImage, 0, 0);
 
-                updateCameraLabels();
-                updateInspectorFields();
+                // Labels e campos JavaFX nao precisam acompanhar o render a 60 Hz.
+                // Atualiza-los em todo frame gera eventos de acessibilidade nativos
+                // mesmo quando o texto nao mudou e, em sessoes longas, esgota RAM.
+                if (now - lastEditorUiRefreshNanos >= EDITOR_UI_REFRESH_NANOS) {
+                    lastEditorUiRefreshNanos = now;
+                    updateCameraLabels();
+                    updateInspectorFields();
+                }
 
                 // Colaboracao em tempo real: o host transmite o snapshot da cena
                 // (throttle interno ~12 Hz); o convidado aplica via listener. Os
@@ -3511,11 +3536,25 @@ public class IgnisEditorApp extends Application {
         com.ignis.core.Camera cam = game.getViewCamera();
         if (cam != null) {
             boolean preview = game.isCameraPreview();
-            Platform.runLater(() -> {
-                cameraPosLabel.setText(String.format("%s: (%.1f, %.1f)",
-                        preview ? "Cam Jogo" : "Cam Pos", cam.getX(), cam.getY()));
-                cameraZoomLabel.setText(String.format("Zoom: %.0f%%", cam.getZoom() * 100));
-            });
+            double x = cam.getX();
+            double y = cam.getY();
+            double zoom = cam.getZoom();
+            Runnable apply = () -> {
+                String position = String.format("%s: (%.1f, %.1f)",
+                        preview ? "Cam Jogo" : "Cam Pos", x, y);
+                String zoomText = String.format("Zoom: %.0f%%", zoom * 100);
+                if (!position.equals(cameraPosLabel.getText())) {
+                    cameraPosLabel.setText(position);
+                }
+                if (!zoomText.equals(cameraZoomLabel.getText())) {
+                    cameraZoomLabel.setText(zoomText);
+                }
+            };
+            if (Platform.isFxApplicationThread()) {
+                apply.run();
+            } else {
+                Platform.runLater(apply);
+            }
         }
     }
 

@@ -30,8 +30,8 @@ public class ScriptManager {
     private URLClassLoader scriptClassLoader;
     private final List<URLClassLoader> retiredClassLoaders = new ArrayList<>();
 
-    // NAO existe teto aqui, e e de proposito. Ja tentei limitar isto de duas formas e
-    // as duas foram piores (16/07/2026):
+    // Nao existe teto durante uma troca de geracao, e e de proposito. Ja tentei
+    // limitar isto de duas formas e as duas foram piores (16/07/2026):
     //
     //   1. Fechar os mais antigos -> derrubou o auto-save do editor com
     //      NoClassDefFoundError. Um loader aposentado ainda e o loader de definicao
@@ -42,9 +42,9 @@ public class ScriptManager {
     //   2. Soltar a referencia sem fechar -> o close() perde o rastro deles e o handle
     //      do .jar fica preso ate o GC (no Windows isso impede ate apagar o arquivo).
     //
-    // A lista fica completa e o close() fecha todos de uma vez, quando o projeto e
-    // trocado e ninguem mais usa aquelas classes. O custo real e baixo: um loader por
-    // LOTE de compilacao (ver compileAllScripts), nao um por script.
+    // A lista fica completa enquanto as instancias antigas ainda vivem. O editor
+    // chama releaseRetiredClassLoaders() somente depois de substituir todos os
+    // scripts da cena. Ha um loader por LOTE (ver compileAllScripts), nao por script.
 
     // Cache of loaded script classes
     private Map<String, Class<? extends IgnisScript>> scriptClasses = new HashMap<>();
@@ -280,7 +280,8 @@ public class ScriptManager {
     }
 
     /**
-     * Creates a script instance
+     * Creates a detached script instance. Initialization belongs to
+     * {@link GameObject#addComponent(Component)}, the single attachment boundary.
      * @param className Script class name
      * @param gameObject GameObject to which the script will be attached
      * @param game Reference to the Game
@@ -293,10 +294,7 @@ public class ScriptManager {
                 return null;
             }
             
-            IgnisScript script = scriptClass.getDeclaredConstructor().newInstance();
-            script.init(gameObject, game);
-
-            return script;
+            return scriptClass.getDeclaredConstructor().newInstance();
             
         } catch (Exception e) {
             IgnisLogger.error("Error creating script instance: " + e.getMessage(), e);
@@ -491,11 +489,24 @@ public class ScriptManager {
      */
     public void close() {
         closeClassLoader(scriptClassLoader);
+        releaseRetiredClassLoaders();
+        scriptClassLoader = null;
+    }
+
+    /**
+     * Releases loaders whose script instances have already been replaced by the
+     * caller. Calling this before rebuilding the scene can break lazy type
+     * resolution, so the lifecycle boundary intentionally stays explicit.
+     *
+     * @return number of retired loaders released
+     */
+    public synchronized int releaseRetiredClassLoaders() {
+        int released = retiredClassLoaders.size();
         for (URLClassLoader classLoader : retiredClassLoaders) {
             closeClassLoader(classLoader);
         }
         retiredClassLoaders.clear();
-        scriptClassLoader = null;
+        return released;
     }
 
     int retainedClassLoaderCount() {

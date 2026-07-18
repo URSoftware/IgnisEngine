@@ -17,6 +17,32 @@ class ScriptManagerTest {
     Path projectFolder;
 
     @Test
+    void initializesScriptExactlyOnceWhenAttached() throws Exception {
+        Path script = projectFolder.resolve("scripts/CountingScript.java");
+        Files.createDirectories(script.getParent());
+        Files.writeString(script,
+                "public class CountingScript extends com.ignis.core.IgnisScript {\n"
+                + "  public static int initCount;\n"
+                + "  @Override public void init(com.ignis.core.GameObject owner, com.ignis.core.Game game) {\n"
+                + "    super.init(owner, game); initCount++;\n"
+                + "  }\n"
+                + "}\n");
+
+        ScriptManager manager = new ScriptManager(projectFolder.toFile());
+        assertTrue(manager.compileScript(script.toFile()));
+        Game game = new Game();
+        GameObject owner = new GameObject("Owner", game, 0, 0, 16, 16);
+
+        IgnisScript instance = manager.createScriptInstance("CountingScript", owner, game);
+        assertNotNull(instance);
+        assertEquals(0, instance.getClass().getField("initCount").getInt(null));
+
+        owner.addComponent(instance);
+        assertEquals(1, instance.getClass().getField("initCount").getInt(null));
+        manager.close();
+    }
+
+    @Test
     void retainsPreviousClassLoadersUntilManagerCloses() throws Exception {
         Path script = projectFolder.resolve("scripts/TestScript.java");
         Files.createDirectories(script.getParent());
@@ -29,6 +55,25 @@ class ScriptManagerTest {
 
         manager.close();
         assertEquals(0, manager.retainedClassLoaderCount());
+    }
+
+    @Test
+    void releasesRetiredClassLoadersAtExplicitSceneBoundary() throws Exception {
+        Path script = projectFolder.resolve("scripts/TestScript.java");
+        Files.createDirectories(script.getParent());
+        Files.writeString(script, "public class TestScript extends com.ignis.core.IgnisScript {}\n");
+
+        ScriptManager manager = new ScriptManager(projectFolder.toFile());
+        for (int i = 0; i < 4; i++) {
+            assertTrue(manager.compileScript(script.toFile()));
+        }
+        assertEquals(3, manager.retainedClassLoaderCount());
+
+        assertEquals(3, manager.releaseRetiredClassLoaders());
+        assertEquals(0, manager.retainedClassLoaderCount());
+        assertEquals(0, manager.releaseRetiredClassLoaders());
+
+        manager.close();
     }
 
     /**

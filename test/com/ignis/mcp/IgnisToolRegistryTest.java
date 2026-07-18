@@ -24,7 +24,7 @@ class IgnisToolRegistryTest {
 
         Game game = new Game();
         game.setSize(320, 180);
-        registry.attachLiveEditor(game, () -> { }, () -> { }, () -> { }, () -> { });
+        registry.attachLiveEditor(game, () -> { }, () -> { }, () -> { }, () -> { }, null);
 
         assertSame(first, game.getScriptManager());
         assertNotNull(game.getPrefabManager());

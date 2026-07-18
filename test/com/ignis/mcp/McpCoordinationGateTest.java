@@ -36,7 +36,7 @@ class McpCoordinationGateTest {
         registry = new IgnisToolRegistry(projectFolder);
         Game game = new Game();
         game.setSize(320, 180);
-        registry.attachLiveEditor(game, () -> { }, () -> { }, () -> { }, () -> { });
+        registry.attachLiveEditor(game, () -> { }, () -> { }, () -> { }, () -> { }, null);
     }
 
     @AfterEach
