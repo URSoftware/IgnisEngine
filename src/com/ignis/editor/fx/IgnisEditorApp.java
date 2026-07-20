@@ -3329,6 +3329,10 @@ public class IgnisEditorApp extends Application {
                 lastPreviewNanos = now;
                 if (dt > 0 && dt < 0.25) {
                     game.previewEditorParticles(dt);
+                    // Preview de animações no editor: sem isto, sprites dirigidos por
+                    // AnimationComponent só apareciam após o primeiro Play (a state
+                    // machine só rodava no tick). Agora aparecem ao abrir o projeto.
+                    game.previewEditorAnimations(dt);
                 }
 
                 Graphics2D g2d = buffer.createGraphics();

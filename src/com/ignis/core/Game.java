@@ -1012,6 +1012,22 @@ public class Game extends Canvas {
         }
     }
 
+    /**
+     * Preview de animações no editor: avança os {@link AnimationComponent} das
+     * entidades no modo de edição para que seus sprites apareçam (e animem) no
+     * viewport sem depender do primeiro Play. No-op fora do modo de edição.
+     * Espelha {@link #previewEditorParticles(double)}.
+     */
+    public synchronized void previewEditorAnimations(double dt) {
+        if (gameState != GameState.EDITING) return;
+        for (int i = 0; i < entities.size(); i++) {
+            AnimationComponent ac = entities.get(i).getComponent(AnimationComponent.class);
+            if (ac != null) {
+                ac.editorPreview(dt);
+            }
+        }
+    }
+
     public synchronized void syncHierarchy() {
         boolean anyParented = false;
         for (int i = 0; i < entities.size(); i++) {

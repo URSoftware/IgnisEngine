@@ -26,6 +26,14 @@ public class SpriteComponent extends IgnisScript {
     @Serialize
     private boolean flipY = false;
 
+    // Textura de PREVIEW no editor (transient, NUNCA serializada por nao ter
+    // @Serialize). O AnimationComponent usa isto para mostrar frames no viewport
+    // do editor sem sobrescrever a textura autoral 'texture' (que e persistida no
+    // .ignis). Em desenho, tem prioridade sobre 'texture' apenas fora do Play —
+    // durante o Play quem dirige a textura e o proprio AnimationComponent via
+    // setTexture, como antes.
+    private transient Texture2D previewTexture;
+
     /**
      * Cria um SpriteComponent associando uma textura inicial.
      * @param texture Textura a ser desenhada.
@@ -58,21 +66,32 @@ public class SpriteComponent extends IgnisScript {
             texture = new Texture2D(gameObject.getSpritePath());
         }
 
+        // Textura efetiva a desenhar: fora do Play, um preview do AnimationComponent
+        // (previewTexture) tem prioridade sobre a textura autoral; no Play, quem
+        // dirige e o AnimationComponent via setTexture, entao usa-se 'texture'.
+        Texture2D active = texture;
+        if (previewTexture != null) {
+            com.ignis.core.Game g2 = gameObject.getGame();
+            if (g2 == null || g2.getGameState() == com.ignis.core.Game.GameState.EDITING) {
+                active = previewTexture;
+            }
+        }
+
         // Ativa antialiasing para qualidade
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
         // Salva o transform original
         AffineTransform oldTransform = g.getTransform();
-        
+
         // Aplica rotação ao redor do centro do objeto
         if (gameObject.getRotation() != 0) {
             double centerX = gameObject.getX() + gameObject.getWidth() / 2.0;
             double centerY = gameObject.getY() + gameObject.getHeight() / 2.0;
             g.rotate(Math.toRadians(gameObject.getRotation()), centerX, centerY);
         }
-        
-        if (texture != null && texture.getImage() != null) {
+
+        if (active != null && active.getImage() != null) {
             // Inverte Y para compensar o eixo Y invertido das coordenadas de mundo do IgnisEngine
             AffineTransform flipTransform = g.getTransform();
             g.translate(gameObject.getX(), gameObject.getY() + gameObject.getHeight());
@@ -87,7 +106,7 @@ public class SpriteComponent extends IgnisScript {
             g.scale(sx, sy);
             
             // Desenha a imagem
-            g.drawImage(texture.getImage(), 0, 0, gameObject.getWidth(), gameObject.getHeight(), null);
+            g.drawImage(active.getImage(), 0, 0, gameObject.getWidth(), gameObject.getHeight(), null);
             
             // Restaura transformações de inversão
             g.setTransform(flipTransform);
@@ -162,6 +181,9 @@ public class SpriteComponent extends IgnisScript {
     // Getters e Setters
     public Texture2D getTexture() { return texture; }
     public void setTexture(Texture2D texture) { this.texture = texture; }
+    /** Textura de preview do editor (transient, nao serializada). Ver o campo. */
+    public Texture2D getPreviewTexture() { return previewTexture; }
+    public void setPreviewTexture(Texture2D previewTexture) { this.previewTexture = previewTexture; }
     public String getShapeType() { return shapeType; }
     public void setShapeType(String shapeType) { this.shapeType = shapeType; }
     public Color getTint() { return tint; }

@@ -96,6 +96,49 @@ public class AnimationComponent extends IgnisScript {
     }
 
     /**
+     * Preview no modo de edição (fora do Play). Garante o controller carregado e
+     * aplica o frame da animação do estado padrão ao SpriteComponent, avançando o
+     * tempo para animar no viewport do editor — assim os assets visuais aparecem
+     * ao abrir o projeto, sem depender do primeiro Play. Espelha
+     * {@link Game#previewEditorParticles(double)}.
+     *
+     * <p>Não avalia transições (os parâmetros só mudam em runtime): mostra de forma
+     * estável a animação do estado inicial. É um no-op sem controller configurado.</p>
+     *
+     * @param deltaTime tempo decorrido em segundos desde o último frame do editor.
+     */
+    public void editorPreview(double deltaTime) {
+        if (gameObject == null) {
+            return;
+        }
+
+        checkLoadController();
+
+        if (controllerData == null) {
+            return;
+        }
+
+        elapsedStateTime += deltaTime * speed;
+
+        String spritePath = resolveCurrentSpritePath();
+        if (spritePath == null) {
+            return;
+        }
+
+        // Preview NÃO-destrutivo: escreve em previewTexture (transient), preservando
+        // a textura autoral serializada. Assim abrir e salvar o projeto sem dar Play
+        // não sobrescreve o sprite do objeto com um frame de animação.
+        SpriteComponent spriteComp = gameObject.getComponent(SpriteComponent.class);
+        if (spriteComp != null) {
+            Texture2D preview = spriteComp.getPreviewTexture();
+            String currentPath = (preview != null) ? preview.getPath() : null;
+            if (!spritePath.equals(currentPath)) {
+                spriteComp.setPreviewTexture(new Texture2D(spritePath));
+            }
+        }
+    }
+
+    /**
      * Evaluates state transitions and updates the current state if a transition's conditions are met.
      */
     private void evaluateTransitions() {
@@ -201,13 +244,35 @@ public class AnimationComponent extends IgnisScript {
      * Resolves the animation frame for the current state and updates the parent SpriteComponent texture.
      */
     private void updateSprite() {
-        if (controllerData == null || currentState == null || currentState.isEmpty()) {
+        String spritePath = resolveCurrentSpritePath();
+        if (spritePath == null) {
             return;
+        }
+
+        // Update SpriteComponent texture
+        SpriteComponent spriteComp = gameObject.getComponent(SpriteComponent.class);
+        if (spriteComp != null) {
+            String currentPath = (spriteComp.getTexture() != null) ? spriteComp.getTexture().getPath() : null;
+            if (!spritePath.equals(currentPath)) {
+                spriteComp.setTexture(new Texture2D(spritePath));
+            }
+        }
+    }
+
+    /**
+     * Resolves the sprite path of the current state's animation at the current
+     * elapsed time, or {@code null} when there is nothing to show (no controller,
+     * no state, or the animation is missing/empty). Shared by the runtime
+     * {@link #updateSprite()} and the editor {@link #editorPreview(double)}.
+     */
+    private String resolveCurrentSpritePath() {
+        if (controllerData == null || currentState == null || currentState.isEmpty()) {
+            return null;
         }
 
         StateData state = controllerData.states.get(currentState);
         if (state == null || state.animationPath == null || state.animationPath.isEmpty()) {
-            return;
+            return null;
         }
 
         // Resolve SpriteAnimation from cache or load it
@@ -225,7 +290,7 @@ public class AnimationComponent extends IgnisScript {
         }
 
         if (anim == null) {
-            return;
+            return null;
         }
 
         // Apply state-specific loop config
@@ -235,18 +300,7 @@ public class AnimationComponent extends IgnisScript {
         double stateTimeScaled = elapsedStateTime * state.speed;
         String spritePath = anim.spritePathAt(stateTimeScaled);
 
-        if (spritePath == null || spritePath.isEmpty()) {
-            return;
-        }
-
-        // Update SpriteComponent texture
-        SpriteComponent spriteComp = gameObject.getComponent(SpriteComponent.class);
-        if (spriteComp != null) {
-            String currentPath = (spriteComp.getTexture() != null) ? spriteComp.getTexture().getPath() : null;
-            if (!spritePath.equals(currentPath)) {
-                spriteComp.setTexture(new Texture2D(spritePath));
-            }
-        }
+        return (spritePath == null || spritePath.isEmpty()) ? null : spritePath;
     }
 
     /**
