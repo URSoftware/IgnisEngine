@@ -295,12 +295,14 @@ public class Game extends Canvas {
     public static class EntitySnapshot {
         public double x, y;
         public int width, height;
+        public boolean visible;
 
-        public EntitySnapshot(double x, double y, int width, int height) {
+        public EntitySnapshot(double x, double y, int width, int height, boolean visible) {
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
+            this.visible = visible;
         }
     }
 
@@ -784,7 +786,8 @@ public class Game extends Canvas {
                     entity.getX(),
                     entity.getY(),
                     entity.getWidth(),
-                    entity.getHeight()));
+                    entity.getHeight(),
+                    entity.isVisible()));
         }
     }
 
@@ -799,6 +802,11 @@ public class Game extends Canvas {
                 entity.setY(snapshot.y);
                 entity.setWidth(snapshot.width);
                 entity.setHeight(snapshot.height);
+                // Restaura a visibilidade original: scripts podem esconder objetos
+                // durante o Play (cutscenes/diretores). Sem isto o estado invisivel
+                // vazava para o editor e o auto-save persistia a cena inteira
+                // invisivel, deixando o viewport em branco ao reabrir o projeto.
+                entity.setVisible(snapshot.visible);
             }
         }
     }
