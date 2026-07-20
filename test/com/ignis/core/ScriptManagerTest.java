@@ -8,10 +8,27 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScriptManagerTest {
+
+    @Test
+    void reportsCompiledScriptWithoutTryingToLoadMissingClass() throws Exception {
+        Path projectFolder = Files.createTempDirectory("ignis-script-compiled-check");
+        ScriptManager manager = new ScriptManager(projectFolder.toFile());
+
+        assertFalse(manager.hasCompiledScript("FreshScript"));
+
+        Path compiled = projectFolder.resolve("scripts/compiled/FreshScript.class");
+        Files.createDirectories(compiled.getParent());
+        Files.write(compiled, new byte[] {0});
+
+        assertTrue(manager.hasCompiledScript("FreshScript"));
+        assertFalse(manager.hasCompiledScript(""));
+        assertFalse(manager.hasCompiledScript(null));
+    }
 
     @TempDir
     Path projectFolder;

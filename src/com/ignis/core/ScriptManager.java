@@ -322,6 +322,19 @@ public class ScriptManager {
     }
 
     /**
+     * Returns whether the top-level class for a script is already available in
+     * the compiled output. MCP attachments may legitimately happen before the
+     * next compilation pass; checking first avoids logging a misleading
+     * ClassNotFoundException while the serialized attachment is still valid.
+     */
+    public boolean hasCompiledScript(String scriptName) {
+        if (scriptName == null || scriptName.isBlank()) {
+            return false;
+        }
+        return new File(compiledFolder, scriptName + ".class").isFile();
+    }
+
+    /**
      * Lists all available compiled scripts
      * @return List of script class names
      */

@@ -1,6 +1,8 @@
 package com.ignis.core;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 
 /**
@@ -17,6 +19,11 @@ public final class IgnisLogger {
     }
 
     private static final List<LogListener> listeners = new ArrayList<>();
+    private static final int RECENT_LOG_LIMIT = 500;
+    private static final Deque<LogEntry> recentLogs = new ArrayDeque<>();
+    private static long nextSequence = 1;
+
+    public record LogEntry(long sequence, Level level, String message) {}
 
     public static synchronized void addListener(LogListener listener) {
         if (listener != null && !listeners.contains(listener)) {
@@ -26,6 +33,19 @@ public final class IgnisLogger {
 
     public static synchronized void removeListener(LogListener listener) {
         listeners.remove(listener);
+    }
+
+    public static synchronized List<LogEntry> recentLogs(int maxEntries, Level level) {
+        int limit = Math.max(1, Math.min(RECENT_LOG_LIMIT, maxEntries));
+        List<LogEntry> matches = recentLogs.stream()
+                .filter(entry -> level == null || entry.level() == level)
+                .toList();
+        int from = Math.max(0, matches.size() - limit);
+        return List.copyOf(matches.subList(from, matches.size()));
+    }
+
+    public static synchronized void clearRecentLogs() {
+        recentLogs.clear();
     }
 
     public static void info(String message) {
@@ -61,6 +81,11 @@ public final class IgnisLogger {
 
     public static synchronized void log(Level level, String message) {
         if (message == null) return;
+
+        recentLogs.addLast(new LogEntry(nextSequence++, level, message));
+        while (recentLogs.size() > RECENT_LOG_LIMIT) {
+            recentLogs.removeFirst();
+        }
         
         // Notifica todos os listeners registrados (ex: FxConsolePanel)
         for (LogListener listener : listeners) {

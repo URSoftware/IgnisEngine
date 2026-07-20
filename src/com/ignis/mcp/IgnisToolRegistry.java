@@ -512,6 +512,31 @@ public final class IgnisToolRegistry {
                 return "Compilacao concluida. Scripts compilados: " + compiled;
             });
 
+        Map<String, String> readLogsProps = new LinkedHashMap<>();
+        readLogsProps.put("maxLines", "Quantidade de entradas recentes (1-500; padrao 100)");
+        readLogsProps.put("level", "Filtro opcional: INFO, WARN, ERROR ou SCRIPT");
+        add("read_logs",
+            "Le os logs recentes da engine sem precisar inspecionar a tela do editor.",
+            schemaWith(readLogsProps, List.of()),
+            args -> {
+                int maxLines = Math.max(1, Math.min(500, args.optInt("maxLines", 100)));
+                String rawLevel = args.optString("level", "").trim();
+                com.ignis.core.IgnisLogger.Level level = null;
+                if (!rawLevel.isEmpty()) {
+                    try {
+                        level = com.ignis.core.IgnisLogger.Level.valueOf(rawLevel.toUpperCase(java.util.Locale.ROOT));
+                    } catch (IllegalArgumentException exception) {
+                        return "Erro: level deve ser INFO, WARN, ERROR ou SCRIPT.";
+                    }
+                }
+                List<com.ignis.core.IgnisLogger.LogEntry> entries =
+                        com.ignis.core.IgnisLogger.recentLogs(maxLines, level);
+                if (entries.isEmpty()) return "(sem logs)";
+                return entries.stream()
+                        .map(entry -> "[" + entry.sequence() + "][" + entry.level() + "] " + entry.message())
+                        .collect(java.util.stream.Collectors.joining("\n"));
+            });
+
         // read_file
         add("read_file",
             "Le um arquivo de texto pelo caminho relativo a raiz do projeto.",

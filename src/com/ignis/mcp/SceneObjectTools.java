@@ -210,10 +210,12 @@ final class SceneObjectTools {
                 if (sm == null) { sm = reg.scriptManager(); reg.liveGame.setScriptManager(sm); }
                 if (!go.getScriptNames().contains(scriptName)) {
                     try {
-                        com.ignis.core.IgnisScript inst = sm.createScriptInstance(scriptName, go, reg.liveGame);
-                        // addComponent mantem components/scripts/scriptNames coerentes
-                        // (fora de components o anexo nao e serializado pela Scene).
-                        if (inst != null) go.addComponent(inst);
+                        if (sm.hasCompiledScript(scriptName)) {
+                            com.ignis.core.IgnisScript inst = sm.createScriptInstance(scriptName, go, reg.liveGame);
+                            // addComponent mantem components/scripts/scriptNames coerentes
+                            // (fora de components o anexo nao e serializado pela Scene).
+                            if (inst != null) go.addComponent(inst);
+                        }
                     } catch (Exception ignore) { /* compila no Play se necessario */ }
                     if (!go.getScriptNames().contains(scriptName)) {
                         go.getScriptNames().add(scriptName); // preserva o anexo sem instancia
