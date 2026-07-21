@@ -121,12 +121,12 @@ public final class ExplorationDirector extends IgnisScript {
         areas = loadAreas(mapRoot);
         dialogues = loadDialogues(readJson(DIALOGUE_DATA));
 
-        sceneDispatcher.connect(SIGNAL_ENTER_EXPLORATION, payload -> beginExploration());
-        sceneDispatcher.connect(SIGNAL_EXPLORATION_ACTIVATE, payload -> {
+        onSceneSignal(SIGNAL_ENTER_EXPLORATION, payload -> beginExploration());
+        onSceneSignal(SIGNAL_EXPLORATION_ACTIVATE, payload -> {
             active = true;
             veldoraDone = true;
         });
-        sceneDispatcher.connect(SIGNAL_ENTER_FOREST_EXPLORATION, payload -> beginForestExploration());
+        onSceneSignal(SIGNAL_ENTER_FOREST_EXPLORATION, payload -> beginForestExploration());
     }
 
     @Override

@@ -70,8 +70,8 @@ public final class CutsceneDirector extends IgnisScript {
         awakeningCutscene.init(getGameObject(), getGame());
         veldoraEncounter.init(getGameObject(), getGame());
 
-        sceneDispatcher.connect(SIGNAL_ENTER_AWAKENING_CUTSCENE, payload -> beginAwakeningCutscene());
-        sceneDispatcher.connect(SIGNAL_ENTER_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter((double[]) payload));
+        onSceneSignal(SIGNAL_ENTER_AWAKENING_CUTSCENE, payload -> beginAwakeningCutscene());
+        onSceneSignal(SIGNAL_ENTER_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter((double[]) payload));
     }
 
     @Override
@@ -442,6 +442,15 @@ public final class CutsceneDirector extends IgnisScript {
         private String shownBeatId;
         private String shownLineId;
         private boolean completionDelivered;
+        private boolean absorptionTransitionActive;
+        private double absorptionTransitionElapsed;
+        private double veldoraDepartureCenterX;
+        private double veldoraDepartureCenterY;
+        private int veldoraDepartureWidth;
+        private int veldoraDepartureHeight;
+
+        private static final double ABSORPTION_TRANSITION_SECONDS = 1.05;
+        private static final double ABSORPTION_RISE_PIXELS = 56.0;
 
         private UIPanel cinemaShade;
         private UIPanel dialoguePanel;
@@ -480,6 +489,8 @@ public final class CutsceneDirector extends IgnisScript {
         boolean update(double deltaTime, boolean advancePressed, boolean skipPressed) {
             if (sequence == null || completionDelivered) return false;
             if (skipPressed) sequence.requestSkip();
+
+            updateAbsorptionTransition(deltaTime);
 
             String beforeBeat = sequence.currentBeat().id();
             NarrativeLine beforeLine = sequence.currentLine();
@@ -620,10 +631,7 @@ public final class CutsceneDirector extends IgnisScript {
                 case "quiet_aftermath" -> {
                     sceneCaption.setText("A PRISAO FICOU SILENCIOSA");
                     sceneCaption.setVisible(true);
-                    destroyWorldVisual(veldoraVisual);
-                    destroyWorldVisual(barrierVisual);
-                    veldoraVisual = null;
-                    barrierVisual = null;
+                    beginAbsorptionTransition();
                 }
                 default -> sceneCaption.setVisible(false);
             }
@@ -688,6 +696,7 @@ public final class CutsceneDirector extends IgnisScript {
         }
 
         private void finishVisualState() {
+            absorptionTransitionActive = false;
             destroyTransientVisuals();
             destroyWorldVisual(veldoraVisual);
             destroyWorldVisual(barrierVisual);
@@ -701,6 +710,47 @@ public final class CutsceneDirector extends IgnisScript {
             actor.setOpacity(1);
             setCameraPosition(actorCenterX, actorCenterY);
             setCameraZoom(1.6);
+        }
+
+        private void beginAbsorptionTransition() {
+            if (veldoraVisual == null) {
+                destroyWorldVisual(barrierVisual);
+                barrierVisual = null;
+                absorptionTransitionActive = false;
+                return;
+            }
+            absorptionTransitionElapsed = 0;
+            absorptionTransitionActive = true;
+            veldoraDepartureWidth = veldoraVisual.getWidth();
+            veldoraDepartureHeight = veldoraVisual.getHeight();
+            veldoraDepartureCenterX = veldoraVisual.getX() + veldoraDepartureWidth / 2.0;
+            veldoraDepartureCenterY = veldoraVisual.getY() + veldoraDepartureHeight / 2.0;
+        }
+
+        private void updateAbsorptionTransition(double deltaTime) {
+            if (!absorptionTransitionActive || veldoraVisual == null) return;
+            absorptionTransitionElapsed += Math.max(0, deltaTime);
+            double t = Math.min(1.0,
+                    absorptionTransitionElapsed / ABSORPTION_TRANSITION_SECONDS);
+            double eased = 1.0 - Math.pow(1.0 - t, 3.0);
+            double scale = 1.0 - 0.28 * eased;
+            int width = Math.max(1, (int) Math.round(veldoraDepartureWidth * scale));
+            int height = Math.max(1, (int) Math.round(veldoraDepartureHeight * scale));
+            veldoraVisual.setWidth(width);
+            veldoraVisual.setHeight(height);
+            veldoraVisual.setX(veldoraDepartureCenterX - width / 2.0);
+            veldoraVisual.setY(veldoraDepartureCenterY - height / 2.0
+                    - ABSORPTION_RISE_PIXELS * eased);
+            veldoraVisual.setOpacity(1.0 - t);
+            if (barrierVisual != null) barrierVisual.setOpacity(1.0 - t);
+
+            if (t >= 1.0) {
+                destroyWorldVisual(veldoraVisual);
+                destroyWorldVisual(barrierVisual);
+                veldoraVisual = null;
+                barrierVisual = null;
+                absorptionTransitionActive = false;
+            }
         }
 
         private void destroyTransientVisuals() {

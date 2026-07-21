@@ -45,7 +45,7 @@ public final class GameFlowController extends IgnisScript {
     // (nao ha troca real de cena, ver nota abaixo), mas so devem aparecer durante a
     // EXPLORACAO. Sem isto eles vazavam atras/abaixo do menu (revisao visual do Codex).
     private static final String[] CAVE_SCENE_OBJECTS = {
-            "CaveTilemapAwakening", "CaveTilemapGallery",
+            "CaveBackdrop", "CaveTilemapAwakening", "CaveTilemapGallery",
             "CaveCrystalCyanProp", "MagiculeClusterProp", "SealFragmentProp", "CaveExitGlowProp"
     };
     private static final String EXPLORATION_DIRECTOR_OBJECT = "ExplorationDirector";
@@ -121,11 +121,11 @@ public final class GameFlowController extends IgnisScript {
         disableHordeDebug();
         showMainMenu();
 
-        sceneDispatcher.connect(SIGNAL_AWAKENING_CUTSCENE_COMPLETE, payload -> completeAwakening());
-        sceneDispatcher.connect(SIGNAL_REQUEST_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter());
-        sceneDispatcher.connect(SIGNAL_VELDORA_ENCOUNTER_COMPLETE, payload -> completeVeldoraEncounter());
-        sceneDispatcher.connect(SIGNAL_REQUEST_GOBLIN_CONTACT, payload -> beginGoblinContact());
-        sceneDispatcher.connect(SIGNAL_GOBLIN_CONTACT_COMPLETE, payload -> completeGoblinContact());
+        onSceneSignal(SIGNAL_AWAKENING_CUTSCENE_COMPLETE, payload -> completeAwakening());
+        onSceneSignal(SIGNAL_REQUEST_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter());
+        onSceneSignal(SIGNAL_VELDORA_ENCOUNTER_COMPLETE, payload -> completeVeldoraEncounter());
+        onSceneSignal(SIGNAL_REQUEST_GOBLIN_CONTACT, payload -> beginGoblinContact());
+        onSceneSignal(SIGNAL_GOBLIN_CONTACT_COMPLETE, payload -> completeGoblinContact());
 
         log("TensuraGame pronto: Caverna do Selo na tela inicial.");
     }

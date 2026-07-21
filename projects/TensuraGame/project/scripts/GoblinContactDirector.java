@@ -64,7 +64,7 @@ public final class GoblinContactDirector extends IgnisScript {
     @Override
     public void start() {
         contact.init(getGameObject(), getGame());
-        sceneDispatcher.connect(SIGNAL_ENTER_GOBLIN_CONTACT, payload -> beginGoblinContact());
+        onSceneSignal(SIGNAL_ENTER_GOBLIN_CONTACT, payload -> beginGoblinContact());
     }
 
     @Override

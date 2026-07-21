@@ -5,6 +5,8 @@ import com.fxutilities.fxevents.core.SceneSignalDispatcher;
 import com.fxutilities.fxevents.core.GameSignalBus;
 import com.fxutilities.fxevents.core.SignalReceiver;
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Classe base para scripts do motor Ignis.
@@ -25,6 +27,17 @@ public abstract class IgnisScript extends Component {
     // Event system
     protected SceneSignalDispatcher sceneDispatcher;
     protected GameSignalBus gameBus;
+    private final List<SceneConnection> sceneConnections = new ArrayList<>();
+
+    private static final class SceneConnection {
+        private final String signal;
+        private final SignalReceiver receiver;
+
+        private SceneConnection(String signal, SignalReceiver receiver) {
+            this.signal = signal;
+            this.receiver = receiver;
+        }
+    }
 
     /**
      * Classe interna para acesso à transformação do objeto.
@@ -74,6 +87,25 @@ public abstract class IgnisScript extends Component {
             }
         }
         this.transform.sync();
+    }
+
+    /**
+     * Releases event subscriptions owned by this script generation. Script
+     * instances are replaced after recompilation; leaving their receivers in the
+     * scene dispatcher keeps the old classloader and can create orphan runtime UI
+     * and actors that no longer receive tick().
+     */
+    @Override
+    public void onDetach() {
+        if (sceneDispatcher != null) {
+            for (SceneConnection connection : new ArrayList<>(sceneConnections)) {
+                sceneDispatcher.disconnect(connection.signal, connection.receiver);
+            }
+        }
+        sceneConnections.clear();
+        if (gameBus != null) {
+            gameBus.disconnectAllForInstance(this);
+        }
     }
 
     // ==================== MÉTODOS PRINCIPAIS ====================
@@ -1687,11 +1719,11 @@ public abstract class IgnisScript extends Component {
      */
     protected void on(String signal, SignalReceiver receiver) {
         if (sceneDispatcher != null) {
-            if (gameObject != null && !signal.contains(":")) {
-                sceneDispatcher.connect(gameObject.getId() + ":" + signal, receiver);
-            } else {
-                sceneDispatcher.connect(signal, receiver);
-            }
+            String resolvedSignal = gameObject != null && !signal.contains(":")
+                    ? gameObject.getId() + ":" + signal
+                    : signal;
+            sceneDispatcher.connect(resolvedSignal, receiver);
+            sceneConnections.add(new SceneConnection(resolvedSignal, receiver));
         }
     }
 
@@ -1700,12 +1732,31 @@ public abstract class IgnisScript extends Component {
      */
     protected void off(String signal, SignalReceiver receiver) {
         if (sceneDispatcher != null) {
-            if (gameObject != null && !signal.contains(":")) {
-                sceneDispatcher.disconnect(gameObject.getId() + ":" + signal, receiver);
-            } else {
-                sceneDispatcher.disconnect(signal, receiver);
-            }
+            String resolvedSignal = gameObject != null && !signal.contains(":")
+                    ? gameObject.getId() + ":" + signal
+                    : signal;
+            sceneDispatcher.disconnect(resolvedSignal, receiver);
+            sceneConnections.removeIf(connection -> connection.signal.equals(resolvedSignal)
+                    && connection.receiver == receiver);
         }
+    }
+
+    /**
+     * Connects to a scene-wide semantic signal without adding the owner id.
+     * Prefer this for cross-director contracts such as {@code TENSURA_*}.
+     */
+    protected void onSceneSignal(String signal, SignalReceiver receiver) {
+        if (sceneDispatcher == null) return;
+        sceneDispatcher.connect(signal, receiver);
+        sceneConnections.add(new SceneConnection(signal, receiver));
+    }
+
+    /** Disconnects a receiver previously registered with {@link #onSceneSignal}. */
+    protected void offSceneSignal(String signal, SignalReceiver receiver) {
+        if (sceneDispatcher == null) return;
+        sceneDispatcher.disconnect(signal, receiver);
+        sceneConnections.removeIf(connection -> connection.signal.equals(signal)
+                && connection.receiver == receiver);
     }
 
     /**
