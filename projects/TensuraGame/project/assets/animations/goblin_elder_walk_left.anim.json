@@ -1,0 +1,19 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.17,
+      "sprite": "assets/sprites/npcs/goblin_elder/goblin_elder_walk_left_01.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/npcs/goblin_elder/goblin_elder_idle_left.png"
+    },
+    {
+      "duration": 0.17,
+      "sprite": "assets/sprites/npcs/goblin_elder/goblin_elder_walk_left_02.png"
+    }
+  ],
+  "loop": true,
+  "name": "goblin_elder_walk_left"
+}
