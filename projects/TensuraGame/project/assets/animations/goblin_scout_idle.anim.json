@@ -1,0 +1,9 @@
+{
+  "curveType": "LINEAR",
+  "frames": [{
+    "duration": 0.4,
+    "sprite": "assets/sprites/npcs/goblin_scout_idle_down.png"
+  }],
+  "loop": true,
+  "name": "goblin_scout_idle"
+}

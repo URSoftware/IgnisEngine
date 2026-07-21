@@ -1,0 +1,19 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.11,
+      "sprite": "assets/sprites/creatures/dire_wolf_pre_naming_run_down_01.png"
+    },
+    {
+      "duration": 0.08,
+      "sprite": "assets/sprites/creatures/dire_wolf_pre_naming_idle_down.png"
+    },
+    {
+      "duration": 0.11,
+      "sprite": "assets/sprites/creatures/dire_wolf_pre_naming_run_down_02.png"
+    }
+  ],
+  "loop": true,
+  "name": "dire_wolf_pre_naming_run_down"
+}
