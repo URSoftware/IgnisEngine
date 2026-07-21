@@ -67,3 +67,6 @@ projects/MyGame/
 
 # AI assistant config
 .claude/
+
+# Estado volatil de coordenacao do MCP por projeto
+projects/*/project/.ignis/
