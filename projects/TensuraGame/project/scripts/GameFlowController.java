@@ -4,6 +4,7 @@ import com.ignis.core.IgnisScript;
 import com.ignis.core.ui.UIButton;
 import com.ignis.core.ui.UILabel;
 import com.ignis.core.ui.UIPanel;
+import com.rimurusurvivors.domain.CampaignSnapshot;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -13,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Entrada principal do jogo: menu -> roteamento de modo (contrato da fatia
@@ -58,17 +60,6 @@ public final class GameFlowController extends IgnisScript {
     private static final String FOREST_BACKDROP_OBJECT = "JuraForestFloor";
     private static final String GOBLIN_NPC_OBJECT = "GoblinScoutNPC";
 
-    // O motor JA suporta cenas de verdade (IgnisScript.loadScene, ver SceneHost/
-    // SceneTools no MCP) — esta fatia ainda nao foi migrada para usa-las e continua
-    // com as areas no MESMO mundo, por deslocamento manual. O
-    // dominio permanece so em coordenadas locais-a-area (contrato "dominio sem
-    // paths/mundo") e este mapa de deslocamento e a UNICA peca que sabe onde cada
-    // area foi desenhada. Migrar para cave_awakening/cave_gallery como cenas
-    // separadas (com copy_object_to_scene) e trabalho futuro, nao deste checkpoint.
-    //
-    // Duplicado (de proposito) em ExplorationDirector.java: e dado estatico de
-    // layout de nivel, nao logica — se uma area nova entrar no mapa, os dois
-    // lugares precisam mudar juntos.
     private static final Map<String, double[]> AREA_OFFSETS = Map.of(
             "cave_awakening", new double[] {0, 0},
             "cave_gallery", new double[] {900, 0});
@@ -76,10 +67,12 @@ public final class GameFlowController extends IgnisScript {
     // Sinais enviados para os diretores (ver o par exato em cada arquivo).
     private static final String SIGNAL_ENTER_AWAKENING_CUTSCENE = "TENSURA_ENTER_AWAKENING_CUTSCENE";
     private static final String SIGNAL_ENTER_EXPLORATION = "TENSURA_ENTER_EXPLORATION";
+    private static final String SIGNAL_ENTER_EXPLORATION_SNAPSHOT = "TENSURA_ENTER_EXPLORATION_SNAPSHOT";
     private static final String SIGNAL_ENTER_VELDORA_ENCOUNTER = "TENSURA_ENTER_VELDORA_ENCOUNTER";
     private static final String SIGNAL_EXPLORATION_ACTIVATE = "TENSURA_EXPLORATION_ACTIVATE";
     private static final String SIGNAL_ENTER_GOBLIN_CONTACT = "TENSURA_ENTER_GOBLIN_CONTACT";
     private static final String SIGNAL_ENTER_FOREST_EXPLORATION = "TENSURA_ENTER_FOREST_EXPLORATION";
+
     // Sinais recebidos dos diretores.
     private static final String SIGNAL_AWAKENING_CUTSCENE_COMPLETE = "TENSURA_AWAKENING_CUTSCENE_COMPLETE";
     private static final String SIGNAL_REQUEST_VELDORA_ENCOUNTER = "TENSURA_REQUEST_VELDORA_ENCOUNTER";
@@ -87,16 +80,30 @@ public final class GameFlowController extends IgnisScript {
     private static final String SIGNAL_REQUEST_GOBLIN_CONTACT = "TENSURA_REQUEST_GOBLIN_CONTACT";
     private static final String SIGNAL_GOBLIN_CONTACT_COMPLETE = "TENSURA_GOBLIN_CONTACT_COMPLETE";
 
+    // Sinais da persistencia de campanha (CampaignSaveDirector).
+    private static final String SIGNAL_SAVE_REQUEST = "TENSURA_CAMPAIGN_SAVE_REQUEST";
+    private static final String SIGNAL_LOAD_REQUEST = "TENSURA_CAMPAIGN_LOAD_REQUEST";
+    private static final String SIGNAL_SAVED = "TENSURA_CAMPAIGN_SAVED";
+    private static final String SIGNAL_LOADED = "TENSURA_CAMPAIGN_LOADED";
+    private static final String SIGNAL_LOAD_EMPTY = "TENSURA_CAMPAIGN_LOAD_EMPTY";
+    private static final String SIGNAL_SAVE_WARNING = "TENSURA_CAMPAIGN_SAVE_WARNING";
+    private static final String SIGNAL_SAVE_FAILED = "TENSURA_CAMPAIGN_SAVE_FAILED";
+
     private JSONObject mapRoot;
     private GameObject player;
     private FlowState state = FlowState.MENU;
     private boolean veldoraEncounterCompleted;
     private boolean goblinContactCompleted;
 
+    private CampaignSnapshot loadedSnapshot;
+    private String saveWarningMessage;
+
     private UIPanel menuBackground;
     private UILabel menuTitle;
     private UILabel menuSubtitle;
     private UIButton startButton;
+    private UIButton continueButton;
+    private UILabel warningLabel;
     private UILabel objectiveLabel;
     private UILabel debugHintLabel;
 
@@ -126,6 +133,26 @@ public final class GameFlowController extends IgnisScript {
         onSceneSignal(SIGNAL_VELDORA_ENCOUNTER_COMPLETE, payload -> completeVeldoraEncounter());
         onSceneSignal(SIGNAL_REQUEST_GOBLIN_CONTACT, payload -> beginGoblinContact());
         onSceneSignal(SIGNAL_GOBLIN_CONTACT_COMPLETE, payload -> completeGoblinContact());
+
+        onSceneSignal(SIGNAL_LOADED, payload -> {
+            if (payload instanceof CampaignSnapshot snapshot) {
+                onCampaignLoaded(snapshot);
+            }
+        });
+        onSceneSignal(SIGNAL_LOAD_EMPTY, payload -> onCampaignLoadEmpty());
+        onSceneSignal(SIGNAL_SAVE_WARNING, payload -> {
+            if (payload instanceof String warning) {
+                onCampaignSaveWarning(warning);
+            }
+        });
+        onSceneSignal(SIGNAL_SAVED, payload -> log("GameFlowController: campanha salva com sucesso."));
+        onSceneSignal(SIGNAL_SAVE_FAILED, payload -> {
+            if (payload instanceof String failure) {
+                onCampaignSaveWarning(failure);
+            }
+        });
+
+        sceneDispatcher.enqueue(SIGNAL_LOAD_REQUEST, null);
 
         log("TensuraGame pronto: Caverna do Selo na tela inicial.");
     }
@@ -167,11 +194,37 @@ public final class GameFlowController extends IgnisScript {
         menuSubtitle.setAlignment(UILabel.Alignment.CENTER);
         menuSubtitle.setFont("SansSerif", Font.BOLD, 16);
         menuSubtitle.setTextColor(new Color(255, 222, 137));
-        startButton = createButton("DESPERTAR", 0, 0, 240, 58);
-        startButton.setColorScheme(new Color(35, 147, 168), new Color(50, 177, 198), new Color(24, 112, 132));
-        startButton.setBorderColor(new Color(190, 244, 249));
-        startButton.setBorderWidth(2);
-        startButton.setOnClick(this::beginAwakening);
+
+        if (loadedSnapshot != null) {
+            continueButton = createButton("CONTINUAR", 0, 0, 240, 48);
+            continueButton.setColorScheme(new Color(45, 175, 120), new Color(60, 205, 140), new Color(30, 135, 90));
+            continueButton.setBorderColor(new Color(190, 249, 215));
+            continueButton.setBorderWidth(2);
+            continueButton.setOnClick(this::continueCampaign);
+
+            startButton = createButton("NOVO JOGO", 0, 0, 240, 48);
+            startButton.setColorScheme(new Color(35, 147, 168), new Color(50, 177, 198), new Color(24, 112, 132));
+            startButton.setBorderColor(new Color(190, 244, 249));
+            startButton.setBorderWidth(2);
+            startButton.setOnClick(this::beginAwakening);
+        } else {
+            continueButton = null;
+            startButton = createButton("DESPERTAR", 0, 0, 240, 58);
+            startButton.setColorScheme(new Color(35, 147, 168), new Color(50, 177, 198), new Color(24, 112, 132));
+            startButton.setBorderColor(new Color(190, 244, 249));
+            startButton.setBorderWidth(2);
+            startButton.setOnClick(this::beginAwakening);
+        }
+
+        if (saveWarningMessage != null) {
+            warningLabel = createLabel("Aviso: " + saveWarningMessage, 0, 0, 560, 24);
+            warningLabel.setAlignment(UILabel.Alignment.CENTER);
+            warningLabel.setFont("SansSerif", Font.PLAIN, 12);
+            warningLabel.setTextColor(new Color(255, 180, 100));
+        } else {
+            warningLabel = null;
+        }
+
         layoutMenu();
     }
 
@@ -180,9 +233,91 @@ public final class GameFlowController extends IgnisScript {
         double height = Math.max(360, getGame().getHeight());
         menuBackground.setSize(width, height);
         menuTitle.setSize(Math.min(620, width - 40), 60);
-        menuTitle.setPosition((width - menuTitle.getWidth()) / 2.0, Math.max(28, height * 0.30));
-        menuSubtitle.setPosition((width - 460) / 2.0, Math.max(96, height * 0.42));
-        startButton.setPosition((width - 240) / 2.0, Math.min(height - 82, height * 0.60));
+        menuTitle.setPosition((width - menuTitle.getWidth()) / 2.0, Math.max(28, height * 0.26));
+        menuSubtitle.setPosition((width - 460) / 2.0, Math.max(92, height * 0.38));
+
+        if (continueButton != null) {
+            continueButton.setPosition((width - 240) / 2.0, Math.min(height - 120, height * 0.50));
+            startButton.setPosition((width - 240) / 2.0, Math.min(height - 65, height * 0.62));
+        } else {
+            startButton.setPosition((width - 240) / 2.0, Math.min(height - 82, height * 0.58));
+        }
+
+        if (warningLabel != null) {
+            warningLabel.setPosition((width - 560) / 2.0, height - 32);
+        }
+    }
+
+    private void onCampaignLoaded(CampaignSnapshot snapshot) {
+        if (!isSupportedSnapshot(snapshot)) {
+            this.loadedSnapshot = null;
+            onCampaignSaveWarning("Save aponta para uma area indisponivel nesta versao.");
+            return;
+        }
+        this.loadedSnapshot = snapshot;
+        log("GameFlowController: campanha carregada para retomada (area: " + snapshot.areaId() + ").");
+        if (state == FlowState.MENU) {
+            showMainMenu();
+        }
+    }
+
+    private void onCampaignLoadEmpty() {
+        this.loadedSnapshot = null;
+        log("GameFlowController: nenhum save existente encontrado.");
+    }
+
+    private void onCampaignSaveWarning(String warning) {
+        this.saveWarningMessage = warning;
+        log("GameFlowController: aviso de save/load — " + warning);
+        if (state == FlowState.MENU) {
+            showMainMenu();
+        }
+    }
+
+    private boolean isSupportedSnapshot(CampaignSnapshot snapshot) {
+        if (snapshot == null || mapRoot == null) return false;
+        try {
+            findAreaJson(mapRoot, snapshot.areaId());
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private void continueCampaign() {
+        if (state != FlowState.MENU || loadedSnapshot == null) return;
+        clearUI();
+
+        Set<String> milestones = loadedSnapshot.completedMilestones();
+        boolean hasVeldora = milestones.contains("veldora_encounter_complete");
+        boolean hasGoblin = milestones.contains("goblin_contact_complete");
+
+        if (hasGoblin || "jura_forest_approach".equals(loadedSnapshot.areaId())) {
+            veldoraEncounterCompleted = true;
+            goblinContactCompleted = true;
+            setCaveSceneObjectsVisible(false);
+            setForestBackdropVisible(true);
+            setGoblinNpcVisible(true);
+            setupExplorationHud("Floresta de Jura: fale com o goblin para seguir ate a aldeia. [E]");
+            sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, loadedSnapshot);
+            state = FlowState.EXPLORATION;
+        } else if (hasVeldora) {
+            veldoraEncounterCompleted = true;
+            setCaveSceneObjectsVisible(true);
+            setForestBackdropVisible(false);
+            setGoblinNpcVisible(false);
+            setupExplorationHud("Veldora esta com voce. Encontre a saida da caverna.");
+            sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, loadedSnapshot);
+            state = FlowState.EXPLORATION;
+        } else {
+            setCaveSceneObjectsVisible(true);
+            setForestBackdropVisible(false);
+            setGoblinNpcVisible(false);
+            setupExplorationHud("Explore a Caverna do Selo. [E] interagir");
+            sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, loadedSnapshot);
+            state = FlowState.EXPLORATION;
+        }
+        log("GameFlowController: campanha retomada a partir do snapshot na area " + loadedSnapshot.areaId());
     }
 
     // ==================== Roteamento de modo ====================
@@ -233,6 +368,12 @@ public final class GameFlowController extends IgnisScript {
         // rodar sobre um estado que nunca terminou de montar (era o NPE que
         // derrubava o loop do jogo: "this.simulation is null").
         state = FlowState.EXPLORATION;
+
+        CampaignSnapshot snap = new CampaignSnapshot(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                "cave_awakening", 80.0, 208.0,
+                Set.of("awakening_complete"));
+        sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
     }
 
     private void setupExplorationHud(String objective) {
@@ -267,6 +408,12 @@ public final class GameFlowController extends IgnisScript {
         setupExplorationHud("Veldora esta com voce. Encontre a saida da caverna.");
         sceneDispatcher.enqueue(SIGNAL_EXPLORATION_ACTIVATE, null);
         state = FlowState.EXPLORATION;
+
+        CampaignSnapshot snap = new CampaignSnapshot(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                "cave_gallery", 176.0, 80.0,
+                Set.of("awakening_complete", "veldora_encounter_complete"));
+        sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
     }
 
     // ==================== Saida da caverna + contato goblin ====================
@@ -300,6 +447,12 @@ public final class GameFlowController extends IgnisScript {
         setupExplorationHud("Floresta de Jura: fale com o goblin para seguir ate a aldeia. [E]");
         sceneDispatcher.enqueue(SIGNAL_ENTER_FOREST_EXPLORATION, null);
         state = FlowState.EXPLORATION;
+
+        CampaignSnapshot snap = new CampaignSnapshot(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                "jura_forest_approach", 96.0, 192.0,
+                Set.of("awakening_complete", "veldora_encounter_complete", "goblin_contact_complete", "goblin_village_route_unlocked"));
+        sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
     }
 
     private void setForestBackdropVisible(boolean visible) {

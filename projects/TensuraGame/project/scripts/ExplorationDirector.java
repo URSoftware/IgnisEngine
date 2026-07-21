@@ -73,6 +73,7 @@ public final class ExplorationDirector extends IgnisScript {
     // Sinal recebido de GameFlowController: o contato goblin acabou; comece a
     // exploracao conversacional na Floresta de Jura (nova simulacao, area diferente).
     private static final String SIGNAL_ENTER_FOREST_EXPLORATION = "TENSURA_ENTER_FOREST_EXPLORATION";
+    private static final String SIGNAL_ENTER_EXPLORATION_SNAPSHOT = "TENSURA_ENTER_EXPLORATION_SNAPSHOT";
 
     private static final String MAP_DATA = "data/cave-seal-map.json";
     private static final String DIALOGUE_DATA = "data/cave-seal-dialogues.json";
@@ -122,6 +123,11 @@ public final class ExplorationDirector extends IgnisScript {
         dialogues = loadDialogues(readJson(DIALOGUE_DATA));
 
         onSceneSignal(SIGNAL_ENTER_EXPLORATION, payload -> beginExploration());
+        onSceneSignal(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, payload -> {
+            if (payload instanceof com.rimurusurvivors.domain.CampaignSnapshot snapshot) {
+                beginExplorationWithSnapshot(snapshot);
+            }
+        });
         onSceneSignal(SIGNAL_EXPLORATION_ACTIVATE, payload -> {
             active = true;
             veldoraDone = true;
@@ -177,6 +183,12 @@ public final class ExplorationDirector extends IgnisScript {
         JSONObject forestAreaJson = findAreaJson(mapRoot, FOREST_AREA_ID);
         beginExplorationAt(FOREST_AREA_ID, forestAreaJson.getDouble("spawnX"), forestAreaJson.getDouble("spawnY"));
         log("ExplorationDirector: exploracao conversacional da floresta iniciada.");
+    }
+
+    private void beginExplorationWithSnapshot(com.rimurusurvivors.domain.CampaignSnapshot snapshot) {
+        if (snapshot == null) return;
+        beginExplorationAt(snapshot.areaId(), snapshot.playerX(), snapshot.playerY());
+        log("ExplorationDirector: exploracao retomada via snapshot em " + snapshot.areaId() + " (" + snapshot.playerX() + ", " + snapshot.playerY() + ").");
     }
 
     /**

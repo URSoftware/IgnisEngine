@@ -1,0 +1,33 @@
+{
+  "battleId": "dire_wolf_leader",
+  "title": "DUELO POR TURNOS - LIDER DA MATILHA",
+  "subtitle": "Leia a intencao, defenda no tempo certo e busque a rendicao.",
+  "timingMode": "strategic",
+  "reactionTelegraphSeconds": 1.1,
+  "commands": [
+    { "key": "1", "command": "ANALYZE",        "label": "Analisar",          "hint": "Grande Sabio revela intencao e condicao de rendicao (nao gasta turno)." },
+    { "key": "2", "command": "WATER_BLADE",     "label": "Hidrolamina",       "hint": "Dano preciso e forte queda de moral. Custa 10 magiaules." },
+    { "key": "3", "command": "DEFEND",          "label": "Defender",          "hint": "Abre a janela de reacao; boa defesa reduz dano e abala a moral." },
+    { "key": "4", "command": "GOBLIN_SUPPORT",  "label": "Comando aos Goblins", "hint": "Apoio da aldeia conforme as preparacoes escolhidas." },
+    { "key": "5", "command": "PREDATOR",        "label": "Predador",          "hint": "So com o lider em ruptura de moral ou HP critico." },
+    { "key": "6", "command": "NEGOTIATE",       "label": "Negociar",          "hint": "So apos a ruptura de moral; encerra o duelo em rendicao." }
+  ],
+  "reaction": {
+    "prompt": "[ESPACO] REAGIR!",
+    "telegraph": "O lider se prepara para investir...",
+    "missed": "Sem reacao: o golpe acerta em cheio.",
+    "gradeLabels": {
+      "PERFECT": "PERFEITO",
+      "GOOD": "BOM",
+      "EARLY": "CEDO DEMAIS",
+      "LATE": "TARDE DEMAIS",
+      "NONE": "SEM REACAO"
+    }
+  },
+  "outcomes": {
+    "VICTORY_SUBDUED": "O lider tomba exausto. A matilha hesita e observa o novo poder de Rimuru.",
+    "VICTORY_SURRENDER": "O herdeiro atravessa a matilha e baixa a cabeca: o futuro Ranga jura lealdade.",
+    "DEFEAT": "Rimuru recua para proteger a aldeia. Sera preciso outra estrategia.",
+    "IN_PROGRESS": ""
+  }
+}
