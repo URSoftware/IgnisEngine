@@ -85,6 +85,11 @@ public final class ExplorationDirector extends IgnisScript {
     // Area minima da floresta (retangulo aberto + goblin conversavel) para o marco
     // fechar de ponta a ponta; layout/tilemap/sprites finais ficam com o Codex.
     private static final String FOREST_AREA_ID = "jura_forest_approach";
+    // Marcos semanticos gravados por GameFlowController no CampaignSnapshot. Duplicados
+    // aqui de proposito (scripts nao se referenciam): usados para restaurar as guardas
+    // de progresso ao retomar por save. Mudar a string exige mudar as duas pontas.
+    private static final String MILESTONE_VELDORA_COMPLETE = "veldora_encounter_complete";
+    private static final String MILESTONE_GOBLIN_CONTACT_COMPLETE = "goblin_contact_complete";
 
     // Duplicado de proposito a partir de GameFlowController.AREA_OFFSETS: e
     // dado estatico de layout de nivel (onde cada area foi desenhada no MESMO
@@ -187,8 +192,19 @@ public final class ExplorationDirector extends IgnisScript {
 
     private void beginExplorationWithSnapshot(com.rimurusurvivors.domain.CampaignSnapshot snapshot) {
         if (snapshot == null) return;
+        // Restaura as guardas de progresso a partir dos marcos do save. Sem isto, ao
+        // retomar (CONTINUAR) na galeria pos-Veldora o jogador ficava PRESO: veldoraDone
+        // continuava false (so era setado pelo sinal EXPLORATION_ACTIVATE do fluxo novo),
+        // entao examinar a boca da caverna nunca disparava o contato goblin. E reexaminar
+        // o selo re-pedia o Veldora (veldoraRequested false), travando a exploracao a
+        // espera de um encontro que o GameFlowController ja marcou como concluido.
+        Set<String> milestones = snapshot.completedMilestones();
+        veldoraDone = milestones.contains(MILESTONE_VELDORA_COMPLETE);
+        veldoraRequested = veldoraDone;
+        goblinRequested = milestones.contains(MILESTONE_GOBLIN_CONTACT_COMPLETE);
         beginExplorationAt(snapshot.areaId(), snapshot.playerX(), snapshot.playerY());
-        log("ExplorationDirector: exploracao retomada via snapshot em " + snapshot.areaId() + " (" + snapshot.playerX() + ", " + snapshot.playerY() + ").");
+        log("ExplorationDirector: exploracao retomada via snapshot em " + snapshot.areaId()
+                + " (" + snapshot.playerX() + ", " + snapshot.playerY() + "), veldoraDone=" + veldoraDone + ".");
     }
 
     /**
