@@ -223,6 +223,30 @@ class ExplorationSimulationTest {
         assertFalse(snapshot.playerMoving());
     }
 
+    @Test
+    void examiningTheCaveExitEndsWithItsDialogueIdAsTheEventDetail() {
+        // Contrato do gatilho da saida da caverna: ExplorationDirector so pede o
+        // contato goblin quando ve DIALOGUE_ENDED cujo detail e o id do dialogo da
+        // boca da caverna (dlg_cave_exit) — o mesmo padrao do gatilho do Veldora.
+        // Se DIALOGUE_ENDED deixar de carregar o id do dialogo, o adaptador silencia.
+        Interactable exit = new Interactable(
+                "cave_forest_exit", 48, 40, 12, InteractionVerb.EXAMINE, "dlg_cave_exit", false, null, 0, 0);
+        ExplorationArea area = new ExplorationArea("cave_gallery", openMap(), List.of(exit));
+        DialogueScript dialogue = new DialogueScript("dlg_cave_exit", List.of(
+                new DialogueLine("Grande Sabio", "Passagem para a superficie detectada."),
+                new DialogueLine("Grande Sabio", "O ar carrega esporos de floresta.")));
+        ExplorationSimulation simulation = new ExplorationSimulation(
+                Map.of("cave_gallery", area), Map.of("dlg_cave_exit", dialogue), "cave_gallery", 48, 48);
+
+        simulation.update(0.05, RunInput.NONE, true);   // abre o dialogo
+        simulation.update(0.05, RunInput.NONE, true);   // segunda fala
+        ExplorationSnapshot ended = simulation.update(0.05, RunInput.NONE, true); // fecha
+
+        assertFalse(ended.dialogueActive());
+        assertTrue(ended.events().stream().anyMatch(e ->
+                e.type() == ExplorationEventType.DIALOGUE_ENDED && "dlg_cave_exit".equals(e.detail())));
+    }
+
     private static DialogueScript oneLineDialogue(String id) {
         return new DialogueScript(id, List.of(new DialogueLine("Grande Sabio", "Registrado.")));
     }

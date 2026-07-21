@@ -36,6 +36,25 @@
         { "speaker": "Grande Sabio", "text": "Uma barreira imensa esta adiante. Sua origem excede qualquer registro conhecido." },
         { "speaker": "Grande Sabio", "text": "Recomendo cautela. Algo do outro lado esta desperto." }
       ]
+    },
+    {
+      "id": "dlg_cave_exit",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Passagem para a superficie detectada. Corrente de ar e luz vem de alem." },
+        { "speaker": "Grande Sabio", "text": "O ar carrega esporos de floresta. Ha vida grande la fora." }
+      ]
+    },
+    {
+      "id": "dlg_goblin_scout_camp",
+      "lines": [
+        { "speaker": "Goblin", "text": "Grande viajante, este e o caminho para a aldeia. Sigo a frente quando estiver pronto." }
+      ]
+    },
+    {
+      "id": "dlg_forest_path_north",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Trilha ao norte leva ao territorio dos goblins. Presenca de lobos aumenta naquela direcao." }
+      ]
     }
   ]
 }

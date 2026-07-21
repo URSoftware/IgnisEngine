@@ -50,10 +50,17 @@ public final class GameFlowController extends IgnisScript {
     };
     private static final String EXPLORATION_DIRECTOR_OBJECT = "ExplorationDirector";
     private static final String CUTSCENE_DIRECTOR_OBJECT = "CutsceneDirector";
+    private static final String GOBLIN_CONTACT_DIRECTOR_OBJECT = "GoblinContactDirector";
+    // Fundo da Floresta de Jura (reaproveita o objeto do Horde debug como chao da
+    // floresta) e o NPC goblin conversavel — ambos assets/posicao do Codex. Este
+    // fluxo so alterna a VISIBILIDADE deles nas transicoes; nao os posiciona.
+    // MagiculeMotes NAO entra aqui: continua exclusivo do Horde debug.
+    private static final String FOREST_BACKDROP_OBJECT = "JuraForestFloor";
+    private static final String GOBLIN_NPC_OBJECT = "GoblinScoutNPC";
 
     // O motor JA suporta cenas de verdade (IgnisScript.loadScene, ver SceneHost/
     // SceneTools no MCP) — esta fatia ainda nao foi migrada para usa-las e continua
-    // com as duas areas lado a lado no MESMO mundo, por deslocamento manual. O
+    // com as areas no MESMO mundo, por deslocamento manual. O
     // dominio permanece so em coordenadas locais-a-area (contrato "dominio sem
     // paths/mundo") e este mapa de deslocamento e a UNICA peca que sabe onde cada
     // area foi desenhada. Migrar para cave_awakening/cave_gallery como cenas
@@ -71,15 +78,20 @@ public final class GameFlowController extends IgnisScript {
     private static final String SIGNAL_ENTER_EXPLORATION = "TENSURA_ENTER_EXPLORATION";
     private static final String SIGNAL_ENTER_VELDORA_ENCOUNTER = "TENSURA_ENTER_VELDORA_ENCOUNTER";
     private static final String SIGNAL_EXPLORATION_ACTIVATE = "TENSURA_EXPLORATION_ACTIVATE";
+    private static final String SIGNAL_ENTER_GOBLIN_CONTACT = "TENSURA_ENTER_GOBLIN_CONTACT";
+    private static final String SIGNAL_ENTER_FOREST_EXPLORATION = "TENSURA_ENTER_FOREST_EXPLORATION";
     // Sinais recebidos dos diretores.
     private static final String SIGNAL_AWAKENING_CUTSCENE_COMPLETE = "TENSURA_AWAKENING_CUTSCENE_COMPLETE";
     private static final String SIGNAL_REQUEST_VELDORA_ENCOUNTER = "TENSURA_REQUEST_VELDORA_ENCOUNTER";
     private static final String SIGNAL_VELDORA_ENCOUNTER_COMPLETE = "TENSURA_VELDORA_ENCOUNTER_COMPLETE";
+    private static final String SIGNAL_REQUEST_GOBLIN_CONTACT = "TENSURA_REQUEST_GOBLIN_CONTACT";
+    private static final String SIGNAL_GOBLIN_CONTACT_COMPLETE = "TENSURA_GOBLIN_CONTACT_COMPLETE";
 
     private JSONObject mapRoot;
     private GameObject player;
     private FlowState state = FlowState.MENU;
     private boolean veldoraEncounterCompleted;
+    private boolean goblinContactCompleted;
 
     private UIPanel menuBackground;
     private UILabel menuTitle;
@@ -112,6 +124,8 @@ public final class GameFlowController extends IgnisScript {
         sceneDispatcher.connect(SIGNAL_AWAKENING_CUTSCENE_COMPLETE, payload -> completeAwakening());
         sceneDispatcher.connect(SIGNAL_REQUEST_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter());
         sceneDispatcher.connect(SIGNAL_VELDORA_ENCOUNTER_COMPLETE, payload -> completeVeldoraEncounter());
+        sceneDispatcher.connect(SIGNAL_REQUEST_GOBLIN_CONTACT, payload -> beginGoblinContact());
+        sceneDispatcher.connect(SIGNAL_GOBLIN_CONTACT_COMPLETE, payload -> completeGoblinContact());
 
         log("TensuraGame pronto: Caverna do Selo na tela inicial.");
     }
@@ -138,6 +152,9 @@ public final class GameFlowController extends IgnisScript {
         clearUI();
         state = FlowState.MENU;
         setCaveSceneObjectsVisible(false);
+        // O fundo da floresta e o NPC goblin nunca vazam para o menu (revisao do Codex).
+        setForestBackdropVisible(false);
+        setGoblinNpcVisible(false);
         if (player != null) player.setVisible(false);
         menuBackground = createPanel(0, 0, 960, 540);
         setUIColors(menuBackground, new Color(4, 12, 18, 230), null, new Color(60, 140, 165));
@@ -182,6 +199,9 @@ public final class GameFlowController extends IgnisScript {
 
         clearUI();
         setCaveSceneObjectsVisible(true);
+        // A caverna nunca mostra o chao da floresta nem o goblin (revisao do Codex).
+        setForestBackdropVisible(false);
+        setGoblinNpcVisible(false);
         if (player == null) {
             player = findObject("Rimuru");
         }
@@ -249,6 +269,49 @@ public final class GameFlowController extends IgnisScript {
         state = FlowState.EXPLORATION;
     }
 
+    // ==================== Saida da caverna + contato goblin ====================
+
+    private void beginGoblinContact() {
+        // So depois do Veldora e uma vez so: a guarda espelha beginVeldoraEncounter.
+        if (state != FlowState.EXPLORATION || !veldoraEncounterCompleted || goblinContactCompleted) return;
+        clearUI();
+        // Antes do beat forest_threshold: a Caverna some e o chao da floresta entra,
+        // para a cutscene NAO acontecer sobre a caverna (revisao do Codex). O NPC
+        // goblin so aparece na exploracao final; durante a cutscene o grupo e um
+        // visual de runtime do proprio GoblinContactDirector.
+        setCaveSceneObjectsVisible(false);
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(false);
+        sceneDispatcher.enqueue(SIGNAL_ENTER_GOBLIN_CONTACT, null);
+        state = FlowState.GOBLIN_CONTACT;
+    }
+
+    private void completeGoblinContact() {
+        if (goblinContactCompleted) return;
+        goblinContactCompleted = true;
+        clearUI();
+        // Rota da aldeia desbloqueada (goblin_village_route_unlocked): o jogo termina
+        // em exploracao conversacional da floresta, NUNCA no HordeEncounter. A caverna
+        // segue oculta, o chao da floresta permanece e o NPC goblin aparece para a
+        // conversa. Layout/arte final do NPC e do chao sao do Codex.
+        setCaveSceneObjectsVisible(false);
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(true);
+        setupExplorationHud("Floresta de Jura: fale com o goblin para seguir ate a aldeia. [E]");
+        sceneDispatcher.enqueue(SIGNAL_ENTER_FOREST_EXPLORATION, null);
+        state = FlowState.EXPLORATION;
+    }
+
+    private void setForestBackdropVisible(boolean visible) {
+        GameObject backdrop = findObject(FOREST_BACKDROP_OBJECT);
+        if (backdrop != null) backdrop.setVisible(visible);
+    }
+
+    private void setGoblinNpcVisible(boolean visible) {
+        GameObject npc = findObject(GOBLIN_NPC_OBJECT);
+        if (npc != null) npc.setVisible(visible);
+    }
+
     // ==================== HordeEncounter (debug) ====================
 
     // O compilador de scripts do Ignis compila cada arquivo isoladamente contra as
@@ -277,8 +340,10 @@ public final class GameFlowController extends IgnisScript {
         // eram chamados manualmente daqui, entao desativar-se bastava).
         setObjectScriptsEnabled(EXPLORATION_DIRECTOR_OBJECT, false);
         setObjectScriptsEnabled(CUTSCENE_DIRECTOR_OBJECT, false);
+        setObjectScriptsEnabled(GOBLIN_CONTACT_DIRECTOR_OBJECT, false);
         setCaveSceneObjectsVisible(false);
         if (player != null) player.setVisible(false);
+        setGoblinNpcVisible(false);
         setHordeBackgroundVisible(true);
         setHordeScriptEnabled(true);
         log("HordeEncounter (debug) ativado via F9.");
@@ -340,6 +405,7 @@ public final class GameFlowController extends IgnisScript {
         MENU,
         CUTSCENE,
         VELDORA_ENCOUNTER,
+        GOBLIN_CONTACT,
         EXPLORATION
     }
 }

@@ -38,7 +38,7 @@
     {
       "id": "scouts_emerge",
       "cameraCue": "forest_edge_hold_group_right",
-      "oneShotClips": ["cutscene_goblin_scout_first_contact_canon_v1"],
+      "oneShotClips": ["cutscene_goblin_scout_first_contact_canon_v2"],
       "eventsOnEnter": ["goblin_scout_group_reveal"],
       "lines": [
         {

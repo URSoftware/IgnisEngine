@@ -38,7 +38,26 @@
         { "col0": 9, "row0": 0, "col1": 9, "row1": 15 }
       ],
       "interactables": [
-        { "id": "cave_gallery_seal", "x": 176, "y": 80, "radius": 24, "verb": "TALK", "dialogueId": "dlg_gallery_seal", "collectible": false }
+        { "id": "cave_gallery_seal", "x": 176, "y": 80, "radius": 24, "verb": "TALK", "dialogueId": "dlg_gallery_seal", "collectible": false },
+        { "id": "cave_forest_exit", "x": 272, "y": 432, "radius": 22, "verb": "EXAMINE", "dialogueId": "dlg_cave_exit", "collectible": false }
+      ]
+    },
+    {
+      "id": "jura_forest_approach",
+      "cols": 20,
+      "rows": 12,
+      "cellSize": 32,
+      "spawnX": 96,
+      "spawnY": 192,
+      "walls": [
+        { "col0": 0, "row0": 0, "col1": 19, "row1": 0 },
+        { "col0": 0, "row0": 11, "col1": 19, "row1": 11 },
+        { "col0": 0, "row0": 0, "col1": 0, "row1": 11 },
+        { "col0": 19, "row0": 0, "col1": 19, "row1": 11 }
+      ],
+      "interactables": [
+        { "id": "goblin_scout_leader", "x": 400, "y": 192, "radius": 24, "verb": "TALK", "dialogueId": "dlg_goblin_scout_camp", "collectible": false },
+        { "id": "forest_path_north", "x": 320, "y": 96, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_forest_path_north", "collectible": false }
       ]
     }
   ]
