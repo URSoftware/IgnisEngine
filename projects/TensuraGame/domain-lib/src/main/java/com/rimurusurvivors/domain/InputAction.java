@@ -12,6 +12,9 @@ public sealed interface InputAction {
     /** Direcao em coordenadas de mundo (ver {@link RunInput}), por durationSeconds. */
     record Move(double horizontal, double vertical, double durationSeconds) implements InputAction {
         public Move {
+            if (!Double.isFinite(horizontal) || !Double.isFinite(vertical)) {
+                throw new IllegalArgumentException("Move axes must be finite.");
+            }
             if (!Double.isFinite(durationSeconds) || durationSeconds < 0) {
                 throw new IllegalArgumentException("Move duration must be finite and non-negative.");
             }

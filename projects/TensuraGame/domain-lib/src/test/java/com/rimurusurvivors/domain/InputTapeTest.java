@@ -2,6 +2,7 @@ package com.rimurusurvivors.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -97,5 +98,45 @@ class InputTapeTest {
             assertFalse(snapshot.playerMoving());
             assertTrue(snapshot.events().isEmpty());
         }
+    }
+
+    @Test
+    void moveRejectsNonFiniteAxes() {
+        assertThrows(IllegalArgumentException.class, () -> new InputAction.Move(Double.NaN, 0, 0.1));
+        assertThrows(IllegalArgumentException.class, () -> new InputAction.Move(0, Double.POSITIVE_INFINITY, 0.1));
+        assertThrows(IllegalArgumentException.class, () -> new InputAction.Move(Double.NEGATIVE_INFINITY, 0, 0.1));
+    }
+
+    @Test
+    void positiveSubStepDurationProducesOneStepWhileZeroProducesNone() {
+        List<ExplorationSnapshot> tinyMove = ExplorationInputTapeRunner.run(
+                freshOpenSimulation(null), new InputTape(List.of(new InputAction.Move(1, 0, 0.001))));
+        List<ExplorationSnapshot> zeroMove = ExplorationInputTapeRunner.run(
+                freshOpenSimulation(null), new InputTape(List.of(new InputAction.Move(1, 0, 0))));
+
+        assertEquals(1, tinyMove.size());
+        assertTrue(zeroMove.isEmpty());
+    }
+
+    @Test
+    void semanticCheckpointsReportTheFirstDivergenceWithActionAndState() {
+        InputTape tape = new InputTape(List.of(
+                new InputAction.Move(1, 0, 0.05),
+                new InputAction.Wait(0.05)));
+        ExplorationInputTrace trace = ExplorationInputTapeRunner.runTrace(freshOpenSimulation(null), tape);
+        List<ExplorationSemanticCheckpoint> checkpoints = List.of(
+                new ExplorationSemanticCheckpoint("wrong area", 0, "forest", false, null, null),
+                new ExplorationSemanticCheckpoint("also wrong", 1, "village", false, null, null));
+
+        ExplorationInputTrace.Divergence divergence = trace.firstDivergence(checkpoints).orElseThrow();
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class, () -> trace.requireMatches(checkpoints));
+
+        assertEquals(1, divergence.stepNumber());
+        assertEquals(0, divergence.actionIndex());
+        assertEquals(divergence.message(), failure.getMessage());
+        assertTrue(divergence.message().contains("Move"));
+        assertTrue(divergence.message().contains("expected=wrong area {areaId=forest, dialogueActive=false}"));
+        assertTrue(divergence.message().contains("obtained=areaId=start"));
     }
 }

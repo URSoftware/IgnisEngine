@@ -46,7 +46,20 @@ class CaveToForestWalkthroughTest {
                 new InputAction.AdvanceDialogue(),   // segunda fala
                 new InputAction.AdvanceDialogue()));  // DIALOGUE_ENDED dlg_cave_exit (pede contato goblin)
 
-        List<ExplorationSnapshot> trace = ExplorationInputTapeRunner.run(simulation, tape);
+        ExplorationInputTrace inputTrace = ExplorationInputTapeRunner.runTrace(simulation, tape);
+        inputTrace.requireMatches(List.of(
+                new ExplorationSemanticCheckpoint(
+                        "entrada na galeria", 3, "cave_gallery", false,
+                        ExplorationEventType.AREA_CHANGED, "cave_gallery"),
+                new ExplorationSemanticCheckpoint(
+                        "encontro com Veldora solicitado", 7, "cave_gallery", false,
+                        ExplorationEventType.DIALOGUE_ENDED, "dlg_gallery_seal"),
+                new ExplorationSemanticCheckpoint(
+                        "contato goblin solicitado", 12, "cave_gallery", false,
+                        ExplorationEventType.DIALOGUE_ENDED, "dlg_cave_exit")));
+        List<ExplorationSnapshot> trace = inputTrace.steps().stream()
+                .map(ExplorationInputTrace.Step::snapshot)
+                .toList();
         List<ExplorationEvent> events = trace.stream().flatMap(s -> s.events().stream()).toList();
 
         ExplorationSnapshot last = trace.get(trace.size() - 1);
@@ -80,7 +93,13 @@ class CaveToForestWalkthroughTest {
                 new InputAction.Interact(),
                 new InputAction.AdvanceDialogue()));
 
-        List<ExplorationSnapshot> trace = ExplorationInputTapeRunner.run(forestSimulation, tape);
+        ExplorationInputTrace inputTrace = ExplorationInputTapeRunner.runTrace(forestSimulation, tape);
+        inputTrace.requireMatches(List.of(new ExplorationSemanticCheckpoint(
+                "conversa com o batedor concluida", 2, "jura_forest_approach", false,
+                ExplorationEventType.DIALOGUE_ENDED, "dlg_goblin_scout_camp")));
+        List<ExplorationSnapshot> trace = inputTrace.steps().stream()
+                .map(ExplorationInputTrace.Step::snapshot)
+                .toList();
         ExplorationSnapshot last = trace.get(trace.size() - 1);
 
         assertEquals("jura_forest_approach", last.areaId());
