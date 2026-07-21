@@ -31,6 +31,7 @@ public class ScriptManager {
     private final List<URLClassLoader> retiredClassLoaders = new ArrayList<>();
     private URLClassLoader projectLibraryClassLoader;
     private List<URL> projectLibraryUrls = Collections.emptyList();
+    private List<String> projectLibrarySignatures = Collections.emptyList();
     private final List<URLClassLoader> retiredProjectLibraryClassLoaders = new ArrayList<>();
 
     // Nao existe teto durante uma troca de geracao, e e de proposito. Ja tentei
@@ -245,12 +246,17 @@ public class ScriptManager {
     }
 
     private ClassLoader ensureProjectLibraryClassLoader() throws MalformedURLException {
+        List<File> discoveredJars = discoverLibJars();
         List<URL> discoveredUrls = new ArrayList<>();
-        for (File jar : discoverLibJars()) {
+        List<String> discoveredSignatures = new ArrayList<>();
+        for (File jar : discoveredJars) {
             discoveredUrls.add(jar.toURI().toURL());
+            discoveredSignatures.add(librarySignature(jar));
         }
 
-        if (projectLibraryClassLoader != null && projectLibraryUrls.equals(discoveredUrls)) {
+        if (projectLibraryClassLoader != null
+                && projectLibraryUrls.equals(discoveredUrls)
+                && projectLibrarySignatures.equals(discoveredSignatures)) {
             return projectLibraryClassLoader;
         }
 
@@ -260,9 +266,20 @@ public class ScriptManager {
             retiredProjectLibraryClassLoaders.add(projectLibraryClassLoader);
         }
         projectLibraryUrls = Collections.unmodifiableList(new ArrayList<>(discoveredUrls));
+        projectLibrarySignatures = Collections.unmodifiableList(new ArrayList<>(discoveredSignatures));
         projectLibraryClassLoader = new URLClassLoader(
                 discoveredUrls.toArray(new URL[0]), getClass().getClassLoader());
         return projectLibraryClassLoader;
+    }
+
+    /**
+     * URL equality is insufficient for project libraries: a build can replace a
+     * JAR at the same path while the editor remains open. Include file metadata
+     * so the next script generation gets a fresh parent loader without closing
+     * the loader that still owns the live scene instances.
+     */
+    private String librarySignature(File jar) {
+        return jar.getAbsolutePath() + "|" + jar.length() + "|" + jar.lastModified();
     }
 
     /**
@@ -535,6 +552,7 @@ public class ScriptManager {
         scriptClassLoader = null;
         projectLibraryClassLoader = null;
         projectLibraryUrls = Collections.emptyList();
+        projectLibrarySignatures = Collections.emptyList();
     }
 
     /**

@@ -1,5 +1,11 @@
 package com.ignis.mcp;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,10 +31,18 @@ import java.util.Map;
  * </ul>
  *
  * <p>Singleton estatico: o estado sobrevive a recriacao do {@link IgnisToolRegistry}
- * (troca de projeto), mas e em memoria (perde no fechamento do editor). Todo acesso
- * vem das ferramentas MCP, executadas na thread de UI do JavaFX
+ * (troca de projeto). Alem disso, mural, claims e tarefas sao <b>persistidos</b> em
+ * {@code <projeto>/.ignis/coordination.json} via {@link #bindProject(File)}, de modo
+ * que sobrevivem ao fechamento e ao {@code restart_editor}: um agente que reconecta
+ * apos o editor voltar reencontra as mensagens, as reservas e as tarefas onde parou
+ * (fecha a lacuna "coordenacao MCP e volatil" do roadmap de producao agentica).
+ * A presenca (timestamps de atividade) NAO e persistida — e efemera por natureza.</p>
+ *
+ * <p>Todo acesso vem das ferramentas MCP, executadas na thread de UI do JavaFX
  * (via {@link IgnisMcpBridge#runOnFxThread}) — portanto serializado; ainda assim,
- * os metodos sao {@code synchronized} por seguranca.</p>
+ * os metodos sao {@code synchronized} por seguranca. A escrita em disco e
+ * best-effort: qualquer falha de I/O e engolida e o estado em memoria continua
+ * valendo (nunca quebra uma ferramenta por causa do arquivo).</p>
  */
 public final class McpCoordination {
 
@@ -84,6 +98,128 @@ public final class McpCoordination {
     private long seqCounter = 0;
     private int taskCounter = 0;
 
+    // Arquivo de persistencia do projeto atual (<projeto>/.ignis/coordination.json),
+    // ou null quando nao ha projeto ligado (ex: primeiros instantes, testes headless).
+    private File storeFile;
+    // Caminho ja ligado: evita recarregar por cima de um estado em memoria mais novo
+    // quando o mesmo projeto e religado (registry recriado no restart do bridge).
+    private String boundPath;
+
+    // ------------------------------------------------------------------
+    // Persistencia por projeto
+    // ------------------------------------------------------------------
+
+    /**
+     * Liga a coordenacao ao projeto informado, carregando o estado gravado em
+     * {@code <projeto>/.ignis/coordination.json} se existir. Chamado ao criar um
+     * {@link IgnisToolRegistry} (portanto a cada abertura de projeto e a cada
+     * restart do editor).
+     *
+     * <p>Idempotente para o MESMO projeto: religar o mesmo caminho nao recarrega o
+     * arquivo (o estado em memoria ja e a fonte de verdade e ja esta gravado). Trocar
+     * de projeto zera o estado em memoria e carrega o do novo projeto.</p>
+     */
+    public synchronized void bindProject(File projectFolder) {
+        if (projectFolder == null) return;
+        File file = new File(new File(projectFolder, ".ignis"), "coordination.json");
+        String path = file.getAbsolutePath();
+        if (path.equals(boundPath)) return; // mesmo projeto: mantem memoria/arquivo atuais
+        // Projeto diferente (ou primeira ligacao): descarta a coordenacao do projeto
+        // anterior e carrega a deste.
+        agents.clear();
+        agentRoles.clear();
+        messages.clear();
+        claims.clear();
+        tasks.clear();
+        seqCounter = 0;
+        taskCounter = 0;
+        storeFile = file;
+        boundPath = path;
+        load();
+    }
+
+    private void load() {
+        if (storeFile == null || !storeFile.isFile()) return;
+        try {
+            JSONObject root = new JSONObject(
+                    new String(Files.readAllBytes(storeFile.toPath()), StandardCharsets.UTF_8));
+            seqCounter = root.optLong("seqCounter", 0);
+            taskCounter = root.optInt("taskCounter", 0);
+            long now = System.currentTimeMillis();
+            JSONArray msgs = root.optJSONArray("messages");
+            if (msgs != null) {
+                for (int i = 0; i < msgs.length(); i++) {
+                    JSONObject m = msgs.getJSONObject(i);
+                    String to = m.has("to") && !m.isNull("to") ? m.optString("to", null) : null;
+                    messages.add(new Message(m.optLong("seq"), m.optLong("millis"),
+                            m.optString("from"), to, m.optString("text")));
+                }
+            }
+            JSONArray cls = root.optJSONArray("claims");
+            if (cls != null) {
+                for (int i = 0; i < cls.length(); i++) {
+                    JSONObject c = cls.getJSONObject(i);
+                    long millis = c.optLong("millis");
+                    // Pula claims ja expirados no momento do carregamento.
+                    if ((now - millis) > CLAIM_TTL_MS) continue;
+                    claims.put(c.optString("resource"), new Claim(c.optString("agent"), millis));
+                }
+            }
+            JSONArray tks = root.optJSONArray("tasks");
+            if (tks != null) {
+                for (int i = 0; i < tks.length(); i++) {
+                    JSONObject t = tks.getJSONObject(i);
+                    Task task = new Task(t.optInt("id"), t.optString("title"), t.optString("description", ""));
+                    task.owner = t.has("owner") && !t.isNull("owner") ? t.optString("owner", null) : null;
+                    task.status = t.optString("status", "aberta");
+                    tasks.add(task);
+                    if (task.id > taskCounter) taskCounter = task.id;
+                }
+            }
+        } catch (Exception e) {
+            // Arquivo corrompido/ilegivel: segue com o que ja estiver em memoria.
+            agents.clear(); // presenca nao vem do arquivo; nada a preservar aqui
+        }
+    }
+
+    /** Grava o estado atual (best-effort; falhas de I/O nao interrompem a ferramenta). */
+    private void save() {
+        if (storeFile == null) return;
+        try {
+            JSONObject root = new JSONObject();
+            root.put("seqCounter", seqCounter);
+            root.put("taskCounter", taskCounter);
+            JSONArray msgs = new JSONArray();
+            for (Message m : messages) {
+                JSONObject o = new JSONObject()
+                        .put("seq", m.seq).put("millis", m.millis)
+                        .put("from", m.from).put("text", m.text);
+                if (m.to != null) o.put("to", m.to);
+                msgs.put(o);
+            }
+            root.put("messages", msgs);
+            JSONArray cls = new JSONArray();
+            for (Map.Entry<String, Claim> e : claims.entrySet()) {
+                cls.put(new JSONObject().put("resource", e.getKey())
+                        .put("agent", e.getValue().agent).put("millis", e.getValue().millis));
+            }
+            root.put("claims", cls);
+            JSONArray tks = new JSONArray();
+            for (Task t : tasks) {
+                JSONObject o = new JSONObject().put("id", t.id).put("title", t.title)
+                        .put("description", t.description).put("status", t.status);
+                if (t.owner != null) o.put("owner", t.owner);
+                tks.put(o);
+            }
+            root.put("tasks", tks);
+            File dir = storeFile.getParentFile();
+            if (dir != null) dir.mkdirs();
+            Files.write(storeFile.toPath(), root.toString(2).getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignore) {
+            // best-effort: o estado em memoria continua valendo.
+        }
+    }
+
     // ------------------------------------------------------------------
     // Presenca
     // ------------------------------------------------------------------
@@ -104,6 +240,7 @@ public final class McpCoordination {
         if (role != null && !role.isBlank()) agentRoles.put(agent, role.trim());
         String others = activeAgents(agent);
         system(agent + " entrou" + (role != null && !role.isBlank() ? " (" + role.trim() + ")" : "") + ".");
+        save();
         return "Bem-vindo, " + agent + ".\n" + (others.isEmpty()
                 ? "Voce e o unico agente ativo no momento."
                 : "Outros agentes ativos: " + others);
@@ -158,6 +295,7 @@ public final class McpCoordination {
         messages.add(new Message(++seqCounter, System.currentTimeMillis(), from, target, text));
         // Limita o historico para nao crescer sem limite.
         while (messages.size() > 500) messages.remove(0);
+        save();
         return "Mensagem enviada" + (target != null ? " para " + target : " (broadcast)") + ". seq=" + seqCounter;
     }
 
@@ -201,6 +339,7 @@ public final class McpCoordination {
                     + ". Combine pelo mural (send_message) ou espere liberar.";
         }
         claims.put(resource, new Claim(agent, now));
+        save();
         return "OK: '" + resource + "' reservado para " + agent + ".";
     }
 
@@ -214,6 +353,7 @@ public final class McpCoordination {
             return "NEGADO: '" + resource + "' pertence a " + existing.agent + ".";
         }
         claims.remove(resource);
+        save();
         return "OK: '" + resource + "' liberado.";
     }
 
@@ -271,6 +411,7 @@ public final class McpCoordination {
     public synchronized String createTask(String title, String description) {
         Task t = new Task(++taskCounter, title, description == null ? "" : description);
         tasks.add(t);
+        save();
         return "Tarefa #" + t.id + " criada: " + t.title;
     }
 
@@ -280,6 +421,7 @@ public final class McpCoordination {
                 t.owner = agent;
                 t.status = "em_andamento";
                 touch(agent);
+                save();
                 return "Tarefa #" + id + " atribuida a " + agent + ".";
             }
         }
@@ -290,6 +432,7 @@ public final class McpCoordination {
         for (Task t : tasks) {
             if (t.id == id) {
                 t.status = "concluida";
+                save();
                 return "Tarefa #" + id + " concluida.";
             }
         }

@@ -126,10 +126,16 @@ class ScriptManagerTest {
      * crash.
      */
     private void writeDomainLibJar() throws Exception {
+        writeDomainLibJar("one");
+    }
+
+    private void writeDomainLibJar(String version) throws Exception {
         Path build = projectFolder.resolve("build-lib");
         Path source = build.resolve("com/exemplo/dominio/RunState.java");
         Files.createDirectories(source.getParent());
-        Files.writeString(source, "package com.exemplo.dominio;\npublic class RunState {}\n");
+        Files.writeString(source, "package com.exemplo.dominio;\n"
+                + "public class RunState { public static String version() { return \""
+                + version + "\"; } }\n");
 
         Path classes = build.resolve("classes");
         Files.createDirectories(classes);
@@ -147,7 +153,10 @@ class ScriptManagerTest {
         Files.createDirectories(libs);
         Path classFile = classes.resolve("com/exemplo/dominio/RunState.class");
         try (java.util.jar.JarOutputStream jar = new java.util.jar.JarOutputStream(
-                Files.newOutputStream(libs.resolve("dominio.jar")))) {
+                Files.newOutputStream(libs.resolve("dominio.jar"),
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+                        java.nio.file.StandardOpenOption.WRITE))) {
             jar.putNextEntry(new java.util.zip.ZipEntry("com/exemplo/dominio/RunState.class"));
             jar.write(Files.readAllBytes(classFile));
             jar.closeEntry();
@@ -199,6 +208,31 @@ class ScriptManagerTest {
         java.lang.reflect.Field[] fields = owner.getDeclaredFields();
         assertEquals(1, fields.length);
         assertEquals("RunState", fields[0].getType().getSimpleName());
+
+        manager.close();
+    }
+
+    @Test
+    void replacingProjectJarAtSamePathReloadsLibraryParent() throws Exception {
+        writeDomainLibJar("one");
+
+        Path script = projectFolder.resolve("scripts/OwnerScript.java");
+        Files.createDirectories(script.getParent());
+        Files.writeString(script, "public class OwnerScript extends com.ignis.core.IgnisScript {\n"
+                + "    public String version() { return com.exemplo.dominio.RunState.version(); }\n"
+                + "}\n");
+
+        ScriptManager manager = new ScriptManager(projectFolder.toFile());
+        assertEquals(1, manager.compileAllScripts());
+        Object first = manager.loadScriptClass("OwnerScript").getDeclaredConstructor().newInstance();
+        assertEquals("one", first.getClass().getMethod("version").invoke(first));
+
+        // O mesmo caminho continua no classpath, mas o conteudo do jar foi
+        // reconstruido. A proxima geracao precisa receber um parent novo.
+        writeDomainLibJar("second");
+        assertEquals(1, manager.compileAllScripts());
+        Object second = manager.loadScriptClass("OwnerScript").getDeclaredConstructor().newInstance();
+        assertEquals("second", second.getClass().getMethod("version").invoke(second));
 
         manager.close();
     }

@@ -1078,7 +1078,7 @@ public class IgnisEditorApp extends Application {
             // Configuracoes tambem se beneficia).
             com.ignis.mcp.McpService.setEditorContext(game,
                     this::playWorld, this::stopWorld, this::refreshHierarchy, this::saveProjectSilently,
-                    mcpSceneHost);
+                    mcpSceneHost, this::restartEditor);
             // Captura da janela inteira para a ferramenta MCP capture_editor_window
             // (validacao visual da GUI por agentes). O snapshot FX vive aqui; o
             // registry so conhece o Supplier<BufferedImage>.
@@ -1091,6 +1091,59 @@ public class IgnisEditorApp extends Application {
         } catch (Exception ex) {
             IgnisLogger.error("[IgnisMCP] Falha ao auto-iniciar o bridge: " + ex.getMessage());
         }
+    }
+
+    // Reinicia o editor (ferramenta MCP restart_editor): salva o projeto, encerra o
+    // bridge/Play/colaboracao e relanca uma JVM nova do editor. A nova instancia
+    // reabre o ultimo projeto (EditorPrefs) e re-sobe o bridge MCP na mesma porta,
+    // enquanto a coordenacao (mural/claims/tarefas) sobrevive em .ignis/coordination.json.
+    // Pode ser chamado por qualquer thread (a ferramenta usa uma thread propria).
+    void restartEditor() {
+        Runnable relaunch = () -> {
+            try { saveLayout(); } catch (Exception ignore) {}
+            try {
+                if (currentProject != null && currentIgnisFile != null) saveProjectSilently();
+            } catch (Exception ignore) {}
+            try { if (console != null) console.stopCapture(); } catch (Exception ignore) {}
+            try { stopGameLoop(); } catch (Exception ignore) {}
+            try { com.ignis.mcp.McpService.stop(); } catch (Exception ignore) {}
+            try { com.ignis.collab.CollabSession.get().stop(); } catch (Exception ignore) {}
+            try {
+                spawnEditorProcess();
+                IgnisLogger.info("[Editor] Novo processo do editor lancado; encerrando o atual.");
+            } catch (Exception ex) {
+                IgnisLogger.error("[Editor] Falha ao relancar o editor: " + ex.getMessage());
+            }
+            Platform.exit();
+            System.exit(0);
+        };
+        if (Platform.isFxApplicationThread()) relaunch.run();
+        else Platform.runLater(relaunch);
+    }
+
+    // Lanca uma copia nova deste editor reusando a linha de comando exata da JVM atual
+    // (ProcessHandle preserva o module-path/--add-modules do JavaFX). So cai no
+    // fallback (java -cp ... mainClass) se o SO nao expuser os argumentos do processo.
+    private void spawnEditorProcess() throws Exception {
+        ProcessHandle.Info info = ProcessHandle.current().info();
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        String exe = info.command().orElse(null);
+        if (exe != null) {
+            cmd.add(exe);
+            for (String a : info.arguments().orElse(new String[0])) cmd.add(a);
+        } else {
+            boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+            cmd.add(new java.io.File(System.getProperty("java.home"),
+                    "bin/java" + (win ? ".exe" : "")).getAbsolutePath());
+            cmd.add("-cp");
+            cmd.add(System.getProperty("java.class.path"));
+            cmd.add("com.ignis.editor.fx.IgnisEditorApp");
+        }
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        String cwd = System.getProperty("user.dir");
+        if (cwd != null) pb.directory(new java.io.File(cwd));
+        pb.inheritIO();
+        pb.start();
     }
 
     // Build nativo em JavaFX (Fase 3, passo 1).

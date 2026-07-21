@@ -198,6 +198,9 @@ public final class IgnisToolRegistry {
         m.put("create_scene", new Guard("cena", null, true));
         m.put("switch_scene", new Guard("cena", null, true));
         m.put("copy_object_to_scene", new Guard("cena", null, true));
+        // Reiniciar o editor derruba a sessao inteira (bridge, Play, cena): tao amplo
+        // quanto clear_scene — barra se outro agente segura qualquer recurso.
+        m.put("restart_editor", new Guard("cena", null, true));
 
         return java.util.Collections.unmodifiableMap(m);
     }
@@ -207,6 +210,9 @@ public final class IgnisToolRegistry {
     Game liveGame;
     Runnable playHook, stopHook, saveHook;
     Runnable refreshHook;
+    // Relanca o processo do editor (ferramenta restart_editor). Injetado pelo
+    // IgnisEditorApp; nulo no modo headless (STDIO), onde nao ha editor a reiniciar.
+    Runnable restartHook;
     // Ponte para criar/listar/trocar de cena e copiar objetos entre cenas (nulo se o
     // editor nao a injetou ainda — ver SceneHost). Ferramentas de SceneTools checam.
     SceneHost sceneHost;
@@ -223,6 +229,9 @@ public final class IgnisToolRegistry {
 
     public IgnisToolRegistry(File projectFolder) {
         this.projectFolder = projectFolder;
+        // Liga a coordenacao multi-agente ao arquivo do projeto: mural, claims e
+        // tarefas passam a sobreviver ao fechamento/restart do editor.
+        McpCoordination.get().bindProject(projectFolder);
         registerDefaults();
     }
 
@@ -232,7 +241,7 @@ public final class IgnisToolRegistry {
      * executados na thread de UI (o {@link #call} ja envolve tudo em runOnFxThread).
      */
     public void attachLiveEditor(Game game, Runnable play, Runnable stop, Runnable refresh, Runnable save,
-            SceneHost sceneHost) {
+            SceneHost sceneHost, Runnable restart) {
         this.liveGame = game;
         ScriptManager manager = scriptManager();
         game.setScriptManager(manager);
@@ -244,7 +253,18 @@ public final class IgnisToolRegistry {
         this.refreshHook = refresh;
         this.saveHook = save;
         this.sceneHost = sceneHost;
+        this.restartHook = restart;
         registerEditorTools();
+    }
+
+    /**
+     * Compatibility overload for integrations created before the restart hook
+     * and explicit SceneHost were added. New editor integrations should use the
+     * seven-argument overload above.
+     */
+    public void attachLiveEditor(Game game, Runnable play, Runnable stop, Runnable refresh, Runnable save,
+            SceneHost sceneHost) {
+        attachLiveEditor(game, play, stop, refresh, save, sceneHost, () -> { });
     }
 
     // Ferramentas que exigem o editor vivo (liveGame): registradas em grupos por
@@ -258,6 +278,7 @@ public final class IgnisToolRegistry {
         new ContentTools(this).registerAll();
         new EditorWorkflowTools(this).registerCaptureTools();
         new SceneTools(this).registerAll();
+        new EditorLifecycleTools(this).registerAll();
     }
 
     public boolean hasLiveEditor() {
