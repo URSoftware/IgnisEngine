@@ -1120,7 +1120,11 @@ public class IgnisEditorApp extends Application {
                 sm.compileAllScripts();
                 reloadAllScriptInstances();
             }
-            game.playWorld();
+            // Scripts were compiled and all scene instances were replaced just
+            // above. Do not compile a second generation inside Game.playWorld():
+            // that would retire the loader which owns the live instances and can
+            // break lazy project-jar resolution on the first gameplay signal.
+            game.playWorldWithPreparedScripts();
             game.start();
             playing = true;
             playButton.setDisable(true);

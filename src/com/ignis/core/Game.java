@@ -703,13 +703,32 @@ public class Game extends Canvas {
      * Saves initial positions of all objects
      */
     public void playWorld() {
+        playWorld(true);
+    }
+
+    /**
+     * Starts Play after an editor has already compiled scripts and replaced every
+     * script instance with the resulting classloader generation.
+     *
+     * <p>Compiling again here would immediately retire the classloader that owns
+     * those live instances. Lazy dependency resolution can then fail during the
+     * first tick even though the project jar is valid. Standalone callers should
+     * keep using {@link #playWorld()}.</p>
+     */
+    public void playWorldWithPreparedScripts() {
+        playWorld(false);
+    }
+
+    private void playWorld(boolean compileScripts) {
         if (gameState == GameState.EDITING) {
             // Save snapshot of all objects
             saveInitialSnapshots();
-            
+
             // Compile and initialize scripts
             if (scriptManager != null) {
-                scriptManager.compileAllScripts();
+                if (compileScripts) {
+                    scriptManager.compileAllScripts();
+                }
                 initializeScripts();
             }
         } else if (gameState == GameState.PAUSED) {

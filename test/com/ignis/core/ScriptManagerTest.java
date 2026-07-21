@@ -120,18 +120,6 @@ class ScriptManagerTest {
     }
 
     /**
-     * Regressao do crash de 16/07/2026: o auto-save do editor morria com
-     * {@code NoClassDefFoundError} porque o ScriptManager fechava os classloaders
-     * aposentados.
-     *
-     * <p>Uma instancia que esta na cena continua pertencendo ao loader que a definiu,
-     * e resolucao de tipo e <b>preguicosa</b>: o tipo de um campo so e carregado
-     * quando alguem olha para ele — por exemplo o reflection do auto-save chamando
-     * {@code getDeclaredFields()}. Se aquele loader foi fechado no meio do caminho, a
-     * resolucao falha. Compilar algumas vezes sem recarregar a cena basta para
-     * reproduzir; nao adianta supor que "a cena ja foi recriada".</p>
-     */
-    /**
      * Empacota uma classe de dominio num jar dentro de {@code project/libs}, como faz
      * o TensuraGame com rimuru-survivors-domain.jar. E o unico jeito de um script ter
      * um campo cujo tipo so o classloader do projeto resolve — que e o cenario do
@@ -169,17 +157,17 @@ class ScriptManagerTest {
     /**
      * Regressao do crash de 16/07/2026: o auto-save do editor morria com
      * {@code NoClassDefFoundError: com/rimurusurvivors/domain/RunSimulation} porque o
-     * ScriptManager fechava os classloaders aposentados.
+     * ScriptManager fechava o classloader aposentado que tambem possuia o jar.
      *
      * <p>Uma instancia que esta na cena continua pertencendo ao loader que a definiu,
      * e resolucao de tipo e <b>preguicosa</b>: o tipo de um campo so e carregado
      * quando alguem olha para ele — por exemplo o reflection do auto-save chamando
-     * {@code getDeclaredFields()}. Se aquele loader foi fechado no meio do caminho, a
-     * resolucao falha. Bastam algumas recompilacoes sem recarregar a cena; a premissa
-     * de que "depois de N gerações a cena ja foi recriada" e falsa.</p>
+     * {@code getDeclaredFields()}. O loader do script pode ser fechado depois que a
+     * cena troca de geracao, mas seu parent de bibliotecas precisa continuar aberto
+     * para concluir essa resolucao tardia.</p>
      */
     @Test
-    void oldClassesStillResolveLibTypesAfterManyRecompiles() throws Exception {
+    void oldClassesStillResolveLibTypesAfterRetiredScriptLoadersAreReleased() throws Exception {
         writeDomainLibJar();
 
         Path script = projectFolder.resolve("scripts/OwnerScript.java");
@@ -200,6 +188,11 @@ class ScriptManagerTest {
         for (int i = 0; i < 4; i++) {
             assertEquals(1, manager.compileAllScripts());
         }
+
+        // O editor faz isso depois de trocar as instancias da cena. O jar precisa
+        // continuar acessivel pelo parent persistente mesmo com o loader do script
+        // antigo fechado; a JVM ainda pode resolver tipos de campos tardiamente.
+        assertEquals(4, manager.releaseRetiredClassLoaders());
 
         // Exatamente o que o auto-save faz (ScriptSerializationHelper.getSerializedFields).
         // Com o loader aposentado FECHADO, isto lancava NoClassDefFoundError.

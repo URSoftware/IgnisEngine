@@ -29,6 +29,9 @@ public class ScriptManager {
     // Custom ClassLoader to load scripts
     private URLClassLoader scriptClassLoader;
     private final List<URLClassLoader> retiredClassLoaders = new ArrayList<>();
+    private URLClassLoader projectLibraryClassLoader;
+    private List<URL> projectLibraryUrls = Collections.emptyList();
+    private final List<URLClassLoader> retiredProjectLibraryClassLoaders = new ArrayList<>();
 
     // Nao existe teto durante uma troca de geracao, e e de proposito. Ja tentei
     // limitar isto de duas formas e as duas foram piores (16/07/2026):
@@ -223,15 +226,15 @@ public class ScriptManager {
 
             List<URL> urls = new ArrayList<>();
             urls.add(compiledFolder.toURI().toURL());
-            // Mesmas libs privadas usadas na compilacao (ver discoverLibJars) - sem isso
-            // um script compilado com sucesso contra o jar ainda falharia ao rodar,
-            // porque o classloader de runtime nao acharia as classes do jar.
-            for (File jar : discoverLibJars()) {
-                urls.add(jar.toURI().toURL());
-            }
 
-            scriptClassLoader = new URLClassLoader(urls.toArray(new URL[0]), getClass().getClassLoader());
-            IgnisLogger.info("[ScriptManager] Runtime classpath: " + urls);
+            // Scripts are reloaded often, while project libraries are stable for the
+            // editor session. Keeping libs in the short-lived script loader made a
+            // closed retired generation unable to resolve a library type lazily.
+            // A dedicated parent keeps project types available until close().
+            ClassLoader runtimeParent = ensureProjectLibraryClassLoader();
+            scriptClassLoader = new URLClassLoader(urls.toArray(new URL[0]), runtimeParent);
+            IgnisLogger.info("[ScriptManager] Script runtime classpath: " + urls);
+            IgnisLogger.info("[ScriptManager] Project library classpath: " + projectLibraryUrls);
 
             // Clear cache
             scriptClasses.clear();
@@ -239,6 +242,27 @@ public class ScriptManager {
         } catch (Exception e) {
             IgnisLogger.error("Error reloading ClassLoader: " + e.getMessage());
         }
+    }
+
+    private ClassLoader ensureProjectLibraryClassLoader() throws MalformedURLException {
+        List<URL> discoveredUrls = new ArrayList<>();
+        for (File jar : discoverLibJars()) {
+            discoveredUrls.add(jar.toURI().toURL());
+        }
+
+        if (projectLibraryClassLoader != null && projectLibraryUrls.equals(discoveredUrls)) {
+            return projectLibraryClassLoader;
+        }
+
+        if (projectLibraryClassLoader != null) {
+            // A live script generation may still have this loader as its parent.
+            // Retain it until ScriptManager.close(), just like an open project jar.
+            retiredProjectLibraryClassLoaders.add(projectLibraryClassLoader);
+        }
+        projectLibraryUrls = Collections.unmodifiableList(new ArrayList<>(discoveredUrls));
+        projectLibraryClassLoader = new URLClassLoader(
+                discoveredUrls.toArray(new URL[0]), getClass().getClassLoader());
+        return projectLibraryClassLoader;
     }
 
     /**
@@ -503,7 +527,14 @@ public class ScriptManager {
     public void close() {
         closeClassLoader(scriptClassLoader);
         releaseRetiredClassLoaders();
+        closeClassLoader(projectLibraryClassLoader);
+        for (URLClassLoader classLoader : retiredProjectLibraryClassLoaders) {
+            closeClassLoader(classLoader);
+        }
+        retiredProjectLibraryClassLoaders.clear();
         scriptClassLoader = null;
+        projectLibraryClassLoader = null;
+        projectLibraryUrls = Collections.emptyList();
     }
 
     /**
