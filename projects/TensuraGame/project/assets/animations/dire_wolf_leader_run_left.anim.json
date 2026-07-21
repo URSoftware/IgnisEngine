@@ -1,0 +1,19 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/creatures/dire_wolf_leader/dire_wolf_leader_walk_left_01.png"
+    },
+    {
+      "duration": 0.09,
+      "sprite": "assets/sprites/creatures/dire_wolf_leader/dire_wolf_leader_idle_left.png"
+    },
+    {
+      "duration": 0.12,
+      "sprite": "assets/sprites/creatures/dire_wolf_leader/dire_wolf_leader_walk_left_02.png"
+    }
+  ],
+  "loop": true,
+  "name": "dire_wolf_leader_run_left"
+}

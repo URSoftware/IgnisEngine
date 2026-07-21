@@ -1,0 +1,9 @@
+{
+  "curveType": "LINEAR",
+  "frames": [{
+    "duration": 0.45,
+    "sprite": "assets/sprites/creatures/dire_wolf_leader/dire_wolf_leader_idle_down.png"
+  }],
+  "loop": true,
+  "name": "dire_wolf_leader_idle"
+}
