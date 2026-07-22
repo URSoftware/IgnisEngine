@@ -557,13 +557,64 @@ public class Game extends Canvas {
         return list;
     }
 
-    // Roteia clique de mouse para a UI durante o Play: CanvasComponents do topo
-    // para o fundo, depois o canvas global de runtime. true = UI consumiu.
-    // Idem para movimento do mouse (hover de botoes etc.).
-    
-    
-    
-    
+    // Roteia clique/movimento de mouse para a UI: CanvasComponents do topo para o
+    // fundo, depois o canvas global de runtime. Fonte unica usada tanto pelo mouse
+    // real (EditorInputController) quanto pela injecao por coordenada do MCP.
+
+    // Nucleo do roteamento (sem checar estado): percorre a UI e entrega o clique.
+    private boolean dispatchUiClick(MouseEvent e, boolean pressed) {
+        java.util.List<CanvasComponent> ccs = getCanvasComponents();
+        for (int i = ccs.size() - 1; i >= 0; i--) {
+            if (ccs.get(i).processMouseClick(e, pressed)) return true;
+        }
+        return uiCanvas != null && uiCanvas.isVisible() && uiCanvas.processMouseClick(e, pressed);
+    }
+
+    private boolean dispatchUiMove(MouseEvent e) {
+        java.util.List<CanvasComponent> ccs = getCanvasComponents();
+        for (int i = ccs.size() - 1; i >= 0; i--) {
+            if (ccs.get(i).processMouseMove(e)) return true;
+        }
+        return uiCanvas != null && uiCanvas.isVisible() && uiCanvas.processMouseMove(e);
+    }
+
+    /** Roteia um clique de UI real (so no Play). @return true se a UI consumiu. */
+    public boolean routeUiMouseClick(MouseEvent e, boolean pressed) {
+        return gameState == GameState.PLAYING && dispatchUiClick(e, pressed);
+    }
+
+    /** Roteia um movimento de mouse real para a UI (hover), so no Play. */
+    public void routeUiMouseMove(MouseEvent e) {
+        if (gameState == GameState.PLAYING) dispatchUiMove(e);
+    }
+
+    /**
+     * Clica na UI em (x,y) de tela como se o jogador tivesse clicado: move o mouse,
+     * gera press+release sinteticos e roteia para os CanvasComponents/canvas global.
+     * Funciona em Play OU pausado (base do QA determinista de menus/dialogo). O onClick
+     * dos widgets dispara no release. @return true se algum widget consumiu o clique.
+     */
+    public boolean injectUiClickAt(int x, int y, int button) {
+        if (gameState == GameState.EDITING) return false;
+        Input.injectMouseMove(x, y);
+        long t = System.currentTimeMillis();
+        dispatchUiMove(new MouseEvent(this, MouseEvent.MOUSE_MOVED, t, 0, x, y, 0, false, MouseEvent.NOBUTTON));
+        boolean pressConsumed = dispatchUiClick(
+                new MouseEvent(this, MouseEvent.MOUSE_PRESSED, t, 0, x, y, 1, false, button), true);
+        boolean releaseConsumed = dispatchUiClick(
+                new MouseEvent(this, MouseEvent.MOUSE_RELEASED, t, 0, x, y, 1, false, button), false);
+        return pressConsumed || releaseConsumed;
+    }
+
+    /** Move o cursor virtual para (x,y) de tela e roteia hover para a UI (Play/pausado). */
+    public void moveMouseTo(int x, int y) {
+        Input.injectMouseMove(x, y);
+        if (gameState != GameState.EDITING) {
+            dispatchUiMove(new MouseEvent(this, MouseEvent.MOUSE_MOVED,
+                    System.currentTimeMillis(), 0, x, y, 0, false, MouseEvent.NOBUTTON));
+        }
+    }
+
     // ==================== GIZMO DE COLLIDER (item 8b) ====================
 
     /** Fator mundo-por-pixel da camera de edicao (1.0 sem transform de camera). */
@@ -923,6 +974,31 @@ public class Game extends Canvas {
             // Processa os sinais pendentes no dispatcher da cena e no bus global
             if (sceneSignalDispatcher != null) sceneSignalDispatcher.processPendingSignals();
             if (gameSignalBus != null) gameSignalBus.processGlobalSignals();
+        }
+    }
+
+    /**
+     * Avanca a simulacao UM passo de forma determinista, para testes por agente
+     * (ferramenta MCP {@code advance_frames}). Forca um tick de PLAYING sob o monitor
+     * do {@code Game} — portanto mutuamente exclusivo com o loop do jogo e com o
+     * render, sem frame "rasgado" — mesmo que o mundo esteja PAUSED, restaurando o
+     * estado ao fim para nao "vazar" o Play. Em EDITING nao ha simulacao: o tick so
+     * atualiza o Input e a UI.
+     *
+     * <p>Fluxo determinista recomendado: {@code play_game} &rarr; {@code pause_game}
+     * (o loop livre para de avancar) &rarr; {@code inject_input} &rarr;
+     * {@code advance_frames} (cada passo forcado aqui) &rarr; ler estado/capturar.</p>
+     */
+    public synchronized void stepSimulationOnce() {
+        if (gameState == GameState.PAUSED) {
+            gameState = GameState.PLAYING;
+            try {
+                tick();
+            } finally {
+                gameState = GameState.PAUSED;
+            }
+        } else {
+            tick();
         }
     }
 

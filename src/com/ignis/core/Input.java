@@ -47,6 +47,12 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
     private boolean[] mouseButtons = new boolean[4]; // 0=unused, 1=left, 2=middle, 3=right
     private boolean[] mouseJustPressed = new boolean[4];
     private boolean[] mouseJustReleased = new boolean[4];
+    // Buffer do mouse (simetrico ao do teclado): eventos AWT e injecao enfileiram
+    // aqui e a update() os PROMOVE a just-pressed/just-released. Sem isto, o "just"
+    // era limpo no fim da update() antes de os scripts lerem no mesmo tick — o evento
+    // de um frame (real e injetado) nunca chegava. Indices 1..3.
+    private Set<Integer> mouseToPress = new HashSet<>();
+    private Set<Integer> mouseToRelease = new HashSet<>();
 
     private Input() {
         // Construtor privado para singleton
@@ -91,6 +97,8 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
             keysToRemove.clear();
             keysJustPressed.clear();
             keysJustReleased.clear();
+            mouseToPress.clear();
+            mouseToRelease.clear();
             for (int i = 0; i < mouseButtons.length; i++) {
                 mouseButtons[i] = false;
                 mouseJustPressed[i] = false;
@@ -105,9 +113,15 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
     public static void update() {
         Input input = getInstance();
         synchronized (input.stateLock) {
-            // Limpar estados "just pressed" e "just released"
+            // Limpar estados "just pressed" e "just released" (teclado e mouse) ANTES
+            // de promover o buffer deste frame: assim os flags refletem os eventos
+            // processados AGORA e sobrevivem ate os scripts lerem no mesmo tick.
             input.keysJustPressed.clear();
             input.keysJustReleased.clear();
+            for (int i = 0; i < 4; i++) {
+                input.mouseJustPressed[i] = false;
+                input.mouseJustReleased[i] = false;
+            }
 
             // Processar teclas que foram pressionadas
             for (Integer key : input.keysToAdd) {
@@ -127,12 +141,86 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
             }
             input.keysToRemove.clear();
 
-            // Limpar estados "just" do mouse
-            for (int i = 0; i < 4; i++) {
-                input.mouseJustPressed[i] = false;
-                input.mouseJustReleased[i] = false;
+            // Processar botoes do mouse pressionados (mesma promocao do teclado).
+            for (Integer b : input.mouseToPress) {
+                if (b >= 1 && b <= 3 && !input.mouseButtons[b]) {
+                    input.mouseJustPressed[b] = true;
+                }
+                if (b >= 1 && b <= 3) input.mouseButtons[b] = true;
+            }
+            input.mouseToPress.clear();
+
+            // Processar botoes do mouse soltos.
+            for (Integer b : input.mouseToRelease) {
+                if (b >= 1 && b <= 3 && input.mouseButtons[b]) {
+                    input.mouseJustReleased[b] = true;
+                }
+                if (b >= 1 && b <= 3) input.mouseButtons[b] = false;
+            }
+            input.mouseToRelease.clear();
+        }
+    }
+
+    // ==================== INJECAO PROGRAMATICA (MCP / testes por agente) ====================
+
+    /**
+     * Injeta uma tecla como se o teclado a tivesse pressionado/soltado. Passa pelo
+     * mesmo buffer dos eventos AWT ({@code keysToAdd}/{@code keysToRemove}), de modo
+     * que a proxima {@link #update()} promove a tecla para "just pressed" e depois
+     * "pressed" — semantica identica ao input real. Usado pela ferramenta MCP
+     * {@code inject_input} para QA narrativo sem depender do foco da janela.
+     *
+     * @param keyCode codigo VK (java.awt.event.KeyEvent.VK_*)
+     * @param pressed true = pressionar, false = soltar
+     */
+    public static void injectKey(int keyCode, boolean pressed) {
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            if (pressed) {
+                input.keysToRemove.remove(keyCode);
+                input.keysToAdd.add(keyCode);
+            } else {
+                input.keysToAdd.remove(keyCode);
+                input.keysToRemove.add(keyCode);
             }
         }
+    }
+
+    /**
+     * Injeta um botao do mouse (1=esquerdo, 2=meio, 3=direito). Passa pelo mesmo
+     * buffer dos eventos AWT, entao a proxima {@link #update()} promove para
+     * "just pressed"/"just released" por um frame — semantica identica ao mouse real.
+     */
+    public static void injectMouseButton(int button, boolean pressed) {
+        if (button < 1 || button > 3) return;
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            if (pressed) {
+                input.mouseToRelease.remove(button);
+                input.mouseToPress.add(button);
+            } else {
+                input.mouseToPress.remove(button);
+                input.mouseToRelease.add(button);
+            }
+        }
+    }
+
+    /** Posiciona o cursor virtual (coordenadas do viewport). */
+    public static void injectMouseMove(int x, int y) {
+        Input input = getInstance();
+        synchronized (input.stateLock) {
+            input.mouseX = x;
+            input.mouseY = y;
+        }
+    }
+
+    /**
+     * Zera TODO o estado de teclado e mouse (mesma limpeza da perda de foco). Usado
+     * pela ferramenta MCP {@code release_all_inputs} para garantir que nenhuma tecla
+     * fique "presa" ao fim de uma sessao de teste, mesmo apos excecao.
+     */
+    public static void resetAll() {
+        getInstance().clearAll();
     }
 
     // ==================== KEYBOARD API ====================
@@ -342,8 +430,8 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
         int button = e.getButton();
         if (button >= 1 && button <= 3) {
             synchronized (stateLock) {
-                mouseButtons[button] = true;
-                mouseJustPressed[button] = true;
+                mouseToRelease.remove(button);
+                mouseToPress.add(button);
             }
         }
     }
@@ -353,8 +441,8 @@ public class Input implements KeyListener, MouseListener, MouseMotionListener {
         int button = e.getButton();
         if (button >= 1 && button <= 3) {
             synchronized (stateLock) {
-                mouseButtons[button] = false;
-                mouseJustReleased[button] = true;
+                mouseToPress.remove(button);
+                mouseToRelease.add(button);
             }
         }
     }

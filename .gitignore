@@ -70,3 +70,5 @@ projects/MyGame/
 
 # Estado volatil de coordenacao do MCP por projeto
 projects/*/project/.ignis/
+# Mural/claims/tarefas persistidos pelo MCP (McpCoordination) — transitorio, nao versionar
+**/.ignis/coordination.json

@@ -21,8 +21,10 @@ class InputFocusTest {
         Input input = Input.getInstance();
 
         input.keyPressed(key(game, KeyEvent.KEY_PRESSED, KeyEvent.VK_W));
-        Input.update();
         input.mousePressed(mouse(game, MouseEvent.MOUSE_PRESSED, MouseEvent.BUTTON1));
+        // Mouse e teclado usam o mesmo buffer: o update() promove ambos ao snapshot
+        // lido pelos scripts (antes o mouse setava o held direto, sem passar por aqui).
+        Input.update();
 
         assertTrue(Input.isKeyPressed(KeyEvent.VK_W));
         assertTrue(Input.isMouseLeftPressed());

@@ -61,22 +61,14 @@ final class EditorInputController {
         }
     }
 
+    // Roteamento de mouse para a UI vive no Game (fonte unica, compartilhada com a
+    // injecao por coordenada do MCP); aqui apenas delegamos o evento real.
     private boolean routeMouseClickToUi(MouseEvent e, boolean pressed) {
-        if (game.getGameState() != Game.GameState.PLAYING) return false;
-        java.util.List<CanvasComponent> ccs = game.getCanvasComponents();
-        for (int i = ccs.size() - 1; i >= 0; i--) {
-            if (ccs.get(i).processMouseClick(e, pressed)) return true;
-        }
-        return game.getUICanvas() != null && game.getUICanvas().isVisible() && game.getUICanvas().processMouseClick(e, pressed);
+        return game.routeUiMouseClick(e, pressed);
     }
 
     private void routeMouseMoveToUi(MouseEvent e) {
-        if (game.getGameState() != Game.GameState.PLAYING) return;
-        java.util.List<CanvasComponent> ccs = game.getCanvasComponents();
-        for (int i = ccs.size() - 1; i >= 0; i--) {
-            if (ccs.get(i).processMouseMove(e)) return;
-        }
-        if (game.getUICanvas() != null && game.getUICanvas().isVisible()) game.getUICanvas().processMouseMove(e);
+        game.routeUiMouseMove(e);
     }
 
     void install() {

@@ -115,6 +115,22 @@ public final class IgnisToolRegistry {
             "set_parent", "clear_parent",
             "create_scene", "switch_scene", "copy_object_to_scene");
 
+    // Ferramentas que MUTAM o grafo de cena de forma PERSISTENTE (o que o Stop
+    // descarta): as que mudanças em Play seriam perdidas ao restaurar o snapshot.
+    // Derivadas do FORWARD_TO_HOST menos as que controlam o proprio Play/save
+    // (play_game/stop_game precisam rodar em Play; save_project tem seu proprio
+    // preflight). Ganham o contrato uniforme mode/dryRun/diff/allowInPlay no gate
+    // central do call() e no schema (via add()), sem tocar cada handler.
+    private static final java.util.Set<String> SCENE_MUTATING = buildSceneMutating();
+
+    private static java.util.Set<String> buildSceneMutating() {
+        java.util.Set<String> s = new java.util.HashSet<>(FORWARD_TO_HOST);
+        s.remove("play_game");
+        s.remove("stop_game");
+        s.remove("save_project");
+        return java.util.Collections.unmodifiableSet(s);
+    }
+
     // ------------------------------------------------------------------
     // Coordenacao multi-agente: escopo de claim por ferramenta
     // ------------------------------------------------------------------
@@ -164,6 +180,17 @@ public final class IgnisToolRegistry {
                 "attach_animation", "play_animation", "stop_animation")) {
             m.put(t, new Guard("objeto", "objectName", false));
         }
+        // UI persistente por objeto (P1 fatia 2): ferramentas ui_* com 'objectName'
+        // disputam o OBJETO dono do CanvasComponent. Sem 'objectName' (canvas global
+        // volatil), o argumento fica vazio e nao gera claim (ver coordConflict).
+        for (String t : List.of(
+                "ui_create_label", "ui_create_button", "ui_create_progressbar", "ui_create_panel",
+                "ui_create_image", "ui_create_textfield", "ui_create_checkbox", "ui_create_slider",
+                "ui_set_text", "ui_set_progress_value", "ui_set_nine_slice", "ui_remove_element",
+                "ui_clear_all", "ui_set_anchor", "ui_set_style",
+                "ui_attach_canvas", "ui_set_canvas_props", "ui_detach_canvas")) {
+            m.put(t, new Guard("objeto", "objectName", false));
+        }
         // Reparentar: o filho e quem muda de lugar na hierarquia.
         m.put("set_parent", new Guard("objeto", "child", false));
 
@@ -201,6 +228,30 @@ public final class IgnisToolRegistry {
         // Reiniciar o editor derruba a sessao inteira (bridge, Play, cena): tao amplo
         // quanto clear_scene — barra se outro agente segura qualquer recurso.
         m.put("restart_editor", new Guard("cena", null, true));
+        // Ferramentas de teste que mexem no runtime/sim inteiro: mesmo escopo amplo
+        // de play_game/stop_game (afetam o que todos veem no Play).
+        m.put("inject_input", new Guard("cena", null, true));
+        m.put("advance_frames", new Guard("cena", null, true));
+        m.put("pause_game", new Guard("cena", null, true));
+        m.put("resume_game", new Guard("cena", null, true));
+        m.put("run_input_tape", new Guard("cena", null, true));
+        m.put("click_ui", new Guard("cena", null, true));
+        m.put("move_mouse", new Guard("cena", null, true));
+        m.put("run_cutscene", new Guard("cena", null, true));
+
+        // Autoria de cutscenes: cada cutscene e um recurso proprio ('cutscene:intro'),
+        // como scripts — dois agentes podem editar cutscenes diferentes em paralelo.
+        for (String t : List.of("create_cutscene", "delete_cutscene", "add_cutscene_track",
+                "add_cutscene_keyframe", "remove_cutscene_keyframe", "set_cutscene_duration")) {
+            m.put(t, new Guard("cutscene", "name", false));
+        }
+
+        // Autoria de dialogos: cada dialogo e um recurso proprio ('dialogo:intro'),
+        // identificado por 'id' — mesmo tratamento das cutscenes.
+        for (String t : List.of("create_dialog", "delete_dialog", "set_dialog_node",
+                "remove_dialog_node")) {
+            m.put(t, new Guard("dialogo", "id", false));
+        }
 
         return java.util.Collections.unmodifiableMap(m);
     }
@@ -279,6 +330,10 @@ public final class IgnisToolRegistry {
         new EditorWorkflowTools(this).registerCaptureTools();
         new SceneTools(this).registerAll();
         new EditorLifecycleTools(this).registerAll();
+        new RuntimeInspectionTools(this).registerAll();
+        new RuntimeTestingTools(this).registerAll();
+        new CutsceneTools(this).registerAll();
+        new DialogTools(this).registerAll();
     }
 
     public boolean hasLiveEditor() {
@@ -338,14 +393,45 @@ public final class IgnisToolRegistry {
             McpCoordination.get().touchAgent(agent);
         }
 
+        // Contrato uniforme das ferramentas que mutam a cena (mode/dryRun/diff): estes
+        // gates rodam ANTES do dispatch para a FX thread, para recusar/relatar sem nunca
+        // tocar a cena — e serem testaveis headless.
+        final boolean sceneMutating = SCENE_MUTATING.contains(name);
+        final String mode = (liveGame != null) ? liveGame.getGameState().toString().toLowerCase(java.util.Locale.ROOT)
+                : "headless";
+        if (sceneMutating && liveGame != null
+                && liveGame.getGameState() == Game.GameState.PLAYING
+                && !safeArgs.optBoolean("allowInPlay", false)) {
+            IgnisLogger.warn("[MCP] " + who + name + " -> RECUSADO (Play)");
+            return "RECUSADO ('" + name + "' em modo Play): mudancas feitas durante o Play sao DESCARTADAS no "
+                    + "Stop (o editor restaura o snapshot inicial da cena). Pare o Play (stop_game) para editar "
+                    + "de forma persistente, ou passe allowInPlay=true para aplicar so no runtime transitorio.";
+        }
+        if (sceneMutating && safeArgs.optBoolean("dryRun", false)) {
+            IgnisLogger.info("[MCP] " + who + name + " -> dryRun");
+            return "[dryRun] '" + name + "' NAO aplicado (modo=" + mode + "). Faria com: "
+                    + truncate(safeArgs.toString(), 200);
+        }
+
+        final boolean wantDiff = sceneMutating && liveGame != null && safeArgs.optBoolean("diff", false);
         long startNanos = System.nanoTime();
         String result = IgnisMcpBridge.runOnFxThread(() -> {
+            java.util.Map<String, String> before = wantDiff ? snapshotScene() : null;
+            String r;
             try {
-                return def.handler.execute(safeArgs);
+                r = def.handler.execute(safeArgs);
             } catch (Exception e) {
                 return "Erro ao executar '" + name + "': " + e.getMessage();
             }
+            if (before != null && (r == null || !r.startsWith("Erro"))) {
+                r = r + "\n" + diffScenes(before, snapshotScene());
+            }
+            return r;
         });
+        // Toda ferramenta mutavel informa o modo em que rodou (contrato do roadmap).
+        if (sceneMutating && result != null && !result.startsWith("Erro")) {
+            result = result + " [modo=" + mode + "]";
+        }
         // Auditoria: cada chamada de agente aparece no Console do editor
         // (FxConsolePanel captura System.out). Args truncados para nao inundar
         // o log com conteudos grandes (ex: write_script).
@@ -359,6 +445,73 @@ public final class IgnisToolRegistry {
 
     private static String truncate(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    /**
+     * Fotografa a cena viva por ID estavel -> assinatura curta (nome, transform, z,
+     * visibilidade). Base do resumo de diff opcional das ferramentas mutaveis. Roda na
+     * FX thread (chamado de dentro do runnable do {@link #call}).
+     */
+    java.util.Map<String, String> snapshotScene() {
+        java.util.Map<String, String> m = new LinkedHashMap<>();
+        if (liveGame == null) return m;
+        for (GameObject go : liveGame.getEntities()) {
+            m.put(go.getId(), go.getName() + "|" + (int) go.getX() + "," + (int) go.getY()
+                    + "|" + go.getWidth() + "x" + go.getHeight() + "|z" + go.getZIndex()
+                    + "|" + (go.isVisible() ? "v" : "h"));
+        }
+        return m;
+    }
+
+    // Snapshots NOMEADOS de cena (ferramentas snapshot_scene/compare_scene_snapshot):
+    // vivem so na memoria da sessao — comparam edicao persistente vs runtime
+    // transitorio, nao substituem save. Limitados para nao crescer sem fim.
+    private final Map<String, java.util.Map<String, String>> namedSceneSnapshots = new LinkedHashMap<>();
+    private static final int MAX_NAMED_SNAPSHOTS = 16;
+
+    void storeSceneSnapshot(String label, java.util.Map<String, String> snap) {
+        namedSceneSnapshots.remove(label);
+        while (namedSceneSnapshots.size() >= MAX_NAMED_SNAPSHOTS) {
+            namedSceneSnapshots.remove(namedSceneSnapshots.keySet().iterator().next());
+        }
+        namedSceneSnapshots.put(label, snap);
+    }
+
+    java.util.Map<String, String> getSceneSnapshot(String label) {
+        return namedSceneSnapshots.get(label);
+    }
+
+    java.util.Set<String> sceneSnapshotLabels() {
+        return new java.util.LinkedHashSet<>(namedSceneSnapshots.keySet());
+    }
+
+    /** Resumo textual do que mudou entre dois snapshots de cena (added/removed/changed). */
+    static String diffScenes(java.util.Map<String, String> before, java.util.Map<String, String> after) {
+        List<String> added = new ArrayList<>();
+        List<String> removed = new ArrayList<>();
+        List<String> changed = new ArrayList<>();
+        for (Map.Entry<String, String> e : after.entrySet()) {
+            String old = before.get(e.getKey());
+            if (old == null) added.add(nameOf(e.getValue()));
+            else if (!old.equals(e.getValue())) changed.add(nameOf(old) + ": " + old + " -> " + e.getValue());
+        }
+        for (Map.Entry<String, String> e : before.entrySet()) {
+            if (!after.containsKey(e.getKey())) removed.add(nameOf(e.getValue()));
+        }
+        if (added.isEmpty() && removed.isEmpty() && changed.isEmpty()) {
+            return "diff: (nenhuma mudanca na cena)";
+        }
+        StringBuilder sb = new StringBuilder("diff: +").append(added.size())
+                .append(" -").append(removed.size()).append(" ~").append(changed.size());
+        if (!added.isEmpty()) sb.append("\n  + ").append(String.join(", ", added));
+        if (!removed.isEmpty()) sb.append("\n  - ").append(String.join(", ", removed));
+        for (String c : changed) sb.append("\n  ~ ").append(c);
+        return sb.toString();
+    }
+
+    private static String nameOf(String signature) {
+        int bar = signature.indexOf('|');
+        return bar >= 0 ? signature.substring(0, bar) : signature;
     }
 
     /** Serializa as definicoes das ferramentas (para o endpoint HTTP GET /mcp/tools). */
@@ -393,6 +546,25 @@ public final class IgnisToolRegistry {
                     .put("description", "Seu nome de agente (opcional). Identifica voce no Console do "
                             + "editor e faz esta chamada respeitar os claims dos outros agentes."));
             description = description + " Informe 'agent' para se identificar e respeitar claims.";
+        }
+        // Contrato uniforme das ferramentas que mutam a cena de forma persistente:
+        // dryRun (nao aplica, so relata), diff (resumo do que mudou na cena) e
+        // allowInPlay (aplicar mesmo em Play, ciente de que o Stop descarta). Injetado
+        // aqui para o catalogo /mcp/tools ensinar o protocolo sem cada handler repetir.
+        if (SCENE_MUTATING.contains(name)) {
+            JSONObject properties = schema.optJSONObject("properties");
+            if (properties == null) {
+                properties = new JSONObject();
+                schema.put("properties", properties);
+            }
+            properties.put("dryRun", new JSONObject().put("type", "boolean")
+                    .put("description", "Se true, NAO aplica: valida e relata o que faria (previa segura)."));
+            properties.put("diff", new JSONObject().put("type", "boolean")
+                    .put("description", "Se true, anexa um resumo do que mudou na cena (objetos +/-/alterados)."));
+            properties.put("allowInPlay", new JSONObject().put("type", "boolean")
+                    .put("description", "Em modo Play, edicoes sao descartadas no Stop. Passe true para aplicar "
+                            + "mesmo assim (so no runtime transitorio). Padrao: recusa em Play."));
+            description = description + " [muta cena: aceita dryRun/diff; recusada em Play sem allowInPlay]";
         }
         tools.put(name, new ToolDef(name, description, schema, handler));
     }
@@ -457,7 +629,114 @@ public final class IgnisToolRegistry {
         return null;
     }
 
+    // Guia de autoria retornado por how_to_create_game. Ensina o modelo mental do
+    // Editor e a ordem/regras das ferramentas para o trabalho do agente aparecer na
+    // Cena, na Hierarchy e no Inspector — e nao se perder no Play ou fora do viewport.
+    private static final String HOW_TO_CREATE_GAME =
+        "# Como criar jogos no Editor IgnisEngine (via MCP)\n"
+        + "\n"
+        + "## Modelo mental\n"
+        + "- CENA (Scene): o 'mapa'/'mundo' aberto agora. Tem os GameObjects numa HIERARQUIA\n"
+        + "  pai-filho e uma camera. Um jogo tem VARIAS cenas (um mundo por cena).\n"
+        + "- HIERARQUIA: dentro da cena, objetos podem ter pai (set_parent). O filho segue o\n"
+        + "  pai no Play. A Hierarchy do editor mostra essa arvore.\n"
+        + "- MUNDO (World): limites/grade/barreiras da cena (set_world_bounds, block_rect...).\n"
+        + "  Nao confundir com 'cena': o World e a fisica/espaco; a cena e o conteudo.\n"
+        + "- Z-INDEX: ordem de desenho. Menor atras, maior na frente. Fundos ficam atras.\n"
+        + "\n"
+        + "## Ordem recomendada\n"
+        + "1. how_to_create_game (isto) + get_editor_status para ver projeto/cena atuais.\n"
+        + "2. list_scenes; crie um mundo por cena com create_scene / troque com switch_scene.\n"
+        + "3. Crie objetos: create_object (formas/player), create_text_object, create_tilemap,\n"
+        + "   create_background_layer, create_particle_emitter, create_light_object.\n"
+        + "4. De aparencia/comportamento: set_object_sprite, attach_script, attach_animation,\n"
+        + "   set_object_transform, reorder_object_z.\n"
+        + "5. Organize a hierarquia com set_parent/clear_parent.\n"
+        + "6. Camera: create_camera/set_active_camera/set_camera_follow (o que o jogador ve).\n"
+        + "7. validate_scene para achar problemas; corrija.\n"
+        + "8. save_project para PERSISTIR (sem isso, nada fica salvo no .ignis).\n"
+        + "\n"
+        + "## Regras para o trabalho APARECER (Cena/Hierarchy/Inspector/viewport)\n"
+        + "- Todo create_* adiciona o objeto a cena ATIVA e atualiza a Hierarchy/Inspector.\n"
+        + "  Se nao aparece, confira: cena certa aberta (switch_scene) e nome unico.\n"
+        + "- NOME UNICO por cena: nomes duplicados deixam as ferramentas por-nome ambiguas.\n"
+        + "- VISIVEL: set_object_visible(true). Scripts de cutscene podem esconder objetos.\n"
+        + "- Z-INDEX na frente do fundo: o tilemap tem z=-100 por padrao e pode ficar ATRAS\n"
+        + "  de um Background z=0 — use reorder_object_z para trazer a frente.\n"
+        + "- DENTRO do viewport/limites: objeto fora dos bounds do World nao aparece na tela\n"
+        + "  (validate_scene aponta). Posicione perto de (0,0) ou da camera.\n"
+        + "- SPRITE existente: set_object_sprite deve apontar para um asset que existe\n"
+        + "  (import_asset_from_path / generate_sprite antes). validate_scene sinaliza ausentes.\n"
+        + "\n"
+        + "## Play e persistencia (nao perca trabalho)\n"
+        + "- EDICAO e onde voce constroi. play_game inicia a simulacao; stop_game RESTAURA o\n"
+        + "  snapshot inicial: mudancas feitas DURANTE o Play sao descartadas. Edite em edicao.\n"
+        + "- Por isso, ferramentas que mutam a cena sao RECUSADAS em Play por padrao (pare com\n"
+        + "  stop_game, ou passe allowInPlay=true para mexer so no runtime). Use dryRun=true para\n"
+        + "  simular sem aplicar e diff=true para ver o que mudou. A resposta informa [modo=...].\n"
+        + "- Compile scripts antes do Play (compile_project) e recarregue com restart_editor se\n"
+        + "  trocar codigo de script fora do editor.\n"
+        + "- QA determinista: play_game -> pause_game -> inject_input -> advance_frames ->\n"
+        + "  ler (list_runtime_objects/capture_viewport) -> release_all_inputs -> stop_game.\n"
+        + "  Sequencias inteiras: run_input_tape (fita de eventos por frame; zera o input no fim).\n"
+        + "  inject_input aceita durationFrames para segurar uma tecla N frames e soltar sozinho.\n"
+        + "  CLIQUE por coordenada: click_ui(x,y) dispara o onClick de um botao/escolha de dialogo\n"
+        + "  (ache as bounds com get_ui_tree); move_mouse(x,y) so posiciona/hover. A fita tambem\n"
+        + "  aceita eventos {clickUi:true, x, y} para clicar no meio de uma sequencia.\n"
+        + "\n"
+        + "## Como CONFERIR (em vez de adivinhar)\n"
+        + "- list_runtime_objects: estado real (posicao, z, visivel, pai, scripts, componentes).\n"
+        + "- get_ui_tree: arvore da UI in-game (widgets, bounds, texto, interatividade, origem).\n"
+        + "- validate_scene: nomes duplicados, assets/scripts ausentes, pai quebrado, fora do mundo.\n"
+        + "- snapshot_scene + compare_scene_snapshot: fotografe a cena antes (ex: do Play) e\n"
+        + "  compare depois — separa edicao persistente de runtime transitorio.\n"
+        + "- capture_viewport / capture_editor_window: ver o que a Scene View e a janela mostram.\n"
+        + "- get_runtime_metrics: contagens e memoria (detecta objetos/listeners que vazam).\n"
+        + "\n"
+        + "## UI in-game: VOLATIL vs PERSISTENTE\n"
+        + "- SEM objectName, as ferramentas ui_* montam no canvas GLOBAL de runtime: some no\n"
+        + "  stop_game e NAO e salvo no .ignis. Bom para HUD temporario de teste durante o Play.\n"
+        + "- COM objectName, montam no CanvasComponent daquele objeto: PERSISTENTE — serializa na\n"
+        + "  cena, reabre pronto e o preview aparece ate em edicao. Anexa o componente sozinho.\n"
+        + "  Ex: ui_create_progressbar(name=hp, objectName=Player) faz um HUD que fica salvo.\n"
+        + "- Nomes sao unicos POR CANVAS (o mesmo 'hp' pode existir no Player e no Boss).\n"
+        + "- Ao contrario da cena, edicao de UI persistente feita em Play NAO e descartada no Stop.\n"
+        + "- ui_attach_canvas/ui_set_canvas_props/ui_detach_canvas gerem o componente; ui_set_anchor\n"
+        + "  e ui_set_style ajustam ancoras/cores/fonte/z; botao guarda actionData (ex 'signal:x')\n"
+        + "  que um script le e conecta. Confira tudo com get_ui_tree (mostra a origem de cada widget).\n"
+        + "\n"
+        + "## Cutscenes (timeline por tracks/keyframes)\n"
+        + "- create_cutscene -> add_cutscene_keyframe (ACTOR/CAMERA interpolam x/y com easing;\n"
+        + "  DIALOG/AUDIO/SIGNAL/FLAG disparam no frame exato; 60 frames = 1s).\n"
+        + "- validate_cutscene confere ator/asset ausente; preview_cutscene faz scrub read-only.\n"
+        + "- run_cutscene executa no Play frame a frame (ou skip=true direto ao estado final).\n"
+        + "- Fica em cutscenes/<nome>.cutscene.json no projeto (persistente, versionavel).\n"
+        + "\n"
+        + "## Dialogos (grafo de nos, data-driven)\n"
+        + "- create_dialog -> set_dialog_node (fala com speaker/retrato/texto e saida via 'next' OU\n"
+        + "  'choices' [{text,next,setFlag?,condition?}]). Um no sem next e sem choices e terminal.\n"
+        + "- validate_dialog checa start, referencias quebradas, nos inalcancaveis e ciclos sem saida;\n"
+        + "  preview_dialog percorre o grafo seguindo choicesPath (indices) e mostra a transcricao.\n"
+        + "- Fica em dialogs/<id>.dialog.json. A engine NAO exibe sozinha: um script le o JSON e desenha\n"
+        + "  com a UI persistente (ui_* com objectName). Ponte: track DIALOG de cutscene pode citar\n"
+        + "  'dialog:<id>#<no>' no campo data. Nao guarde texto protegido copiado da obra.\n"
+        + "\n"
+        + "## Multiagente\n"
+        + "- Informe 'agent' nas chamadas e use claim/release + send_message para nao pisar no\n"
+        + "  trabalho de outro agente. Mural, claims e tarefas sobrevivem ao restart do editor.\n";
+
     private void registerDefaults() {
+        // how_to_create_game — guia de orientacao para o agente construir jogos no
+        // Editor pela ordem/regras certas (Cena, hierarquia, mundos/cenas, aparecer
+        // no viewport, salvar). Disponivel tambem no STDIO (headless) para o agente
+        // ler o protocolo antes de mexer na cena.
+        add("how_to_create_game",
+            "Guia PASSO A PASSO de como criar jogos no Editor IgnisEngine via MCP: o modelo de Cena e "
+            + "hierarquia de objetos, mundos/cenas, a ordem correta de ferramentas e as regras para os objetos "
+            + "aparecerem na Cena/Hierarchy/Inspector e o programador poder ve-los. LEIA ISTO ANTES de comecar.",
+            objectSchema(),
+            args -> HOW_TO_CREATE_GAME);
+
         // get_project_tree
         add("get_project_tree",
             "Retorna a arvore recursiva de diretorios e arquivos do projeto ativo.",

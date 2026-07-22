@@ -40,6 +40,16 @@ public class UIButton extends UIComponent {
     private transient Image iconImage;
     private int iconSize = 20;
     private int iconPadding = 8;
+
+    /**
+     * Ação declarativa do botão, persistida na cena (ex.: "signal:abrir_menu",
+     * "scene:Floresta"). Como {@code onClick} é transient e não sobrevive ao save,
+     * um botão montado no editor guarda AQUI a intenção; um script de runtime lê
+     * {@link #getActionData()} e conecta ao sistema do jogo (mesma filosofia do
+     * CutscenePlayer, que reporta eventos em vez de acoplar a engine). O motor não
+     * interpreta esta string sozinho.
+     */
+    private String actionData = "";
     
     // ==================== CONSTRUTORES ====================
     
@@ -166,6 +176,9 @@ public class UIButton extends UIComponent {
         this.iconPath = path;
         loadIcon();
     }
+
+    public String getActionData() { return actionData; }
+    public void setActionData(String actionData) { this.actionData = actionData != null ? actionData : ""; }
     
     /**
      * Define o esquema de cores do botão.
@@ -271,6 +284,7 @@ public class UIButton extends UIComponent {
         json.put("disabledColor", colorToHex(disabledColor));
         if (iconPath != null) json.put("iconPath", iconPath);
         json.put("iconSize", iconSize);
+        if (actionData != null && !actionData.isEmpty()) json.put("actionData", actionData);
         return json;
     }
     
@@ -287,6 +301,7 @@ public class UIButton extends UIComponent {
         button.disabledColor = hexToColor(json.optString("disabledColor", "#323232"));
         button.iconPath = json.optString("iconPath", null);
         button.iconSize = json.optInt("iconSize", 20);
+        button.actionData = json.optString("actionData", "");
         if (button.iconPath != null) button.loadIcon();
         return button;
     }

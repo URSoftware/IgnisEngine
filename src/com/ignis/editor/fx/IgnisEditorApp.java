@@ -494,11 +494,56 @@ public class IgnisEditorApp extends Application {
         savePrefab.setOnAction(e -> saveSelectedAsPrefab());
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> instantiatePrefabDialog());
+        // Linter da cena (mesma regra do MCP validate_scene, via SceneValidator): dá ao
+        // usuário humano o diagnóstico que antes só existia por ferramenta de agente.
+        MenuItem validar = new MenuItem("Validar Cena…");
+        validar.setOnAction(e -> validateCurrentScene());
         scene.getItems().addAll(gerenciarCenarios, novaCena, new SeparatorMenuItem(),
                 criarObjeto, criarCamera, criarConteudo, new SeparatorMenuItem(), dup, ren, del,
                 new SeparatorMenuItem(), up, down, top, bottom,
-                new SeparatorMenuItem(), savePrefab, instPrefab);
+                new SeparatorMenuItem(), savePrefab, instPrefab,
+                new SeparatorMenuItem(), validar);
         return scene;
+    }
+
+    // Roda o linter de cena (SceneValidator — mesma regra do MCP validate_scene) e
+    // mostra os problemas ao usuario num dialogo rolavel. Fecha o gap de nao existir
+    // validacao acessivel pela GUI (so havia via ferramenta MCP de agente).
+    void validateCurrentScene() {
+        if (currentProject == null) {
+            new Alert(Alert.AlertType.INFORMATION,
+                    "Abra um projeto primeiro (Arquivo > Abrir projeto).").showAndWait();
+            return;
+        }
+        java.util.List<String> scripts = null;
+        try {
+            com.ignis.core.ScriptManager sm = game.getScriptManager();
+            if (sm != null) scripts = sm.listAvailableScripts();
+        } catch (Exception ignore) { /* projeto sem scripts */ }
+
+        java.util.List<String> issues = com.ignis.core.SceneValidator.validate(
+                game.getEntities(), game.getWorld(), projectFolder, scripts);
+        int n = game.getEntities().size();
+        if (issues.isEmpty()) {
+            Alert ok = new Alert(Alert.AlertType.INFORMATION,
+                    "Nenhum problema encontrado (" + n + " objeto(s)).");
+            ok.setHeaderText("Cena válida");
+            ok.showAndWait();
+            setStatus("Validação: cena OK (" + n + " objeto(s)).");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String i : issues) sb.append("• ").append(i).append('\n');
+        javafx.scene.control.TextArea area = new javafx.scene.control.TextArea(sb.toString());
+        area.setEditable(false);
+        area.setWrapText(true);
+        area.setPrefSize(560, 320);
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setHeaderText(issues.size() + " problema(s) na cena");
+        alert.getDialogPane().setContent(area);
+        alert.setResizable(true);
+        alert.showAndWait();
+        setStatus("Validação: " + issues.size() + " problema(s) na cena.");
     }
 
     // ---------------- Ciclo de vida do projeto ----------------

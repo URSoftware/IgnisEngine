@@ -140,18 +140,26 @@ public final class McpCoordination {
 
     private void load() {
         if (storeFile == null || !storeFile.isFile()) return;
+        // Monta o estado num staging local e so o COMITA se o arquivo inteiro parsear.
+        // Assim um arquivo corrompido/truncado nunca deixa metade das mensagens ou dos
+        // claims carregados — o reset ao carregar e total (fica como cena limpa).
+        long stagedSeq;
+        int stagedTaskCounter;
+        List<Message> stagedMsgs = new ArrayList<>();
+        Map<String, Claim> stagedClaims = new LinkedHashMap<>();
+        List<Task> stagedTasks = new ArrayList<>();
         try {
             JSONObject root = new JSONObject(
                     new String(Files.readAllBytes(storeFile.toPath()), StandardCharsets.UTF_8));
-            seqCounter = root.optLong("seqCounter", 0);
-            taskCounter = root.optInt("taskCounter", 0);
+            stagedSeq = root.optLong("seqCounter", 0);
+            stagedTaskCounter = root.optInt("taskCounter", 0);
             long now = System.currentTimeMillis();
             JSONArray msgs = root.optJSONArray("messages");
             if (msgs != null) {
                 for (int i = 0; i < msgs.length(); i++) {
                     JSONObject m = msgs.getJSONObject(i);
                     String to = m.has("to") && !m.isNull("to") ? m.optString("to", null) : null;
-                    messages.add(new Message(m.optLong("seq"), m.optLong("millis"),
+                    stagedMsgs.add(new Message(m.optLong("seq"), m.optLong("millis"),
                             m.optString("from"), to, m.optString("text")));
                 }
             }
@@ -162,7 +170,7 @@ public final class McpCoordination {
                     long millis = c.optLong("millis");
                     // Pula claims ja expirados no momento do carregamento.
                     if ((now - millis) > CLAIM_TTL_MS) continue;
-                    claims.put(c.optString("resource"), new Claim(c.optString("agent"), millis));
+                    stagedClaims.put(c.optString("resource"), new Claim(c.optString("agent"), millis));
                 }
             }
             JSONArray tks = root.optJSONArray("tasks");
@@ -172,14 +180,24 @@ public final class McpCoordination {
                     Task task = new Task(t.optInt("id"), t.optString("title"), t.optString("description", ""));
                     task.owner = t.has("owner") && !t.isNull("owner") ? t.optString("owner", null) : null;
                     task.status = t.optString("status", "aberta");
-                    tasks.add(task);
-                    if (task.id > taskCounter) taskCounter = task.id;
+                    stagedTasks.add(task);
+                    if (task.id > stagedTaskCounter) stagedTaskCounter = task.id;
                 }
             }
         } catch (Exception e) {
-            // Arquivo corrompido/ilegivel: segue com o que ja estiver em memoria.
-            agents.clear(); // presenca nao vem do arquivo; nada a preservar aqui
+            // Arquivo corrompido/ilegivel: reset TOTAL (bindProject ja zerou tudo; nada
+            // parcial e comitado). Segue como cena de coordenacao limpa.
+            return;
         }
+        // Commit atomico do staging para o estado vivo.
+        messages.clear();
+        messages.addAll(stagedMsgs);
+        claims.clear();
+        claims.putAll(stagedClaims);
+        tasks.clear();
+        tasks.addAll(stagedTasks);
+        seqCounter = stagedSeq;
+        taskCounter = stagedTaskCounter;
     }
 
     /** Grava o estado atual (best-effort; falhas de I/O nao interrompem a ferramenta). */
@@ -214,7 +232,19 @@ public final class McpCoordination {
             root.put("tasks", tks);
             File dir = storeFile.getParentFile();
             if (dir != null) dir.mkdirs();
-            Files.write(storeFile.toPath(), root.toString(2).getBytes(StandardCharsets.UTF_8));
+            // Escrita atomica: grava num .tmp e renomeia por cima. Se o processo cair no
+            // meio da gravacao (restart_editor, crash), o coordination.json continua
+            // integro (ou o antigo, ou o novo — nunca metade). ATOMIC_MOVE quando o SO
+            // suporta; senao cai no REPLACE_EXISTING.
+            java.nio.file.Path target = storeFile.toPath();
+            java.nio.file.Path tmp = target.resolveSibling("coordination.json.tmp");
+            Files.write(tmp, root.toString(2).getBytes(StandardCharsets.UTF_8));
+            try {
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (Exception ignore) {
             // best-effort: o estado em memoria continua valendo.
         }

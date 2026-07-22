@@ -98,11 +98,17 @@ curl -X POST http://127.0.0.1:8790/mcp/call \
 
 ## 4. Ferramentas registradas
 
-### 4.1 Sempre disponíveis (26) — `IgnisToolRegistry.registerDefaults()`
+### 4.1 Sempre disponíveis (27) — `IgnisToolRegistry.registerDefaults()`
 
 Funcionam mesmo no modo headless (`--mcp <projeto>`, transporte STDIO), pois operam
 em arquivos do projeto ou em singletons estáticos do motor — não exigem o editor
 JavaFX aberto.
+
+**Orientação (1)**
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `how_to_create_game` | — | Guia passo a passo de como criar jogos no Editor (Cena, hierarquia, mundos/cenas, regras para o objeto aparecer, Play x persistência). **Leia antes de começar.** |
 
 **Projeto, scripts e imagem (9)**
 
@@ -150,7 +156,7 @@ JavaFX aberto.
 | `add_animation_frame` | `animName`, `spritePath`, `duration` | Adiciona um keyframe ao final da animação |
 | `read_animation` | `animName` | Lê a definição JSON completa da animação |
 
-### 4.2 Somente com editor vivo (41) — `attachLiveEditor(...)`
+### 4.2 Somente com editor vivo (84) — `attachLiveEditor(...)`
 
 Quando o bridge roda **dentro do editor JavaFX** (não no modo headless), o
 `IgnisEditorApp` registra o *contexto vivo* (`McpService.setEditorContext(...)`) — o
@@ -206,23 +212,42 @@ do editor, então botões e viewport ficam sincronizados.
 | `set_camera_transform` | `name`, `x?`, `y?`, `zoom?`, `rotation?` | Move/aplica zoom/rotaciona uma câmera |
 | `convert_coordinates` | `direction` (`world_to_screen`/`screen_to_world`), `x`, `y` | Converte coordenadas usando a câmera ativa (mira/HUD) |
 
-**UI in-game direta, sem escrever script (9)** — via `com.ignis.core.ui.*`
+**UI in-game direta, sem escrever script (19)** — via `com.ignis.core.ui.*`
 
 Antes, criar UI (botões, barras, texto) só era possível escrevendo um `IgnisScript`
 (`createButton`/`createLabel`/... protegidos). Estas ferramentas usam o mesmo
-`UICanvas` diretamente, permitindo montar HUD/menus **sem nenhum script**:
+`UICanvas` diretamente, permitindo montar HUD/menus **sem nenhum script** — no canvas
+global volátil OU, com `objectName`, num `CanvasComponent` **persistente** por objeto:
 
 | Ferramenta | Argumentos | O que faz |
 |-----------|-----------|-----------|
-| `ui_create_label` | `name`, `text`, `x?`, `y?`, `width?`, `height?`, `color?` | Cria um texto na UI |
-| `ui_create_button` | `name`, `text`, `x?`, `y?`, `width?`, `height?`, `removeOnClick?` | Cria um botão (opcionalmente auto-removível ao clicar) |
-| `ui_create_progressbar` | `name`, `x?`, `y?`, `width?`, `height?`, `value?`, `maxValue?`, `fillColor?` | Cria uma barra (HP/mana/loading) |
-| `ui_create_panel` | `name`, `x?`, `y?`, `width?`, `height?`, `backgroundColor?`, `layout?` | Cria um painel container (`NONE`/`VERTICAL`/`HORIZONTAL`/`GRID`) |
-| `ui_set_text` | `name`, `text` | Altera o texto de um label/botão existente |
-| `ui_set_progress_value` | `name`, `value`, `maxValue?` | Atualiza o valor de uma barra |
-| `ui_remove_element` | `name` | Remove um elemento pelo nome |
-| `ui_clear_all` | — | Remove todos os elementos de UI |
-| `ui_list_elements` | — | Lista os elementos atuais (nome, tipo, posição, tamanho) |
+Todas aceitam **`objectName?`**: com ele, montam no `CanvasComponent` daquele objeto —
+**UI PERSISTENTE** (serializa na cena, reabre pronta, anexa o componente sozinho); sem ele,
+no canvas global de runtime — **VOLÁTIL** (o Stop limpa, não vai ao `.ignis`). Nomes são
+únicos **por canvas**. Ao contrário da cena, edição de UI persistente em Play **não** é
+descartada no Stop.
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `ui_create_label` | `name`, `text`, `x?`, `y?`, `width?`, `height?`, `color?`, `objectName?` | Cria um texto na UI |
+| `ui_create_button` | `name`, `text`, `x?`, `y?`, `width?`, `height?`, `removeOnClick?`, `actionData?`, `objectName?` | Cria um botão. `actionData` = ação declarativa persistida (ex. `signal:abrir_menu`), lida por um script (o motor não interpreta) |
+| `ui_create_progressbar` | `name`, `x?`, `y?`, `width?`, `height?`, `value?`, `maxValue?`, `fillColor?`, `objectName?` | Cria uma barra (HP/mana/loading) |
+| `ui_create_panel` | `name`, `x?`, `y?`, `width?`, `height?`, `backgroundColor?`, `layout?`, `objectName?` | Cria um painel container (`NONE`/`VERTICAL`/`HORIZONTAL`/`GRID`) |
+| `ui_create_image` | `name`, `path`, `x?`, `y?`, `width?`, `height?`, `scaleMode?`, `objectName?` | Cria uma imagem de UI |
+| `ui_create_textfield` | `name`, `x?`, `y?`, `width?`, `height?`, `placeholder?`, `text?`, `objectName?` | Cria um campo de texto editável |
+| `ui_create_checkbox` | `name`, `text?`, `checked?`, `x?`, `y?`, `objectName?` | Cria uma checkbox |
+| `ui_create_slider` | `name`, `x?`, `y?`, `width?`, `height?`, `min?`, `max?`, `value?`, `objectName?` | Cria um slider (valor contínuo) |
+| `ui_set_nine_slice` | `name`, `left`, `right`, `top`, `bottom`, `objectName?` | Ativa nine-slice numa UIImage |
+| `ui_set_text` | `name`, `text`, `objectName?` | Altera o texto de um label/botão existente |
+| `ui_set_progress_value` | `name`, `value`, `maxValue?`, `objectName?` | Atualiza o valor de uma barra |
+| `ui_set_anchor` | `name`, `anchorX`, `anchorY`, `pivotX?`, `pivotY?`, `objectName?` | Âncora no pai (0-1) e pivô próprio — HUD que gruda em cantos |
+| `ui_set_style` | `name`, `backgroundColor?`, `textColor?`, `borderColor?`, `borderWidth?`, `borderRadius?`, `fontSize?`, `padding?`, `zOrder?`, `objectName?` | Estilo/fonte/z-order entre irmãos (só os campos informados) |
+| `ui_remove_element` | `name`, `objectName?`, `dryRun?` | Remove um elemento pelo nome |
+| `ui_clear_all` | `objectName?`, `dryRun?` | Remove todos os elementos do canvas alvo |
+| `ui_list_elements` | `objectName?` | Lista os elementos do canvas alvo (nome, tipo, posição, tamanho) |
+| `ui_attach_canvas` | `objectName`, `sortingOrder?` | Anexa um `CanvasComponent` (UI persistente) a um objeto |
+| `ui_set_canvas_props` | `objectName`, `sortingOrder?`, `visible?` | Ordem de desenho entre canvases e visibilidade do canvas inteiro |
+| `ui_detach_canvas` | `objectName`, `dryRun?` | Remove o `CanvasComponent` e toda a UI dele (destrutivo) |
 
 **Extras de GameObject (7)**
 
@@ -241,6 +266,94 @@ Antes, criar UI (botões, barras, texto) só era possível escrevendo um `IgnisS
 | Ferramenta | Argumentos | O que faz |
 |-----------|-----------|-----------|
 | `get_scene_info` | — | Resumo: nº de objetos, câmeras, estado do jogo (edição/play) |
+
+**Ciclo de vida do editor (2)** — `EditorLifecycleTools`
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `restart_editor` | — | Salva e relança o editor; a nova JVM reabre o projeto e re-sobe o bridge na mesma porta/token. Mural/claims/tarefas sobrevivem (`.ignis/coordination.json`). Aguarde ~5-10s e reconecte. |
+| `get_editor_status` | — | Projeto, cenas, nº de objetos/scripts, URL/porta do bridge e agentes ativos. Confirma que o editor voltou após o restart. |
+
+**Observabilidade e validação (6)** — `RuntimeInspectionTools` (read-only)
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `list_runtime_objects` | — | ID, tipo, pos, tamanho, z, visível, pai, scripts e componentes de cada objeto (inclui o que scripts esconderam no Play) |
+| `get_runtime_metrics` | — | Contagens (objetos/visíveis/scripts/componentes), mundo com limites, taxa de sim e memória JVM |
+| `validate_scene` | — | Linter da cena: nomes duplicados, sprite/script ausente, pai quebrado, objeto fora do mundo. `OK` se nada. Mesma regra do menu **Cena > Validar Cena…** do editor (via `com.ignis.core.SceneValidator`) |
+| `snapshot_scene` | `label?` | Fotografa a cena sob um rótulo (em memória, até 16) para comparar depois |
+| `compare_scene_snapshot` | `before`, `after?` | Diff entre dois snapshots (`current` = cena viva): `+N -M ~K` com detalhes. Separa edição persistente de runtime transitório |
+| `get_ui_tree` | `objectName?` | Árvore da UI in-game: widget, bounds absolutos, âncora/pivô, z, texto, visível/interativo/focado — e a origem (canvas global volátil ou `CanvasComponent` persistente) |
+
+**Teste de runtime — input e tempo determinísticos (8)** — `RuntimeTestingTools`
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `inject_input` | `action?`, `key?`, `state?`, `mouseButton?`, `x?`, `y?`, `durationFrames?` | Injeta teclado/mouse sem foco de janela (vira "just pressed" no próximo frame). `x`/`y` reposicionam o cursor virtual. Com `durationFrames`, segura N frames e solta sozinho (requer Play/pausado) |
+| `click_ui` | `x`, `y`, `button?` | **Clica na UI por coordenada** (press+release roteados aos CanvasComponents/canvas global): dispara o `onClick` de um botão/escolha de diálogo. Requer Play/pausado. Retorna se um widget consumiu |
+| `move_mouse` | `x`, `y` | Move o cursor virtual e roteia hover para a UI (destaca botões sob o ponto) |
+| `release_all_inputs` | — | Solta todas as teclas/botões (zera o input) |
+| `advance_frames` | `count?`, `fixedDelta?` | Avança N passos de 1/60s de forma determinista (mesmo pausado) |
+| `pause_game` | — | Pausa a simulação (base do passo a passo) |
+| `resume_game` | — | Retoma a simulação pausada |
+| `run_input_tape` | `tape`, `maxFrames?` | Reproduz uma fita `[{at, action\|key\|mouseButton\|clickUi, x?, y?, state?}]` frame a frame (inclui cliques de UI por coordenada); ao final (mesmo após exceção) zera TODO o input |
+
+Fluxo determinista: `play_game` → `pause_game` → `inject_input` → `advance_frames` →
+`list_runtime_objects`/`capture_viewport` → `release_all_inputs` → `stop_game`.
+
+**Cutscenes — timeline por tracks/keyframes (11)** — `CutsceneTools` (P1)
+
+Timeline determinística em frames de simulação (60/s), persistida em
+`cutscenes/<nome>.cutscene.json`. Tracks `ACTOR`/`CAMERA` interpolam `x`/`y` com easing
+(`LINEAR`/`EASE_IN`/`EASE_OUT`/`EASE_IN_OUT`/`STEP`, curva de saída do keyframe);
+`DIALOG`/`AUDIO`/`SIGNAL`/`FLAG` disparam eventos no frame exato (reportados ao chamador —
+o jogo decide como reagir).
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `create_cutscene` | `name`, `durationFrames?` | Cria a cutscene vazia no projeto |
+| `list_cutscenes` | — | Lista as cutscenes (duração, nº de tracks) |
+| `get_cutscene` | `name` | Timeline completa em JSON |
+| `set_cutscene_duration` | `name`, `durationFrames` | Altera a duração total |
+| `add_cutscene_track` | `name`, `type`, `target?` | Adiciona uma track vazia |
+| `add_cutscene_keyframe` | `name`, `type`, `frame`, `target?`, `x?`, `y?`, `visible?`, `easing?`, `text?`, `data?` | Grava/substitui um keyframe (cria a track se preciso) |
+| `remove_cutscene_keyframe` | `name`, `type`, `frame`, `target?` | Remove um keyframe |
+| `delete_cutscene` | `name` | Apaga a cutscene |
+| `validate_cutscene` | `name` | Ator ausente na cena, keyframe além da duração, diálogo sem texto, áudio sem asset |
+| `preview_cutscene` | `name`, `frame?` | Scrub read-only: pose interpolada + eventos do frame, SEM tocar a cena |
+| `run_cutscene` | `name`, `fromFrame?`, `toFrame?`, `skip?` | Executa no Play frame a frame (pose + 1 passo de sim); `skip=true` pula ao estado final listando os eventos — mesmo estado da conclusão natural |
+
+**Diálogos — grafo de nós data-driven (8)** — `DialogTools` (P1 fatia 2b)
+
+Grafo de nós persistido em `dialogs/<id>.dialog.json`. Cada nó tem speaker, retrato,
+texto e saída via `next` (linear) OU `choices` (ramificação; uma escolha pode setar flag
+e ter condição). A engine **não** exibe sozinha: um script lê o JSON e desenha com a UI
+persistente (`ui_*` com `objectName`). Ponte: uma track `DIALOG` de cutscene pode citar
+`dialog:<id>#<nó>` no campo `data`. Não armazena texto protegido copiado da obra.
+
+| Ferramenta | Argumentos | O que faz |
+|-----------|-----------|-----------|
+| `create_dialog` | `id`, `start?` | Cria o diálogo vazio no projeto |
+| `list_dialogs` | — | Lista os diálogos (nº de nós, start) |
+| `get_dialog` | `id` | Grafo completo em JSON |
+| `set_dialog_node` | `id`, `nodeId`, `speaker?`, `portrait?`, `text?`, `next?`, `choices?`, `makeStart?` | Cria/substitui um nó (choices = array JSON de `{text, next, setFlag?, condition?}`) |
+| `remove_dialog_node` | `id`, `nodeId` | Remove um nó |
+| `delete_dialog` | `id` | Apaga o diálogo |
+| `validate_dialog` | `id` | Start ausente, refs quebradas, nós inalcançáveis, texto/escolha vazios, retrato ausente, condição nunca setada, ciclo sem terminal |
+| `preview_dialog` | `id`, `fromNode?`, `choicesPath?` | Percorre o grafo (seguindo `choicesPath` = índices de escolha) e devolve a transcrição, sem Play |
+
+**Contrato uniforme das ferramentas que mutam a cena** (gate central do `call()`, sobre
+`SCENE_MUTATING` = mutações de cena/objeto/câmera/mundo, exceto `play_game`/`stop_game`/
+`save_project`). Toda ferramenta desse grupo aceita e anuncia no schema:
+
+| Parâmetro | Efeito |
+|-----------|--------|
+| `dryRun` | Não aplica: valida e relata o que faria (`[dryRun] ... (modo=...)`). |
+| `diff` | Anexa `diff: +N -M ~K` com os objetos adicionados/removidos/alterados. |
+| `allowInPlay` | Em Play, a mutação é RECUSADA por padrão (o Stop descarta a edição); `true` aplica só no runtime transitório. |
+
+Toda resposta mutável termina com `[modo=editing|playing]`. A recusa-em-Play e o `dryRun`
+rodam antes de tocar a cena.
 
 > Importante: ferramentas novas exigem reiniciar o editor após atualizar o build
 > (Java não faz hot-reload). Ao reabrir com o MCP habilitado, o bridge sobe já com o
