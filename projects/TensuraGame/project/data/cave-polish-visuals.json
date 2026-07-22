@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "visualSetId": "cave_seal_polish_v2",
+  "source": "assets/source/cave_polish_dressing_chroma_v1.png",
+  "assets": {
+    "backdrop": "assets/sprites/backgrounds/cave_backdrop_texture_v3.png",
+    "ceilingStalactites": "assets/sprites/props/cave_polish/cave_ceiling_stalactites_cyan_v1.png",
+    "ceilingOverhang": "assets/sprites/props/cave_polish/cave_ceiling_overhang_cyan_v1.png",
+    "crystalVein": "assets/sprites/props/cave_polish/cave_crystal_vein_cyan_v1.png",
+    "floorRubble": "assets/sprites/props/cave_polish/cave_floor_rubble_cyan_v1.png",
+    "magiculeMotesAnimation": "cave_magicule_motes_ambient",
+    "forestThresholdAnimation": "cave_forest_threshold",
+    "awakeningEnvironmentOverlay": "assets/sprites/props/cave_polish/cave_awakening_environment_overlay_v2.png",
+    "galleryEnvironmentOverlay": "assets/sprites/props/cave_polish/cave_gallery_environment_overlay_v2.png",
+    "awakeningRuneAnimation": "cave_awakening_rune_ring"
+  },
+  "runtimeObjects": {
+    "awakeningEnvironmentOverlay": "CaveAwakeningEnvironmentOverlayV2",
+    "galleryEnvironmentOverlay": "CaveGalleryEnvironmentOverlayV2",
+    "awakeningRune": "CaveAwakeningRuneRing"
+  },
+  "placementRules": [
+    "Decorative props do not add collision or change exploration coordinates.",
+    "Ceiling silhouettes render above the tilemap but behind dialogue and cutscene UI.",
+    "Cyan light remains local to crystals, magicules and the forest threshold.",
+    "No source sheet or chroma background may be referenced by a runtime object.",
+    "The cave exit glow becomes prominent only after veldora_absorbed_exit_unlocked.",
+    "Environment overlays keep the central exploration routes and the Veldora seal center transparent.",
+    "Violet light is localized to Veldora's seal; cyan marks water, crystals and ambient magicules.",
+    "The awakening rune has no collider and remains behind Rimuru during gameplay and cutscenes."
+  ]
+}

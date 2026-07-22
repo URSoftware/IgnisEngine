@@ -739,6 +739,10 @@ public class IgnisEditorApp extends Application {
             setStatus("Nenhum projeto aberto para salvar.");
             return;
         }
+        if (playing) {
+            setStatus("Pare o Play antes de salvar o projeto.");
+            return;
+        }
         if (isCollabSessionProject()) {
             setStatus("Projeto da sessao colaborativa: quem salva e o host (suas edicoes ja vao para ele).");
             return;
@@ -758,6 +762,10 @@ public class IgnisEditorApp extends Application {
      void saveProjectAs(Stage stage) {
         if (currentProject == null) {
             setStatus("Nenhum projeto aberto.");
+            return;
+        }
+        if (playing) {
+            setStatus("Pare o Play antes de salvar o projeto.");
             return;
         }
         FileChooser fc = new FileChooser();
@@ -1146,11 +1154,11 @@ public class IgnisEditorApp extends Application {
     void restartEditor() {
         Runnable relaunch = () -> {
             try { saveLayout(); } catch (Exception ignore) {}
+            try { if (playing) stopWorld(); } catch (Exception ignore) {}
             try {
                 if (currentProject != null && currentIgnisFile != null) saveProjectSilently();
             } catch (Exception ignore) {}
             try { if (console != null) console.stopCapture(); } catch (Exception ignore) {}
-            try { stopGameLoop(); } catch (Exception ignore) {}
             try { com.ignis.mcp.McpService.stop(); } catch (Exception ignore) {}
             try { com.ignis.collab.CollabSession.get().stop(); } catch (Exception ignore) {}
             try {
@@ -1212,6 +1220,7 @@ public class IgnisEditorApp extends Application {
         if (playing) return;
         try {
             clearSecondarySelection();
+            scenes.beginPlaySession();
             // Recompilar e recarregar todos os scripts antes de iniciar o Play
             com.ignis.core.ScriptManager sm = game.getScriptManager();
             if (sm != null) {
@@ -1238,8 +1247,12 @@ public class IgnisEditorApp extends Application {
     void stopWorld() {
         if (!playing) return;
         stopGameLoop();
-        // Recarregar os scripts para restaurar o estado do editor e suas variáveis
-        reloadAllScriptInstances();
+        // Uma transicao em runtime usa uma copia da cena de destino. Ao parar,
+        // restaura explicitamente a cena que continuou ativa no editor; snapshots
+        // por ID nao conseguem recompor uma colecao de entidades substituida.
+        if (!scenes.restoreEditingSceneAfterPlay()) {
+            reloadAllScriptInstances();
+        }
         setStatus("Parado (edicao)");
     }
 
@@ -2069,6 +2082,7 @@ public class IgnisEditorApp extends Application {
     // gravacao geraria um dialogo a cada intervalo). Erros vao so para a barra de status.
     private void saveProjectSilently() {
         if (currentProject == null || currentIgnisFile == null) return;
+        if (playing) return;
         if (isCollabSessionProject()) return; // copia temporaria: o host e quem salva
         try {
             syncEntitiesToScene();

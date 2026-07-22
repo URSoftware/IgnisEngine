@@ -4,7 +4,7 @@
     {
       "id": "cave_awakening",
       "cols": 20,
-      "rows": 12,
+      "rows": 16,
       "cellSize": 32,
       "spawnX": 80,
       "spawnY": 208,
@@ -39,7 +39,7 @@
       ],
       "interactables": [
         { "id": "cave_gallery_seal", "x": 176, "y": 80, "radius": 24, "verb": "TALK", "dialogueId": "dlg_gallery_seal", "collectible": false },
-        { "id": "cave_forest_exit", "x": 272, "y": 432, "radius": 22, "verb": "EXAMINE", "dialogueId": "dlg_cave_exit", "collectible": false }
+        { "id": "cave_forest_exit", "x": 272, "y": 432, "radius": 96, "verb": "EXAMINE", "dialogueId": "dlg_cave_exit", "collectible": false }
       ]
     },
     {
@@ -47,18 +47,18 @@
       "cols": 20,
       "rows": 12,
       "cellSize": 32,
-      "spawnX": 96,
-      "spawnY": 192,
+      "spawnX": 304,
+      "spawnY": 58,
       "walls": [
         { "col0": 0, "row0": 0, "col1": 19, "row1": 0 },
-        { "col0": 0, "row0": 11, "col1": 19, "row1": 11 },
-        { "col0": 0, "row0": 0, "col1": 0, "row1": 11 },
-        { "col0": 19, "row0": 0, "col1": 19, "row1": 11 }
+        { "col0": 0, "row0": 15, "col1": 19, "row1": 15 },
+        { "col0": 0, "row0": 0, "col1": 0, "row1": 15 },
+        { "col0": 19, "row0": 0, "col1": 19, "row1": 15 }
       ],
       "interactables": [
-        { "id": "goblin_scout_leader", "x": 400, "y": 192, "radius": 24, "verb": "TALK", "dialogueId": "dlg_goblin_scout_camp", "collectible": false },
-        { "id": "forest_path_north", "x": 320, "y": 96, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_forest_path_north", "collectible": false },
-        { "id": "forest_village_gate", "x": 320, "y": 96, "radius": 24, "verb": "ENTER", "targetAreaId": "goblin_village_pre_naming", "targetSpawnX": 96, "targetSpawnY": 256 }
+        { "id": "goblin_scout_leader", "x": 474, "y": 270, "radius": 36, "verb": "TALK", "dialogueId": "dlg_goblin_scout_camp", "collectible": false },
+        { "id": "forest_path_north", "x": 320, "y": 448, "radius": 28, "verb": "EXAMINE", "dialogueId": "dlg_forest_path_north", "collectible": false },
+        { "id": "forest_village_gate", "x": 320, "y": 448, "radius": 32, "verb": "ENTER", "targetAreaId": "goblin_village_pre_naming", "targetSpawnX": 96, "targetSpawnY": 256 }
       ]
     },
     {

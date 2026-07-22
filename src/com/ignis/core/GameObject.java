@@ -505,7 +505,7 @@ public class GameObject {
                 if (game != null) {
                     script.init(this, game);
                     if (game.getGameState() == Game.GameState.PLAYING) {
-                        script.start();
+                        script.callStart();
                     }
                 }
                 // scriptNames guarda apenas SCRIPTS DE USUARIO (recarregaveis pelo

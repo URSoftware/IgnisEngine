@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sequenceId": "goblin_first_contact",
   "locale": "pt-BR",
   "dialogueIsOriginal": true,
@@ -29,17 +29,37 @@
   },
   "beats": [
     {
-      "id": "forest_threshold",
+      "id": "cave_exit_cinematic",
       "cameraCue": "cave_exit_to_forest_wide",
       "audioCues": ["cave_ambience_fade_out", "tempest_forest_theme_fade_in"],
+      "oneShotClips": ["cutscene_cave_exit_story_v1"],
+      "autoDurationSeconds": 5.05,
+      "lines": []
+    },
+    {
+      "id": "forest_silence",
+      "cameraCue": "forest_arrival_silent_hold",
       "autoDurationSeconds": 2.0,
       "lines": []
     },
     {
       "id": "scouts_emerge",
       "cameraCue": "forest_edge_hold_group_right",
-      "oneShotClips": ["cutscene_goblin_scout_first_contact_canon_v2"],
+      "oneShotClips": ["cutscene_goblin_scout_emerge_v3"],
       "eventsOnEnter": ["goblin_scout_group_reveal"],
+      "autoDurationSeconds": 1.3,
+      "lines": []
+    },
+    {
+      "id": "scouts_alarm",
+      "cameraCue": "forest_edge_hold_group_right",
+      "oneShotClips": ["cutscene_goblin_scout_alarm_v3"],
+      "autoDurationSeconds": 1.25,
+      "lines": []
+    },
+    {
+      "id": "first_words",
+      "cameraCue": "forest_edge_hold_group_right",
       "lines": [
         {
           "id": "gfc_001",
@@ -64,6 +84,7 @@
     {
       "id": "cautious_lowering",
       "cameraCue": "two_subject_medium_with_group_depth",
+      "oneShotClips": ["cutscene_goblin_scout_lower_weapons_v3"],
       "eventsOnEnter": ["goblin_weapons_lower"],
       "lines": [
         {
@@ -116,6 +137,13 @@
         }
       ],
       "eventsAfterLastLine": ["goblin_scout_bow"]
+    },
+    {
+      "id": "scouts_bow",
+      "cameraCue": "two_subject_medium_with_group_depth",
+      "oneShotClips": ["cutscene_goblin_scout_bow_v3"],
+      "autoDurationSeconds": 1.15,
+      "lines": []
     },
     {
       "id": "forest_handoff",

@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "sceneName": "JuraForestScene",
+  "bootstrapObject": "JuraForestSceneBootstrap",
+  "visualSetId": "jura_forest_scene_v2",
+  "background": {
+    "objectName": "JuraForestBackgroundV2",
+    "sprite": "assets/sprites/backgrounds/jura_forest_approach_background_v2.png",
+    "x": 0,
+    "y": 0,
+    "width": 640,
+    "height": 512,
+    "zIndex": -100
+  },
+  "actors": {
+    "player": { "objectName": "Rimuru", "spawnX": 304, "spawnY": 58, "zIndex": 30 },
+    "goblinScout": { "objectName": "GoblinScoutNPC", "x": 474, "y": 270, "zIndex": 35 },
+    "direWolfLeader": { "objectName": "DireWolfLeader", "x": 474, "y": 270, "zIndex": 40, "initiallyVisible": false }
+  },
+  "cutscene": {
+    "animation": "cutscene_cave_exit_story_v1",
+    "renderWidth": 640,
+    "renderHeight": 480,
+    "silentForestHoldSeconds": 2.0,
+    "goblinClips": [
+      "cutscene_goblin_scout_emerge_v3",
+      "cutscene_goblin_scout_alarm_v3",
+      "cutscene_goblin_scout_lower_weapons_v3",
+      "cutscene_goblin_scout_bow_v3"
+    ]
+  },
+  "battleVfx": {
+    "hydrolamina": "battle_hydrolamina_v1",
+    "guardReaction": "battle_guard_reaction_v1",
+    "wolfStrike": "battle_dire_wolf_strike_v1"
+  },
+  "invariants": [
+    "The cave remains in MainScene and exterior exploration starts in JuraForestScene.",
+    "Scene transition saves the campaign before loadScene and resumes from the destination bootstrap.",
+    "Cinematic completion and skip converge on the same idempotent forest state.",
+    "No dialogue is visible during the two-second forest silence hold.",
+    "Battle input is disabled while ACTION or REACTION presentation is playing.",
+    "The forest background and battle stage never reveal the main menu behind a dark overlay."
+  ]
+}

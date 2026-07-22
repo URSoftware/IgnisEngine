@@ -1594,6 +1594,15 @@ public class Game extends Canvas {
     }
 
     public void clearEntities() {
+        // Scene changes retire every script at once. Detach them before dropping
+        // the entity list so global receivers cannot survive into the next scene.
+        for (GameObject entity : new java.util.ArrayList<>(this.entities)) {
+            for (Component component : new java.util.ArrayList<>(entity.getComponents())) {
+                if (component instanceof IgnisScript script) {
+                    script.onDetach();
+                }
+            }
+        }
         this.entities.clear();
         this.runtimeObjects.clear();
         this.sceneSignalDispatcher = new SceneSignalDispatcher(); // Reset scene connections

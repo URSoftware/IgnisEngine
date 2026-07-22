@@ -57,8 +57,16 @@ public final class GameFlowController extends IgnisScript {
     // floresta) e o NPC goblin conversavel — ambos assets/posicao do Codex. Este
     // fluxo so alterna a VISIBILIDADE deles nas transicoes; nao os posiciona.
     // MagiculeMotes NAO entra aqui: continua exclusivo do Horde debug.
-    private static final String FOREST_BACKDROP_OBJECT = "JuraForestFloor";
+    private static final String[] FOREST_BACKDROP_OBJECTS = {
+            "JuraForestBackgroundV2", "JuraForestFloor"
+    };
     private static final String GOBLIN_NPC_OBJECT = "GoblinScoutNPC";
+    private static final String FOREST_SCENE_NAME = "JuraForestScene";
+    private static final String FOREST_AREA_ID = "jura_forest_approach";
+    private static final String FOREST_ARRIVAL_PENDING = "forest_arrival_pending";
+    private static final double FOREST_CAMERA_X = 320.0;
+    private static final double FOREST_CAMERA_Y = 256.0;
+    private static final double FOREST_CAMERA_ZOOM = 1.95;
 
     private static final Map<String, double[]> AREA_OFFSETS = Map.of(
             "cave_awakening", new double[] {0, 0},
@@ -100,6 +108,9 @@ public final class GameFlowController extends IgnisScript {
     private boolean veldoraEncounterCompleted;
     private boolean goblinContactCompleted;
     private boolean duelCompleted;
+    private boolean forestScene;
+    private boolean sceneReadyToLoad;
+    private String pendingSceneName;
 
     private CampaignSnapshot loadedSnapshot;
     private String saveWarningMessage;
@@ -112,13 +123,18 @@ public final class GameFlowController extends IgnisScript {
     private UILabel warningLabel;
     private UILabel objectiveLabel;
     private UILabel debugHintLabel;
+    private UIPanel transitionPanel;
+    private UILabel transitionLabel;
 
     @Override
     public void start() {
-        setCameraZoom(1.6);
+        forestScene = findObject("JuraForestBackgroundV2") != null;
+        setCameraZoom(forestScene ? FOREST_CAMERA_ZOOM : 1.6);
         setMusicVolume(0.28f);
         setSfxVolume(0.6f);
-        playMusic("assets/music/cave_seal_ambience.wav", true);
+        playMusic(forestScene
+                ? "assets/music/tempest_forest_theme.wav"
+                : "assets/music/cave_seal_ambience.wav", true);
 
         mapRoot = readJson(MAP_DATA);
 
@@ -132,7 +148,11 @@ public final class GameFlowController extends IgnisScript {
         }
 
         disableHordeDebug();
-        showMainMenu();
+        if (forestScene) {
+            prepareForestBootstrap();
+        } else {
+            showMainMenu();
+        }
 
         onSceneSignal(SIGNAL_AWAKENING_CUTSCENE_COMPLETE, payload -> completeAwakening());
         onSceneSignal(SIGNAL_REQUEST_VELDORA_ENCOUNTER, payload -> beginVeldoraEncounter());
@@ -155,11 +175,18 @@ public final class GameFlowController extends IgnisScript {
                 onCampaignSaveWarning(warning);
             }
         });
-        onSceneSignal(SIGNAL_SAVED, payload -> log("GameFlowController: campanha salva com sucesso."));
+        onSceneSignal(SIGNAL_SAVED, payload -> {
+            log("GameFlowController: campanha salva com sucesso.");
+            if (pendingSceneName != null) {
+                sceneReadyToLoad = true;
+            }
+        });
         onSceneSignal(SIGNAL_SAVE_FAILED, payload -> {
             if (payload instanceof String failure) {
                 onCampaignSaveWarning(failure);
             }
+            pendingSceneName = null;
+            sceneReadyToLoad = false;
         });
 
         sceneDispatcher.enqueue(SIGNAL_LOAD_REQUEST, null);
@@ -169,6 +196,19 @@ public final class GameFlowController extends IgnisScript {
 
     @Override
     public void tick() {
+        if (sceneReadyToLoad && pendingSceneName != null) {
+            String targetScene = pendingSceneName;
+            sceneReadyToLoad = false;
+            pendingSceneName = null;
+            if (!loadScene(targetScene)) {
+                clearUI();
+                setupExplorationHud("Nao foi possivel carregar a Floresta de Jura. Tente interagir novamente.");
+                sceneDispatcher.enqueue(SIGNAL_EXPLORATION_ACTIVATE, null);
+                state = FlowState.EXPLORATION;
+                log("GameFlowController: falha ao carregar cena " + targetScene + ".");
+            }
+            return;
+        }
         if (state == FlowState.MENU) {
             layoutMenu();
             if (isKeyJustPressed("ENTER")) beginAwakening();
@@ -266,6 +306,10 @@ public final class GameFlowController extends IgnisScript {
         }
         this.loadedSnapshot = snapshot;
         log("GameFlowController: campanha carregada para retomada (area: " + snapshot.areaId() + ").");
+        if (forestScene) {
+            bootstrapForestScene(snapshot);
+            return;
+        }
         if (state == FlowState.MENU) {
             showMainMenu();
         }
@@ -274,6 +318,12 @@ public final class GameFlowController extends IgnisScript {
     private void onCampaignLoadEmpty() {
         this.loadedSnapshot = null;
         log("GameFlowController: nenhum save existente encontrado.");
+        if (forestScene) {
+            bootstrapForestScene(new CampaignSnapshot(
+                    CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                    FOREST_AREA_ID, 304.0, 58.0,
+                    Set.of("awakening_complete", "veldora_encounter_complete", FOREST_ARRIVAL_PENDING)));
+        }
     }
 
     private void onCampaignSaveWarning(String warning) {
@@ -297,6 +347,14 @@ public final class GameFlowController extends IgnisScript {
     private void continueCampaign() {
         if (state != FlowState.MENU || loadedSnapshot == null) return;
         clearUI();
+
+        if (FOREST_AREA_ID.equals(loadedSnapshot.areaId())) {
+            showForestLoadingOverlay();
+            pendingSceneName = FOREST_SCENE_NAME;
+            sceneReadyToLoad = true;
+            state = FlowState.SCENE_TRANSITION;
+            return;
+        }
 
         Set<String> milestones = loadedSnapshot.completedMilestones();
         boolean hasVeldora = milestones.contains("veldora_encounter_complete");
@@ -444,7 +502,7 @@ public final class GameFlowController extends IgnisScript {
             player.setVisible(true);
             player.setOpacity(1);
         }
-        setupExplorationHud("Veldora esta com voce. Encontre a saida da caverna.");
+        setupExplorationHud("Veldora esta com voce. Aproxime-se da saida e pressione [E].");
         sceneDispatcher.enqueue(SIGNAL_EXPLORATION_ACTIVATE, null);
         state = FlowState.EXPLORATION;
 
@@ -460,14 +518,28 @@ public final class GameFlowController extends IgnisScript {
     private void beginGoblinContact() {
         // So depois do Veldora e uma vez so: a guarda espelha beginVeldoraEncounter.
         if (state != FlowState.EXPLORATION || !veldoraEncounterCompleted || goblinContactCompleted) return;
+        if (!forestScene) {
+            clearUI();
+            showForestLoadingOverlay();
+            state = FlowState.SCENE_TRANSITION;
+            pendingSceneName = FOREST_SCENE_NAME;
+            CampaignSnapshot pendingArrival = new CampaignSnapshot(
+                    CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                    FOREST_AREA_ID, 304.0, 58.0,
+                    Set.of("awakening_complete", "veldora_encounter_complete", FOREST_ARRIVAL_PENDING));
+            sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, pendingArrival);
+            log("GameFlowController: saida confirmada; salvando antes de carregar JuraForestScene.");
+            return;
+        }
+        startGoblinContactInForest();
+    }
+
+    private void startGoblinContactInForest() {
         clearUI();
-        // Antes do beat forest_threshold: a Caverna some e o chao da floresta entra,
-        // para a cutscene NAO acontecer sobre a caverna (revisao do Codex). O NPC
-        // goblin so aparece na exploracao final; durante a cutscene o grupo e um
-        // visual de runtime do proprio GoblinContactDirector.
         setCaveSceneObjectsVisible(false);
         setForestBackdropVisible(true);
         setGoblinNpcVisible(false);
+        positionForestPlayer(false);
         sceneDispatcher.enqueue(SIGNAL_ENTER_GOBLIN_CONTACT, null);
         state = FlowState.GOBLIN_CONTACT;
     }
@@ -489,19 +561,93 @@ public final class GameFlowController extends IgnisScript {
 
         CampaignSnapshot snap = new CampaignSnapshot(
                 CampaignSnapshot.CURRENT_SCHEMA_VERSION,
-                "jura_forest_approach", 96.0, 192.0,
+                FOREST_AREA_ID, 304.0, 58.0,
                 Set.of("awakening_complete", "veldora_encounter_complete", "goblin_contact_complete", "goblin_village_route_unlocked"));
         sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
     }
 
     private void setForestBackdropVisible(boolean visible) {
-        GameObject backdrop = findObject(FOREST_BACKDROP_OBJECT);
-        if (backdrop != null) backdrop.setVisible(visible);
+        for (String objectName : FOREST_BACKDROP_OBJECTS) {
+            GameObject backdrop = findObject(objectName);
+            if (backdrop != null) backdrop.setVisible(visible);
+        }
     }
 
     private void setGoblinNpcVisible(boolean visible) {
         GameObject npc = findObject(GOBLIN_NPC_OBJECT);
         if (npc != null) npc.setVisible(visible);
+    }
+
+    private void prepareForestBootstrap() {
+        clearUI();
+        state = FlowState.SCENE_TRANSITION;
+        setCaveSceneObjectsVisible(false);
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(false);
+        setVisible("DireWolfLeader", false);
+        setVisible("CaveExitCinematicPanel", false);
+        setVisible("BattleHydrolaminaVfx", false);
+        setVisible("BattleGuardReactionVfx", false);
+        setVisible("BattleWolfStrikeVfx", false);
+        positionForestPlayer(false);
+        setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+        setCameraZoom(FOREST_CAMERA_ZOOM);
+    }
+
+    private void bootstrapForestScene(CampaignSnapshot snapshot) {
+        if (!forestScene || snapshot == null || state == FlowState.GOBLIN_CONTACT
+                || state == FlowState.EXPLORATION) return;
+        Set<String> milestones = snapshot.completedMilestones();
+        veldoraEncounterCompleted = true;
+        goblinContactCompleted = milestones.contains("goblin_contact_complete");
+        duelCompleted = milestones.contains("dire_wolf_duel_complete");
+        clearUI();
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(false);
+
+        if (goblinContactCompleted) {
+            CampaignSnapshot normalizedSnapshot = new CampaignSnapshot(
+                    CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                    FOREST_AREA_ID, 304.0, 58.0, milestones);
+            loadedSnapshot = normalizedSnapshot;
+            positionForestPlayer(true);
+            setGoblinNpcVisible(true);
+            setupExplorationHud("Floresta de Jura: fale com o goblin para seguir ate a aldeia. [E]");
+            sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, normalizedSnapshot);
+            sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, normalizedSnapshot);
+            state = FlowState.EXPLORATION;
+            log("GameFlowController: save retomado diretamente na JuraForestScene.");
+            return;
+        }
+
+        startGoblinContactInForest();
+        log("GameFlowController: chegada a Jura iniciada pela cutscene de saida.");
+    }
+
+    private void positionForestPlayer(boolean visible) {
+        if (player == null) player = findObject("Rimuru");
+        if (player == null) return;
+        player.setX(304.0 - player.getWidth() / 2.0);
+        player.setY(58.0 - player.getHeight() / 2.0);
+        player.setVisible(visible);
+        player.setOpacity(1);
+    }
+
+    private void showForestLoadingOverlay() {
+        double width = Math.max(480, getGame().getWidth());
+        double height = Math.max(360, getGame().getHeight());
+        transitionPanel = createPanel(0, 0, width, height);
+        setUIColors(transitionPanel, new Color(3, 11, 14, 245), null, null);
+        transitionLabel = createLabel("Saindo da Caverna do Selo...", 0, 0, 520, 42);
+        transitionLabel.setAlignment(UILabel.Alignment.CENTER);
+        transitionLabel.setFont("SansSerif", Font.BOLD, 20);
+        transitionLabel.setTextColor(new Color(194, 241, 246));
+        transitionLabel.setPosition((width - 520) / 2.0, (height - 42) / 2.0);
+    }
+
+    private void setVisible(String objectName, boolean visible) {
+        GameObject object = findObject(objectName);
+        if (object != null) object.setVisible(visible);
     }
 
     // ==================== HordeEncounter (debug) ====================
@@ -651,6 +797,7 @@ public final class GameFlowController extends IgnisScript {
 
     private enum FlowState {
         MENU,
+        SCENE_TRANSITION,
         CUTSCENE,
         VELDORA_ENCOUNTER,
         GOBLIN_CONTACT,

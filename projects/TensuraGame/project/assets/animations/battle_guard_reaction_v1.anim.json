@@ -1,0 +1,12 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    { "duration": 0.12, "sprite": "assets/sprites/vfx/battle/battle_guard_reaction_v1_01.png" },
+    { "duration": 0.12, "sprite": "assets/sprites/vfx/battle/battle_guard_reaction_v1_02.png" },
+    { "duration": 0.18, "sprite": "assets/sprites/vfx/battle/battle_guard_reaction_v1_03.png" },
+    { "duration": 0.10, "sprite": "assets/sprites/vfx/battle/battle_guard_reaction_v1_04.png" },
+    { "duration": 0.24, "sprite": "assets/sprites/vfx/battle/battle_guard_reaction_v1_05.png" }
+  ],
+  "loop": false,
+  "name": "battle_guard_reaction_v1"
+}

@@ -82,12 +82,15 @@ public final class ExplorationDirector extends IgnisScript {
     private static final String CAVE_EXIT_TRIGGER_DIALOGUE_ID = "dlg_cave_exit";
     private static final String GOBLIN_SCOUT_TRIGGER_DIALOGUE_ID = "dlg_goblin_scout_camp";
     private static final String FOREST_AREA_ID = "jura_forest_approach";
+    private static final double FOREST_CAMERA_X = 320.0;
+    private static final double FOREST_CAMERA_Y = 256.0;
+    private static final double FOREST_CAMERA_ZOOM = 1.95;
 
     private static final String MILESTONE_VELDORA_COMPLETE = "veldora_encounter_complete";
     private static final String MILESTONE_GOBLIN_CONTACT_COMPLETE = "goblin_contact_complete";
     private static final String MILESTONE_DUEL_COMPLETE = "dire_wolf_duel_complete";
 
-    private static final Map<String, double[]> AREA_OFFSETS = Map.of(
+    private static final Map<String, double[]> LEGACY_AREA_OFFSETS = Map.of(
             "cave_awakening", new double[] {0, 0},
             "cave_gallery", new double[] {900, 0},
             FOREST_AREA_ID, new double[] {0, 700},
@@ -100,6 +103,8 @@ public final class ExplorationDirector extends IgnisScript {
     private JSONObject mapRoot;
     private Map<String, ExplorationArea> areas;
     private Map<String, DialogueScript> dialogues;
+    private Map<String, double[]> areaOffsets = LEGACY_AREA_OFFSETS;
+    private boolean fixedForestCamera;
     private boolean active;
     private boolean uiReady;
     private boolean veldoraRequested;
@@ -117,6 +122,10 @@ public final class ExplorationDirector extends IgnisScript {
         mapRoot = readJson(MAP_DATA);
         areas = loadAreas(mapRoot);
         dialogues = loadDialogues(readJson(DIALOGUE_DATA));
+        fixedForestCamera = findObject("JuraForestBackgroundV2") != null;
+        if (fixedForestCamera) {
+            areaOffsets = Map.of(FOREST_AREA_ID, new double[] {0, 0});
+        }
 
         onSceneSignal(SIGNAL_ENTER_EXPLORATION, payload -> beginExploration());
         onSceneSignal(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, payload -> {
@@ -162,12 +171,15 @@ public final class ExplorationDirector extends IgnisScript {
             if (event.type() == ExplorationEventType.DIALOGUE_ENDED) {
                 if ("dlg_prep_entrance".equals(event.detail())) {
                     defenseState = defenseState.togglePreparation(VillagePreparation.REINFORCE_ENTRANCE);
+                    updateDefenseVisuals();
                     log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
                 } else if ("dlg_prep_flank".equals(event.detail())) {
                     defenseState = defenseState.togglePreparation(VillagePreparation.LIGHT_FLANK);
+                    updateDefenseVisuals();
                     log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
                 } else if ("dlg_prep_bait".equals(event.detail())) {
                     defenseState = defenseState.togglePreparation(VillagePreparation.CONTROLLED_BAIT);
+                    updateDefenseVisuals();
                     log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
                 }
             }
@@ -185,7 +197,7 @@ public final class ExplorationDirector extends IgnisScript {
         Interactable focused = currentArea != null
                 ? currentArea.findInteractable(snapshot.focusedInteractableId())
                 : null;
-        double[] offset = AREA_OFFSETS.getOrDefault(snapshot.areaId(), new double[] {0, 0});
+        double[] offset = areaOffsets.getOrDefault(snapshot.areaId(), new double[] {0, 0});
         // Prompt de interacao some durante o dialogo (revisao visual do Codex): passar
         // null forca o InteractionController a esconder, sem ele precisar saber de
         // dialogo (continua so conhecendo o Interactable focado).
@@ -237,13 +249,46 @@ public final class ExplorationDirector extends IgnisScript {
             player.setVisible(true);
             player.setOpacity(1);
         }
-        explorationController.configure(simulation, player, AREA_OFFSETS);
+        explorationController.configure(simulation, player, areaOffsets, fixedForestCamera);
+        if (fixedForestCamera) {
+            setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+            setCameraZoom(FOREST_CAMERA_ZOOM);
+        }
         if (!uiReady) {
             interactionController.setup();
             dialogueController.setup();
             uiReady = true;
         }
         active = true;
+        updateDefenseVisuals();
+    }
+
+    private void updateDefenseVisuals() {
+        GameObject palisadeProp = findObject("palisade_barrier");
+        if (palisadeProp == null) palisadeProp = findObject("prep_entrance_barrier");
+        if (palisadeProp != null) {
+            if (defenseState.isSelected(VillagePreparation.REINFORCE_ENTRANCE)) {
+                palisadeProp.setSpritePath("assets/sprites/props/goblin_village/goblin_village_palisade_reinforced_v1.png");
+            } else {
+                palisadeProp.setSpritePath("assets/sprites/props/goblin_village/goblin_village_palisade_neutral_v1.png");
+            }
+        }
+
+        GameObject torchProp = findObject("prep_flank_torches");
+        if (torchProp != null) {
+            if (defenseState.isSelected(VillagePreparation.LIGHT_FLANK)) {
+                torchProp.setSpritePath("assets/sprites/props/goblin_village/goblin_village_torch_lit_v1.png");
+            } else {
+                torchProp.setSpritePath("assets/sprites/props/goblin_village/goblin_village_torch_unlit_v1.png");
+            }
+        }
+
+        GameObject baitProp = findObject("prep_controlled_bait");
+        if (baitProp != null) {
+            if (defenseState.isSelected(VillagePreparation.CONTROLLED_BAIT)) {
+                baitProp.setSpritePath("assets/sprites/props/goblin_village/goblin_village_controlled_bait_v1.png");
+            }
+        }
     }
 
     private boolean shouldRequestVeldoraEncounter(ExplorationSnapshot snapshot) {
@@ -374,6 +419,7 @@ public final class ExplorationDirector extends IgnisScript {
 
         private ExplorationSimulation simulation;
         private GameObject player;
+        private boolean fixedCamera;
         // O dominio usa coordenadas LOCAIS a cada area (cada area comeca do zero). No
         // mundo do editor as duas areas vivem lado a lado (nao ha troca real de cena —
         // ver nota na classe externa), entao cada area precisa de um deslocamento
@@ -381,9 +427,14 @@ public final class ExplorationDirector extends IgnisScript {
         private Map<String, double[]> areaOffsets = Map.of();
 
         /** Liga a simulacao e o visual do jogador; chame antes do primeiro update(). */
-        void configure(ExplorationSimulation simulation, GameObject player, Map<String, double[]> areaOffsets) {
+        void configure(
+                ExplorationSimulation simulation,
+                GameObject player,
+                Map<String, double[]> areaOffsets,
+                boolean fixedCamera) {
             this.simulation = simulation;
             this.player = player;
+            this.fixedCamera = fixedCamera;
             if (player != null) {
                 player.setVisible(true);
                 player.setOpacity(1);
@@ -398,12 +449,15 @@ public final class ExplorationDirector extends IgnisScript {
         }
 
         ExplorationSnapshot update(double deltaTime, boolean interactPressed) {
-            // Mesma conversao tela->mundo do RunInput da arena: W/seta-cima = +1 no
-            // mundo, sem essa troca o jogador andaria para baixo ao apertar W.
+            // O eixo Y do mundo na Ignis e invertido em relacao ao renderizador visual da camera.
+            // RunInput.fromScreenAxes converte getVerticalAxis() (W=-1, S=+1) para garantir que
+            // a tecla W mova o sprite visualmente para CIMA e a tecla S para BAIXO.
             RunInput movement = RunInput.fromScreenAxes(getHorizontalAxis(), getVerticalAxis());
             ExplorationSnapshot snapshot = simulation.update(deltaTime, movement, interactPressed);
             syncPlayer(snapshot);
-            cameraFollow(player, 0.18);
+            if (!fixedCamera) {
+                cameraFollow(player, 0.18);
+            }
             return snapshot;
         }
 
@@ -462,10 +516,10 @@ public final class ExplorationDirector extends IgnisScript {
         private String lastFocusedId;
 
         void setup() {
-            promptPanel = createPanel(0, 0, 132, 34);
+            promptPanel = createPanel(0, 0, 166, 36);
             setUIColors(promptPanel, new Color(6, 15, 23, 235), null, new Color(87, 217, 242));
             promptIcon = createImage(UI + "icon_interact_examine.png", 0, 0, 22, 22);
-            promptLabel = createLabel("", 0, 0, 96, 22);
+            promptLabel = createLabel("", 0, 0, 130, 22);
             promptLabel.setFont("SansSerif", Font.BOLD, 13);
             promptLabel.setTextColor(new Color(226, 248, 255));
             setPromptVisible(false);
@@ -487,7 +541,7 @@ public final class ExplorationDirector extends IgnisScript {
                 return;
             }
             promptIcon.setImagePath(iconFor(focused.verb()));
-            promptLabel.setText(verbLabel(focused.verb()));
+            promptLabel.setText(actionLabel(focused));
             setPromptVisible(true);
             positionPrompt(focused, offsetX, offsetY);
         }
@@ -521,12 +575,14 @@ public final class ExplorationDirector extends IgnisScript {
             };
         }
 
-        private String verbLabel(InteractionVerb verb) {
+        private String actionLabel(Interactable focused) {
+            if ("cave_forest_exit".equals(focused.id())) return "Sair  [E]";
+            InteractionVerb verb = focused.verb();
             return switch (verb) {
-                case EXAMINE -> "Examinar";
-                case TALK -> "Conversar";
-                case COLLECT -> "Coletar";
-                case ENTER -> "Entrar";
+                case EXAMINE -> "Examinar  [E]";
+                case TALK -> "Conversar  [E]";
+                case COLLECT -> "Coletar  [E]";
+                case ENTER -> "Entrar  [E]";
             };
         }
     }

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "visualSetId": "jura_forest_dressing_v1",
+  "source": "assets/source/jura_forest_props_alpha_v1.png",
+  "assets": {
+    "treeCanopy": "assets/sprites/props/jura_forest/jura_tree_canopy_v1.png",
+    "mossyStump": "assets/sprites/props/jura_forest/jura_mossy_stump_v1.png",
+    "fernCluster": "assets/sprites/props/jura_forest/jura_fern_cluster_v1.png",
+    "magiculeMushrooms": "assets/sprites/props/jura_forest/jura_magicule_mushrooms_v1.png",
+    "mossyBoulder": "assets/sprites/props/jura_forest/jura_mossy_boulder_v1.png",
+    "fallenLog": "assets/sprites/props/jura_forest/jura_fallen_log_v1.png"
+  },
+  "invariants": [
+    "Forest dressing is presentation-only and has no collider.",
+    "The route between Rimuru and the goblin scout remains visually open.",
+    "Props do not replace or parent the persistent Rimuru actor.",
+    "Runtime sprites use binary alpha and nearest-neighbor scaling."
+  ]
+}

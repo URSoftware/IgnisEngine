@@ -351,6 +351,16 @@ public final class BattleDirector extends IgnisScript {
         if (leaderActor != null) {
             leaderActor.setVisible(true);
             leaderActor.setOpacity(1);
+            GameObject player = findObject("Rimuru");
+            if (player != null) {
+                double px = player.getX();
+                double py = player.getY();
+                // Posiciona o Lider dos Lobos dentro da safe area visual (160px a direita de Rimuru)
+                leaderActor.setX(px + 160);
+                leaderActor.setY(py - 10);
+                // Centraliza a camera no meio da arena entre Rimuru e o Lider
+                setCameraPosition(px + 80, py - 10);
+            }
         }
     }
 
@@ -398,6 +408,15 @@ public final class BattleDirector extends IgnisScript {
         messageLabel.setSize(Math.min(900, width - 40), 54);
         messageLabel.setPosition((width - messageLabel.getWidth()) / 2.0, height - 70);
         reactionLabel.setPosition((width - 400) / 2.0, height / 2.0 - 20);
+
+        if (leaderPortraitImage != null) {
+            leaderPortraitImage.setPosition(margin + 16, 72);
+        }
+        double telegraphX = (width - 128) / 2.0;
+        double telegraphY = 56;
+        if (biteTelegraphImage != null) biteTelegraphImage.setPosition(telegraphX, telegraphY);
+        if (packCallTelegraphImage != null) packCallTelegraphImage.setPosition(telegraphX, telegraphY);
+        if (chargeTelegraphImage != null) chargeTelegraphImage.setPosition(telegraphX, telegraphY);
     }
 
     private void setUiVisible(boolean visible) {

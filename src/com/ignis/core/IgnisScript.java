@@ -135,6 +135,13 @@ public abstract class IgnisScript extends Component {
         }
     }
 
+    public final void callStart() {
+        if (!started) {
+            start();
+            started = true;
+        }
+    }
+
     public final void internalTick() {
         if (!enabled) return;
         
@@ -144,10 +151,7 @@ public abstract class IgnisScript extends Component {
             callAwake();
         }
         
-        if (!started) {
-            start();
-            started = true;
-        }
+        callStart();
         
         tick();
         update((float) getDeltaTime());

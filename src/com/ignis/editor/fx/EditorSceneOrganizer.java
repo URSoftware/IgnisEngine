@@ -34,6 +34,7 @@ final class EditorSceneOrganizer {
 
     // Evita que a repopulacao programatica do seletor dispare o handler de troca.
     private boolean updatingSceneSelector = false;
+    private boolean runtimeSceneChanged = false;
 
     EditorSceneOrganizer(IgnisEditorApp app) {
         this.app = app;
@@ -90,7 +91,7 @@ final class EditorSceneOrganizer {
     private void loadSceneIntoGame(Scene target) {
         app.setSelected(null);
         app.clearSecondarySelection();
-        app.game.getEntities().clear();
+        app.game.clearEntities();
         app.clearGameCameras();
         if (target != null) {
             for (GameObject e : target.getEntities()) {
@@ -103,6 +104,19 @@ final class EditorSceneOrganizer {
             if (app.game.getScriptManager() != null) app.reloadAllScriptInstances();
         } catch (Exception ignore) { /* scripts opcionais */ }
         app.refreshHierarchy();
+    }
+
+    void beginPlaySession() {
+        runtimeSceneChanged = false;
+    }
+
+    boolean restoreEditingSceneAfterPlay() {
+        if (!runtimeSceneChanged) return false;
+        runtimeSceneChanged = false;
+        Scene editingScene = app.currentProject != null ? app.currentProject.getCurrentScene() : null;
+        loadSceneIntoGame(editingScene);
+        refreshSceneSelector();
+        return true;
     }
 
     // Troca a cena ativa do editor: persiste a cena atual no projeto e carrega a nova.
@@ -129,11 +143,21 @@ final class EditorSceneOrganizer {
         if (app.currentProject == null || sceneName == null) return false;
         Scene target = app.currentProject.getSceneByName(sceneName);
         if (target == null) return false;
+        if (app.playing && !Platform.isFxApplicationThread()) {
+            runtimeSceneChanged = true;
+            Platform.runLater(() -> {
+                if (app.playing) onScriptSceneChange(sceneName);
+            });
+            return true;
+        }
         if (app.playing) {
             Scene copy = Scene.fromJSON(target.toJSON(), app.game);
             app.setSelected(null);
             app.clearSecondarySelection();
-            app.game.getEntities().clear();
+            // Scene transitions must also discard the previous scene dispatcher.
+            // Clearing only the entity list leaves signal receivers from retired
+            // scripts alive, so load/save/cutscene events are handled repeatedly.
+            app.game.clearEntities();
             app.clearGameCameras();
             for (GameObject e : copy.getEntities()) {
                 e.setGame(app.game);
@@ -145,6 +169,7 @@ final class EditorSceneOrganizer {
             try {
                 if (app.game.getScriptManager() != null) app.reloadAllScriptInstances();
             } catch (Exception ignore) { /* scripts opcionais */ }
+            runtimeSceneChanged = true;
             Platform.runLater(app::refreshHierarchy);
         } else {
             Platform.runLater(() -> switchEditorToScene(target));

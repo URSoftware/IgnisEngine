@@ -107,11 +107,15 @@ public final class GoblinContactDirector extends IgnisScript {
 
         private static final String PORTRAITS = "assets/sprites/portraits/";
         private static final String FOREST_MUSIC = "assets/music/tempest_forest_theme.wav";
-        // Clipe canonico v2 do Codex (quadros 128x128), exibido em 384x384 = escala
-        // inteira 3x, com pivot centro-inferior (o grupo pisa no chao da floresta).
-        // Nao editar os assets v2; so consumi-los aqui.
-        private static final String GOBLIN_GROUP_CLIP = "cutscene_goblin_scout_first_contact_canon_v2";
-        private static final int GOBLIN_GROUP_SIZE = 384;
+        private static final String CAVE_EXIT_CLIP = "cutscene_cave_exit_story_v1";
+        private static final String GOBLIN_EMERGE_CLIP = "cutscene_goblin_scout_emerge_v3";
+        private static final String GOBLIN_ALARM_CLIP = "cutscene_goblin_scout_alarm_v3";
+        private static final String GOBLIN_LOWER_CLIP = "cutscene_goblin_scout_lower_weapons_v3";
+        private static final String GOBLIN_BOW_CLIP = "cutscene_goblin_scout_bow_v3";
+        private static final int GOBLIN_GROUP_SIZE = 192;
+        private static final double FOREST_CAMERA_X = 320.0;
+        private static final double FOREST_CAMERA_Y = 256.0;
+        private static final double FOREST_CAMERA_ZOOM = 1.95;
         private static final String SPEAKER_GREAT_SAGE = "great_sage";
         private static final String SPEAKER_RIMURU = "rimuru";
 
@@ -120,6 +124,7 @@ public final class GoblinContactDirector extends IgnisScript {
 
         private NarrativeSequence sequence;
         private GameObject actor;
+        private GameObject cinematicPanel;
         private GameObject goblinGroupVisual;
         private double actorCenterX;
         private double actorCenterY;
@@ -147,11 +152,9 @@ public final class GoblinContactDirector extends IgnisScript {
             actor = player;
             actorCenterX = actor.getX() + actor.getWidth() / 2.0;
             actorCenterY = actor.getY() + actor.getHeight() / 2.0;
-            // Grupo de goblins entra a DIREITA da boca da caverna (cameraCue
-            // "forest_edge_hold_group_right" nos dados), pisando no chao ao lado de
-            // Rimuru. Centro-inferior a direita, livre do corpo do ator.
-            groupGroundX = actorCenterX + 210;
-            groupGroundY = actorCenterY + 14;
+            cinematicPanel = findObject("CaveExitCinematicPanel");
+            groupGroundX = 496;
+            groupGroundY = 220;
             completionDelivered = false;
             shownBeatId = null;
             shownLineId = null;
@@ -165,8 +168,8 @@ public final class GoblinContactDirector extends IgnisScript {
             setupUi();
             enterBeat(sequence.currentBeat().id());
             showLine(sequence.currentLine());
-            setCameraPosition((actorCenterX + groupGroundX) / 2.0, actorCenterY - 40);
-            setCameraZoom(1.2);
+            setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+            setCameraZoom(FOREST_CAMERA_ZOOM);
             log("Contato goblin iniciado: beats=" + data.getJSONArray("beats").length());
         }
 
@@ -228,31 +231,48 @@ public final class GoblinContactDirector extends IgnisScript {
         private void enterBeat(String beatId) {
             shownBeatId = beatId;
             switch (beatId) {
-                case "forest_threshold" -> {
-                    sceneCaption.setText("SAINDO PARA A FLORESTA DE JURA");
-                    sceneCaption.setVisible(true);
-                    // Troca de trilha: ambiente da caverna -> tema da floresta
-                    // (audioCues "cave_ambience_fade_out" + "tempest_forest_theme_fade_in").
+                case "cave_exit_cinematic" -> {
+                    destroyGoblinGroup();
+                    actor.setVisible(false);
+                    sceneCaption.setVisible(false);
+                    if (cinematicPanel != null) {
+                        cinematicPanel.setVisible(true);
+                        attachAndPlay(cinematicPanel, CAVE_EXIT_CLIP, false);
+                    }
                     setMusicVolume(0.32f);
                     playMusic(FOREST_MUSIC, true);
+                    setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+                    setCameraZoom(FOREST_CAMERA_ZOOM);
+                }
+                case "forest_silence" -> {
+                    hideCinematicPanel();
+                    actor.setVisible(true);
+                    actor.setOpacity(1);
+                    sceneCaption.setVisible(false);
+                    setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+                    setCameraZoom(FOREST_CAMERA_ZOOM);
                 }
                 case "scouts_emerge" -> {
+                    hideCinematicPanel();
+                    actor.setVisible(true);
                     sceneCaption.setVisible(false);
-                    // eventsOnEnter "goblin_scout_group_reveal": o grupo surge na borda
-                    // da floresta a direita, tocando o clipe canonico v2 (384x384,
-                    // pivot centro-inferior) do primeiro contato.
                     goblinGroupVisual = createBottomPivotVisual(
                             "GoblinScoutGroup", groupGroundX, groupGroundY, GOBLIN_GROUP_SIZE, 36);
-                    attachAndPlay(goblinGroupVisual, GOBLIN_GROUP_CLIP, true);
-                    setCameraPosition((actorCenterX + groupGroundX) / 2.0 + 20, actorCenterY - 60);
-                    setCameraZoom(1.12);
+                    attachAndPlay(goblinGroupVisual, GOBLIN_EMERGE_CLIP, false);
+                    setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+                    setCameraZoom(FOREST_CAMERA_ZOOM);
+                }
+                case "scouts_alarm" -> {
+                    sceneCaption.setVisible(false);
+                    attachAndPlay(goblinGroupVisual, GOBLIN_ALARM_CLIP, false);
                 }
                 case "cautious_lowering" -> {
-                    // eventsOnEnter "goblin_weapons_lower": aproxima a camera nos dois
-                    // sujeitos com o grupo ao fundo (hostilidade cai). Sem novo VFX.
                     sceneCaption.setVisible(false);
-                    setCameraPosition((actorCenterX + groupGroundX) / 2.0, actorCenterY - 40);
-                    setCameraZoom(1.24);
+                    attachAndPlay(goblinGroupVisual, GOBLIN_LOWER_CLIP, false);
+                }
+                case "scouts_bow" -> {
+                    sceneCaption.setVisible(false);
+                    attachAndPlay(goblinGroupVisual, GOBLIN_BOW_CLIP, false);
                 }
                 case "request_and_choice" -> sceneCaption.setVisible(false);
                 case "forest_handoff" -> {
@@ -261,8 +281,8 @@ public final class GoblinContactDirector extends IgnisScript {
                     // sao emitidos por GameFlowController ao receber COMPLETE.
                     sceneCaption.setVisible(false);
                     destroyGoblinGroup();
-                    setCameraPosition(actorCenterX, actorCenterY);
-                    setCameraZoom(1.6);
+                    setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+                    setCameraZoom(FOREST_CAMERA_ZOOM);
                 }
                 default -> sceneCaption.setVisible(false);
             }
@@ -361,14 +381,19 @@ public final class GoblinContactDirector extends IgnisScript {
 
         private void finishVisualState() {
             destroyGoblinGroup();
+            hideCinematicPanel();
             setDialogueVisible(false);
             sceneCaption.setVisible(false);
             skipLabel.setVisible(false);
             cinemaShade.setVisible(false);
             actor.setVisible(true);
             actor.setOpacity(1);
-            setCameraPosition(actorCenterX, actorCenterY);
-            setCameraZoom(1.6);
+            setCameraPosition(FOREST_CAMERA_X, FOREST_CAMERA_Y);
+            setCameraZoom(FOREST_CAMERA_ZOOM);
+        }
+
+        private void hideCinematicPanel() {
+            if (cinematicPanel != null) cinematicPanel.setVisible(false);
         }
 
         private void destroyGoblinGroup() {
@@ -395,7 +420,7 @@ public final class GoblinContactDirector extends IgnisScript {
             visual.setWidth(size);
             visual.setHeight(size);
             visual.setX(groundX - size / 2.0);
-            visual.setY(groundY - size);
+            visual.setY(groundY);
             visual.setZIndex(zIndex);
             visual.setVisible(true);
             return visual;

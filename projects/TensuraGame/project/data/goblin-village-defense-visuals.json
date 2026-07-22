@@ -36,6 +36,13 @@
       "semanticState": "NONE"
     }
   },
+  "placements": {
+    "palisade_barrier": { "x": 120, "y": 1288, "width": 160, "height": 64 },
+    "prep_flank_torches": { "x": 296, "y": 1260, "width": 48, "height": 80 },
+    "prep_controlled_bait": { "x": 468, "y": 1272, "width": 64, "height": 56 },
+    "village_tents": { "x": 486, "y": 1302, "width": 128, "height": 96 },
+    "village_supplies_tent": { "x": 586, "y": 1372, "width": 128, "height": 96 }
+  },
   "invariants": [
     "A preparation changes only its own prop state and never replaces the player actor.",
     "The three palisade sprites are mutually exclusive states of one entrance prop.",
