@@ -55,6 +55,51 @@
       "lines": [
         { "speaker": "Grande Sabio", "text": "Trilha ao norte leva ao territorio dos goblins. Presenca de lobos aumenta naquela direcao." }
       ]
+    },
+    {
+      "id": "dlg_goblin_elder_welcome",
+      "lines": [
+        { "speaker": "Anciao Goblin", "text": "Grande Senhor Rimuru, a nossa aldeia esta a salva gracas a sua lideranca!" },
+        { "speaker": "Anciao Goblin", "text": "Os lobos sobreviventes cessaram o ataque e aguardam suas ordens." }
+      ]
+    },
+    {
+      "id": "dlg_palisade_inspect",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Barreira defensiva inspecionada. As preparacoes reduziram os danos a estrutura." }
+      ]
+    },
+    {
+      "id": "dlg_tents_inspect",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Tendas da aldeia protegidas. Moradores salvos e seguros." }
+      ]
+    },
+    {
+      "id": "dlg_ranga_allegiance",
+      "lines": [
+        { "speaker": "Lobo Herdeiro", "text": "Nosso lider caiu perante a sua forca. Eu e minha matilha serviremos a voce." },
+        { "speaker": "Rimuru", "text": "De agora em diante, seu nome sera Ranga!" },
+        { "speaker": "Grande Sabio", "text": "Nomeacao concluida. Consumo de magiaules registrado e estabilizado." }
+      ]
+    },
+    {
+      "id": "dlg_prep_entrance",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Preparacao: Reforcar Entrada. Posicionar estacas de madeira reduz o dano inicial da investida da matilha." }
+      ]
+    },
+    {
+      "id": "dlg_prep_flank",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Preparacao: Iluminar Flanco. Tochas estrategicas ampliam o tempo de visibilidade e a janela de reacao." }
+      ]
+    },
+    {
+      "id": "dlg_prep_bait",
+      "lines": [
+        { "speaker": "Grande Sabio", "text": "Preparacao: Isca Controlada. Atrair os lobos secundarios reduz a moral e a vitalidade inicial do lider." }
+      ]
     }
   ]
 }

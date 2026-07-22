@@ -1,5 +1,7 @@
 import com.ignis.core.AssetResolver;
+import com.ignis.core.GameObject;
 import com.ignis.core.IgnisScript;
+import com.ignis.core.ui.UIImage;
 import com.ignis.core.ui.UILabel;
 import com.ignis.core.ui.UIPanel;
 import com.rimurusurvivors.domain.BattleActionResult;
@@ -31,20 +33,7 @@ import java.util.Set;
  *
  * <p>Adaptador FINO: toda regra de jogo vive em {@link BattleSimulation} e a
  * classificacao de tempo de reacao em {@link ReactionWindow}, ambos do jar de
- * dominio. Este script so traduz snapshot -> HUD de texto e input -> comando de
- * dominio. Nenhum "if" aqui decide o resultado da batalha; ele apenas apresenta.
- *
- * <p>Coordenacao entre scripts por sinais de cena (nunca referencia direta —
- * scripts do Ignis compilam isoladamente). Cada nome de sinal tem o par exato em
- * GameFlowController quando a fatia da aldeia estiver ligada; por ora o duelo e
- * alcancavel por uma entrada de depuracao (F10), espelhando o HordeEncounter (F9),
- * sem tocar no fluxo Caverna -> Floresta que ja funciona.
- *
- * <p>Assets de apresentacao final (retratos de batalha, telegraphs animados,
- * cutscene de rendicao/nomeacao) sao do Codex e ainda nao existem; a resolucao
- * usa um painel de texto e emite TENSURA_DIRE_WOLF_DUEL_COMPLETE. A persistencia
- * do desfecho (marco semantico) e a cutscene de nomeacao ficam com quem recebe
- * esse sinal (GameFlowController), preservando a fronteira de responsabilidade.
+ * dominio. Este script traduz snapshot -> HUD visual e input -> comando de dominio.
  */
 public final class BattleDirector extends IgnisScript {
 
@@ -52,49 +41,56 @@ public final class BattleDirector extends IgnisScript {
     private static final String SIGNAL_DUEL_COMPLETE = "TENSURA_DIRE_WOLF_DUEL_COMPLETE";
 
     private static final String BATTLE_DATA = "data/battle-dire-wolf-leader.json";
-    // Semente fixa: duelo deterministico e reproduzivel ("semente X, turno Y").
-    // Quando o duelo for disparado pela narrativa, a semente vira payload do sinal.
     private static final long DEFAULT_SEED = 20260721L;
-    // Preparacoes padrao da entrada de depuracao; a narrativa passara as 2 escolhas
-    // reais da aldeia no payload de TENSURA_ENTER_DIRE_WOLF_DUEL.
     private static final Set<VillagePreparation> DEFAULT_PREPARATIONS = Set.of(
             VillagePreparation.REINFORCE_ENTRANCE, VillagePreparation.LIGHT_FLANK);
 
-    private JSONObject config;
-    private ReactionWindow reactionWindow;
-    private double telegraphSeconds;
+    private static final String PORTRAIT_PATH = "assets/sprites/ui/battle/dire_wolf_leader_portrait_v1.png";
+    private static final String BITE_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_bite_v1.png";
+    private static final String PACK_CALL_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_pack_call_v1.png";
+    private static final String CHARGE_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_charge_v1.png";
+
     private final Map<String, BattleCommand> keyToCommand = new LinkedHashMap<>();
-    private final Map<String, String> commandLabel = new LinkedHashMap<>();
     private final Map<String, String> commandKey = new LinkedHashMap<>();
+    private final Map<String, String> commandLabel = new LinkedHashMap<>();
     private final Map<String, String> commandHint = new LinkedHashMap<>();
     private final Map<String, String> outcomeText = new LinkedHashMap<>();
     private final Map<String, String> gradeLabel = new LinkedHashMap<>();
 
+    private JSONObject config;
+    private double telegraphSeconds = 1.1;
+    private ReactionWindow reactionWindow = ReactionWindow.standard();
+
     private BattleSimulation battle;
     private Mode mode = Mode.INACTIVE;
-    private String statusMessage = "";
     private double reactionElapsed;
-    private boolean uiReady;
+    private String statusMessage = "";
     private boolean completionDelivered;
 
+    private boolean uiReady;
     private UIPanel shade;
-    private UIPanel statusPanel;
-    private UIPanel commandPanel;
     private UILabel titleLabel;
+    private UIPanel statusPanel;
     private UILabel vitalsLabel;
     private UILabel intentionLabel;
+    private UIPanel commandPanel;
     private UILabel commandsLabel;
     private UILabel messageLabel;
     private UILabel reactionLabel;
 
-    @Override
+    private UIImage leaderPortraitImage;
+    private UIImage biteTelegraphImage;
+    private UIImage packCallTelegraphImage;
+    private UIImage chargeTelegraphImage;
+    private GameObject leaderActor;
+
     public void start() {
         config = readJson(BATTLE_DATA);
         parseConfig(config);
         onSceneSignal(SIGNAL_ENTER_DUEL, this::beginDuelFromSignal);
+        log("BattleDirector: inicializado. Depuracao pronta (F10).");
     }
 
-    @Override
     public void tick() {
         if (mode == Mode.INACTIVE) {
             if (isKeyJustPressed("F10")) {
@@ -109,6 +105,7 @@ public final class BattleDirector extends IgnisScript {
             default -> { }
         }
         layoutUi();
+        updateTelegraphs();
     }
 
     // ==================== Entrada do duelo ====================
@@ -123,6 +120,7 @@ public final class BattleDirector extends IgnisScript {
         completionDelivered = false;
         reactionElapsed = 0;
         statusMessage = "Escolha um comando. Leia a intencao do lider antes de agir.";
+        ensureLeaderActor();
         setupUi();
         setUiVisible(true);
         mode = Mode.COMMAND;
@@ -159,8 +157,6 @@ public final class BattleDirector extends IgnisScript {
     }
 
     private void chooseCommand(BattleCommand command) {
-        // DEFEND sempre abre a janela reativa: a leitura de tempo pertence ao
-        // dominio (ReactionWindow), este script so mede o instante da tecla.
         if (command == BattleCommand.DEFEND) {
             reactionElapsed = 0;
             mode = Mode.REACTION;
@@ -179,7 +175,6 @@ public final class BattleDirector extends IgnisScript {
             applyCommand(BattleCommand.DEFEND, timing, timing.name());
             return;
         }
-        // Sem reacao dentro da janela ativa: conta como golpe cheio (NONE).
         if (reactionElapsed > telegraphSeconds + reactionWindow.activeRadius()) {
             applyCommand(BattleCommand.DEFEND, ReactionTiming.NONE, ReactionTiming.NONE.name());
         }
@@ -214,6 +209,10 @@ public final class BattleDirector extends IgnisScript {
         completionDelivered = true;
         BattleOutcome outcome = battle.outcome();
         setUiVisible(false);
+        hideAllTelegraphs();
+        if (leaderActor != null) {
+            leaderActor.setVisible(false);
+        }
         setCameraZoom(1.6);
         mode = Mode.INACTIVE;
         sceneDispatcher.enqueue(SIGNAL_DUEL_COMPLETE, outcome.name());
@@ -336,7 +335,47 @@ public final class BattleDirector extends IgnisScript {
         reactionLabel.setOutline(true, new Color(40, 16, 6), 2);
         reactionLabel.setVisible(false);
 
+        leaderPortraitImage = createImage(PORTRAIT_PATH, 30, 75, 72, 72);
+        biteTelegraphImage = createImage(BITE_TELEGRAPH_PATH, 420, 160, 128, 128);
+        packCallTelegraphImage = createImage(PACK_CALL_TELEGRAPH_PATH, 420, 160, 128, 128);
+        chargeTelegraphImage = createImage(CHARGE_TELEGRAPH_PATH, 420, 160, 128, 128);
+        hideAllTelegraphs();
+
         layoutUi();
+    }
+
+    private void ensureLeaderActor() {
+        if (leaderActor == null) {
+            leaderActor = findObject("DireWolfLeader");
+        }
+        if (leaderActor != null) {
+            leaderActor.setVisible(true);
+            leaderActor.setOpacity(1);
+        }
+    }
+
+    private void updateTelegraphs() {
+        if (mode != Mode.INACTIVE && mode != Mode.RESULT && battle != null) {
+            BattleIntention intention = battle.currentIntention();
+            boolean isReacting = mode == Mode.REACTION || intention.requiresReaction();
+            if (isReacting) {
+                String actionName = intention.actionName();
+                boolean isBite = actionName.contains("Mordida") || actionName.contains("Probing") || actionName.contains("Sondagem");
+                boolean isPackCall = actionName.contains("Chamado") || actionName.contains("Pack") || actionName.contains("Pressao");
+
+                if (biteTelegraphImage != null) biteTelegraphImage.setVisible(isBite);
+                if (packCallTelegraphImage != null) packCallTelegraphImage.setVisible(isPackCall);
+                if (chargeTelegraphImage != null) chargeTelegraphImage.setVisible(!isBite && !isPackCall);
+                return;
+            }
+        }
+        hideAllTelegraphs();
+    }
+
+    private void hideAllTelegraphs() {
+        if (biteTelegraphImage != null) biteTelegraphImage.setVisible(false);
+        if (packCallTelegraphImage != null) packCallTelegraphImage.setVisible(false);
+        if (chargeTelegraphImage != null) chargeTelegraphImage.setVisible(false);
     }
 
     private void layoutUi() {
@@ -371,8 +410,12 @@ public final class BattleDirector extends IgnisScript {
         commandPanel.setVisible(visible);
         commandsLabel.setVisible(visible);
         messageLabel.setVisible(visible);
+        if (leaderPortraitImage != null) {
+            leaderPortraitImage.setVisible(visible);
+        }
         if (!visible) {
             reactionLabel.setVisible(false);
+            hideAllTelegraphs();
         }
     }
 

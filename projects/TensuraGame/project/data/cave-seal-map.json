@@ -57,7 +57,31 @@
       ],
       "interactables": [
         { "id": "goblin_scout_leader", "x": 400, "y": 192, "radius": 24, "verb": "TALK", "dialogueId": "dlg_goblin_scout_camp", "collectible": false },
-        { "id": "forest_path_north", "x": 320, "y": 96, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_forest_path_north", "collectible": false }
+        { "id": "forest_path_north", "x": 320, "y": 96, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_forest_path_north", "collectible": false },
+        { "id": "forest_village_gate", "x": 320, "y": 96, "radius": 24, "verb": "ENTER", "targetAreaId": "goblin_village_pre_naming", "targetSpawnX": 96, "targetSpawnY": 256 }
+      ]
+    },
+    {
+      "id": "goblin_village_pre_naming",
+      "cols": 24,
+      "rows": 16,
+      "cellSize": 32,
+      "spawnX": 96,
+      "spawnY": 256,
+      "walls": [
+        { "col0": 0, "row0": 0, "col1": 23, "row1": 0 },
+        { "col0": 0, "row0": 15, "col1": 23, "row1": 15 },
+        { "col0": 0, "row0": 0, "col1": 0, "row1": 15 },
+        { "col0": 23, "row0": 0, "col1": 23, "row1": 15 }
+      ],
+      "interactables": [
+        { "id": "goblin_elder_npc", "x": 384, "y": 256, "radius": 24, "verb": "TALK", "dialogueId": "dlg_goblin_elder_welcome", "collectible": false },
+        { "id": "palisade_barrier", "x": 200, "y": 120, "radius": 20, "verb": "EXAMINE", "dialogueId": "dlg_palisade_inspect", "collectible": false },
+        { "id": "village_tents", "x": 550, "y": 150, "radius": 24, "verb": "EXAMINE", "dialogueId": "dlg_tents_inspect", "collectible": false },
+        { "id": "ranga_loyal_npc", "x": 480, "y": 280, "radius": 24, "verb": "TALK", "dialogueId": "dlg_ranga_allegiance", "collectible": false },
+        { "id": "prep_entrance_barrier", "x": 160, "y": 120, "radius": 22, "verb": "EXAMINE", "dialogueId": "dlg_prep_entrance", "collectible": false },
+        { "id": "prep_flank_torches", "x": 320, "y": 100, "radius": 22, "verb": "EXAMINE", "dialogueId": "dlg_prep_flank", "collectible": false },
+        { "id": "prep_controlled_bait", "x": 500, "y": 100, "radius": 22, "verb": "EXAMINE", "dialogueId": "dlg_prep_bait", "collectible": false }
       ]
     }
   ]

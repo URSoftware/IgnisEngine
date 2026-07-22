@@ -62,7 +62,9 @@ public final class GameFlowController extends IgnisScript {
 
     private static final Map<String, double[]> AREA_OFFSETS = Map.of(
             "cave_awakening", new double[] {0, 0},
-            "cave_gallery", new double[] {900, 0});
+            "cave_gallery", new double[] {900, 0},
+            "jura_forest_approach", new double[] {0, 700},
+            "goblin_village_pre_naming", new double[] {0, 1200});
 
     // Sinais enviados para os diretores (ver o par exato em cada arquivo).
     private static final String SIGNAL_ENTER_AWAKENING_CUTSCENE = "TENSURA_ENTER_AWAKENING_CUTSCENE";
@@ -79,6 +81,9 @@ public final class GameFlowController extends IgnisScript {
     private static final String SIGNAL_VELDORA_ENCOUNTER_COMPLETE = "TENSURA_VELDORA_ENCOUNTER_COMPLETE";
     private static final String SIGNAL_REQUEST_GOBLIN_CONTACT = "TENSURA_REQUEST_GOBLIN_CONTACT";
     private static final String SIGNAL_GOBLIN_CONTACT_COMPLETE = "TENSURA_GOBLIN_CONTACT_COMPLETE";
+    private static final String SIGNAL_REQUEST_DIRE_WOLF_DUEL = "TENSURA_REQUEST_DIRE_WOLF_DUEL";
+    private static final String SIGNAL_ENTER_DIRE_WOLF_DUEL = "TENSURA_ENTER_DIRE_WOLF_DUEL";
+    private static final String SIGNAL_DIRE_WOLF_DUEL_COMPLETE = "TENSURA_DIRE_WOLF_DUEL_COMPLETE";
 
     // Sinais da persistencia de campanha (CampaignSaveDirector).
     private static final String SIGNAL_SAVE_REQUEST = "TENSURA_CAMPAIGN_SAVE_REQUEST";
@@ -94,6 +99,7 @@ public final class GameFlowController extends IgnisScript {
     private FlowState state = FlowState.MENU;
     private boolean veldoraEncounterCompleted;
     private boolean goblinContactCompleted;
+    private boolean duelCompleted;
 
     private CampaignSnapshot loadedSnapshot;
     private String saveWarningMessage;
@@ -133,6 +139,10 @@ public final class GameFlowController extends IgnisScript {
         onSceneSignal(SIGNAL_VELDORA_ENCOUNTER_COMPLETE, payload -> completeVeldoraEncounter());
         onSceneSignal(SIGNAL_REQUEST_GOBLIN_CONTACT, payload -> beginGoblinContact());
         onSceneSignal(SIGNAL_GOBLIN_CONTACT_COMPLETE, payload -> completeGoblinContact());
+        onSceneSignal(SIGNAL_REQUEST_DIRE_WOLF_DUEL, payload -> beginDireWolfDuel());
+        onSceneSignal(SIGNAL_DIRE_WOLF_DUEL_COMPLETE, payload -> completeDireWolfDuel());
+        onSceneSignal(SIGNAL_DIRE_WOLF_RESOLUTION_COMPLETE, payload -> completeDireWolfResolution());
+        onSceneSignal(SIGNAL_NAMING_CUTSCENE_COMPLETE, payload -> completeNamingCutscene());
 
         onSceneSignal(SIGNAL_LOADED, payload -> {
             if (payload instanceof CampaignSnapshot snapshot) {
@@ -291,8 +301,27 @@ public final class GameFlowController extends IgnisScript {
         Set<String> milestones = loadedSnapshot.completedMilestones();
         boolean hasVeldora = milestones.contains("veldora_encounter_complete");
         boolean hasGoblin = milestones.contains("goblin_contact_complete");
+        boolean hasDuel = milestones.contains("dire_wolf_duel_complete");
 
-        if (hasGoblin || "jura_forest_approach".equals(loadedSnapshot.areaId())) {
+        if (player == null) {
+            player = findObject("Rimuru");
+        }
+        if (player != null) {
+            player.setVisible(true);
+            player.setOpacity(1);
+        }
+
+        if (hasDuel) {
+            veldoraEncounterCompleted = true;
+            goblinContactCompleted = true;
+            duelCompleted = true;
+            setCaveSceneObjectsVisible(false);
+            setForestBackdropVisible(true);
+            setGoblinNpcVisible(true);
+            setupExplorationHud("Vitoria! O herdeiro Ranga e a matilha se uniram a Tempest.");
+            sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, loadedSnapshot);
+            state = FlowState.EXPLORATION;
+        } else if (hasGoblin || "jura_forest_approach".equals(loadedSnapshot.areaId())) {
             veldoraEncounterCompleted = true;
             goblinContactCompleted = true;
             setCaveSceneObjectsVisible(false);
@@ -405,6 +434,16 @@ public final class GameFlowController extends IgnisScript {
         if (veldoraEncounterCompleted) return;
         veldoraEncounterCompleted = true;
         clearUI();
+        setCaveSceneObjectsVisible(true);
+        setForestBackdropVisible(false);
+        setGoblinNpcVisible(false);
+        if (player == null) {
+            player = findObject("Rimuru");
+        }
+        if (player != null) {
+            player.setVisible(true);
+            player.setOpacity(1);
+        }
         setupExplorationHud("Veldora esta com voce. Encontre a saida da caverna.");
         sceneDispatcher.enqueue(SIGNAL_EXPLORATION_ACTIVATE, null);
         state = FlowState.EXPLORATION;
@@ -534,6 +573,62 @@ public final class GameFlowController extends IgnisScript {
         }
     }
 
+    // ==================== Duelo do Lider dos Lobos ====================
+
+    private void beginDireWolfDuel() {
+        if (state != FlowState.EXPLORATION || duelCompleted) return;
+        clearUI();
+        setCaveSceneObjectsVisible(false);
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(false);
+        if (player != null) player.setVisible(false);
+        sceneDispatcher.enqueue(SIGNAL_ENTER_DIRE_WOLF_DUEL, null);
+        state = FlowState.DUEL;
+        log("GameFlowController: iniciando duelo contra o Lider dos Lobos.");
+    }
+
+    private static final String SIGNAL_ENTER_DIRE_WOLF_RESOLUTION = "TENSURA_ENTER_DIRE_WOLF_RESOLUTION";
+    private static final String SIGNAL_DIRE_WOLF_RESOLUTION_COMPLETE = "TENSURA_DIRE_WOLF_RESOLUTION_COMPLETE";
+    private static final String SIGNAL_ENTER_NAMING_CUTSCENE = "TENSURA_ENTER_NAMING_CUTSCENE";
+    private static final String SIGNAL_NAMING_CUTSCENE_COMPLETE = "TENSURA_NAMING_CUTSCENE_COMPLETE";
+
+    private void completeDireWolfDuel() {
+        if (duelCompleted) return;
+        duelCompleted = true;
+        clearUI();
+        setCaveSceneObjectsVisible(false);
+        setForestBackdropVisible(true);
+        setGoblinNpcVisible(true);
+        sceneDispatcher.enqueue(SIGNAL_ENTER_DIRE_WOLF_RESOLUTION, null);
+        state = FlowState.CUTSCENE;
+        log("GameFlowController: duelo concluido. Iniciando cutscene de resolucao.");
+    }
+
+    private void completeDireWolfResolution() {
+        sceneDispatcher.enqueue(SIGNAL_ENTER_NAMING_CUTSCENE, null);
+        log("GameFlowController: resolucao concluida. Iniciando cutscene de nomeacao.");
+    }
+
+    private void completeNamingCutscene() {
+        if (player == null) {
+            player = findObject("Rimuru");
+        }
+        if (player != null) {
+            player.setVisible(true);
+            player.setOpacity(1);
+        }
+        setupExplorationHud("Vitoria! O herdeiro Ranga foi nomeado e a matilha se uniu a Tempest.");
+        state = FlowState.EXPLORATION;
+
+        CampaignSnapshot snap = new CampaignSnapshot(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                "goblin_village_pre_naming", 96.0, 256.0,
+                Set.of("awakening_complete", "veldora_encounter_complete", "goblin_contact_complete", "goblin_village_route_unlocked", "dire_wolf_duel_complete", "ranga_alliance_complete", "ranga_naming_complete"));
+        sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, snap);
+        sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
+        log("GameFlowController: cutscene de nomeacao concluida. Aldeia Goblin destravada e salva com sucesso.");
+    }
+
     // ==================== Dados (sem paths no dominio; a leitura fica aqui) ====================
 
     private JSONObject findAreaJson(JSONObject root, String areaId) {
@@ -559,6 +654,7 @@ public final class GameFlowController extends IgnisScript {
         CUTSCENE,
         VELDORA_ENCOUNTER,
         GOBLIN_CONTACT,
+        DUEL,
         EXPLORATION
     }
 }

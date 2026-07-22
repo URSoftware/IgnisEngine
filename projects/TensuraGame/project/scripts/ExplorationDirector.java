@@ -18,6 +18,8 @@ import com.rimurusurvivors.domain.ExplorationSnapshot;
 import com.rimurusurvivors.domain.Interactable;
 import com.rimurusurvivors.domain.InteractionVerb;
 import com.rimurusurvivors.domain.RunInput;
+import com.rimurusurvivors.domain.VillageDefenseState;
+import com.rimurusurvivors.domain.VillagePreparation;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -70,36 +72,26 @@ public final class ExplorationDirector extends IgnisScript {
     // DEPOIS do encontro com Veldora — hora de sair para a floresta e encontrar os
     // goblins. Sem payload — GoblinContactDirector le a posicao do ator sozinho.
     private static final String SIGNAL_REQUEST_GOBLIN_CONTACT = "TENSURA_REQUEST_GOBLIN_CONTACT";
-    // Sinal recebido de GameFlowController: o contato goblin acabou; comece a
-    // exploracao conversacional na Floresta de Jura (nova simulacao, area diferente).
     private static final String SIGNAL_ENTER_FOREST_EXPLORATION = "TENSURA_ENTER_FOREST_EXPLORATION";
     private static final String SIGNAL_ENTER_EXPLORATION_SNAPSHOT = "TENSURA_ENTER_EXPLORATION_SNAPSHOT";
+    private static final String SIGNAL_REQUEST_DIRE_WOLF_DUEL = "TENSURA_REQUEST_DIRE_WOLF_DUEL";
 
     private static final String MAP_DATA = "data/cave-seal-map.json";
     private static final String DIALOGUE_DATA = "data/cave-seal-dialogues.json";
     private static final String VELDORA_TRIGGER_DIALOGUE_ID = "dlg_gallery_seal";
-    // O gatilho da saida reusa o padrao comprovado do Veldora (DIALOGUE_ENDED de um
-    // interactable), porque a invariante do dominio proibe um ENTER sem area de
-    // destino e a floresta e uma cutscene, nao uma ExplorationArea de verdade.
     private static final String CAVE_EXIT_TRIGGER_DIALOGUE_ID = "dlg_cave_exit";
-    // Area minima da floresta (retangulo aberto + goblin conversavel) para o marco
-    // fechar de ponta a ponta; layout/tilemap/sprites finais ficam com o Codex.
+    private static final String GOBLIN_SCOUT_TRIGGER_DIALOGUE_ID = "dlg_goblin_scout_camp";
     private static final String FOREST_AREA_ID = "jura_forest_approach";
-    // Marcos semanticos gravados por GameFlowController no CampaignSnapshot. Duplicados
-    // aqui de proposito (scripts nao se referenciam): usados para restaurar as guardas
-    // de progresso ao retomar por save. Mudar a string exige mudar as duas pontas.
+
     private static final String MILESTONE_VELDORA_COMPLETE = "veldora_encounter_complete";
     private static final String MILESTONE_GOBLIN_CONTACT_COMPLETE = "goblin_contact_complete";
+    private static final String MILESTONE_DUEL_COMPLETE = "dire_wolf_duel_complete";
 
-    // Duplicado de proposito a partir de GameFlowController.AREA_OFFSETS: e
-    // dado estatico de layout de nivel (onde cada area foi desenhada no MESMO
-    // mundo, ja que a fatia ainda nao usa cenas reais — ver nota do offset em
-    // GameFlowController), nao logica. Se uma area nova entrar no mapa, os
-    // dois lugares precisam mudar juntos.
     private static final Map<String, double[]> AREA_OFFSETS = Map.of(
             "cave_awakening", new double[] {0, 0},
             "cave_gallery", new double[] {900, 0},
-            FOREST_AREA_ID, new double[] {0, 700});
+            FOREST_AREA_ID, new double[] {0, 700},
+            "goblin_village_pre_naming", new double[] {0, 1200});
 
     private final ExplorationController explorationController = new ExplorationController();
     private final InteractionController interactionController = new InteractionController();
@@ -111,11 +103,10 @@ public final class ExplorationDirector extends IgnisScript {
     private boolean active;
     private boolean uiReady;
     private boolean veldoraRequested;
-    // Vira true so quando GameFlowController devolve o controle apos o Veldora
-    // (SIGNAL_EXPLORATION_ACTIVATE). E a guarda que impede a saida para a floresta
-    // de disparar antes da hora, mesmo que o jogador ache a boca da caverna cedo.
     private boolean veldoraDone;
     private boolean goblinRequested;
+    private boolean duelRequested;
+    private VillageDefenseState defenseState = new VillageDefenseState();
 
     @Override
     public void start() {
@@ -134,8 +125,10 @@ public final class ExplorationDirector extends IgnisScript {
             }
         });
         onSceneSignal(SIGNAL_EXPLORATION_ACTIVATE, payload -> {
-            active = true;
             veldoraDone = true;
+            veldoraRequested = true;
+            beginExplorationAt("cave_gallery", 176.0, 80.0);
+            log("ExplorationDirector: exploracao reativada apos Veldora com simulacao limpa.");
         });
         onSceneSignal(SIGNAL_ENTER_FOREST_EXPLORATION, payload -> beginForestExploration());
     }
@@ -163,6 +156,29 @@ public final class ExplorationDirector extends IgnisScript {
             goblinRequested = true;
             log("Exploracao: boca da caverna examinada apos Veldora, pedindo contato goblin.");
             sceneDispatcher.enqueue(SIGNAL_REQUEST_GOBLIN_CONTACT, null);
+            return;
+        }
+        for (com.rimurusurvivors.domain.ExplorationEvent event : snapshot.events()) {
+            if (event.type() == ExplorationEventType.DIALOGUE_ENDED) {
+                if ("dlg_prep_entrance".equals(event.detail())) {
+                    defenseState = defenseState.togglePreparation(VillagePreparation.REINFORCE_ENTRANCE);
+                    log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
+                } else if ("dlg_prep_flank".equals(event.detail())) {
+                    defenseState = defenseState.togglePreparation(VillagePreparation.LIGHT_FLANK);
+                    log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
+                } else if ("dlg_prep_bait".equals(event.detail())) {
+                    defenseState = defenseState.togglePreparation(VillagePreparation.CONTROLLED_BAIT);
+                    log("Aldeia: preparacao defensiva atualizada -> " + defenseState);
+                }
+            }
+        }
+
+        if (shouldRequestDireWolfDuel(snapshot)) {
+            active = false;
+            duelRequested = true;
+            String[] payload = defenseState.toPayload();
+            log("Exploracao: batedor goblin conversado, pedindo duelo de lobos com preparacoes=" + defenseState);
+            sceneDispatcher.enqueue(SIGNAL_REQUEST_DIRE_WOLF_DUEL, payload);
             return;
         }
         ExplorationArea currentArea = areas.get(snapshot.areaId());
@@ -202,6 +218,7 @@ public final class ExplorationDirector extends IgnisScript {
         veldoraDone = milestones.contains(MILESTONE_VELDORA_COMPLETE);
         veldoraRequested = veldoraDone;
         goblinRequested = milestones.contains(MILESTONE_GOBLIN_CONTACT_COMPLETE);
+        duelRequested = milestones.contains(MILESTONE_DUEL_COMPLETE);
         beginExplorationAt(snapshot.areaId(), snapshot.playerX(), snapshot.playerY());
         log("ExplorationDirector: exploracao retomada via snapshot em " + snapshot.areaId()
                 + " (" + snapshot.playerX() + ", " + snapshot.playerY() + "), veldoraDone=" + veldoraDone + ".");
@@ -216,6 +233,10 @@ public final class ExplorationDirector extends IgnisScript {
         ExplorationSimulation simulation =
                 new ExplorationSimulation(areas, dialogues, areaId, spawnX, spawnY);
         GameObject player = findObject("Rimuru");
+        if (player != null) {
+            player.setVisible(true);
+            player.setOpacity(1);
+        }
         explorationController.configure(simulation, player, AREA_OFFSETS);
         if (!uiReady) {
             interactionController.setup();
@@ -237,6 +258,14 @@ public final class ExplorationDirector extends IgnisScript {
         return snapshot.events().stream().anyMatch(event ->
                 event.type() == ExplorationEventType.DIALOGUE_ENDED
                         && CAVE_EXIT_TRIGGER_DIALOGUE_ID.equals(event.detail()));
+    }
+
+    private boolean shouldRequestDireWolfDuel(ExplorationSnapshot snapshot) {
+        if (!goblinRequested || duelRequested || snapshot == null || snapshot.events() == null) return false;
+        return snapshot.events().stream().anyMatch(event ->
+                event.type() == ExplorationEventType.DIALOGUE_ENDED
+                        && (GOBLIN_SCOUT_TRIGGER_DIALOGUE_ID.equals(event.detail())
+                        || "dlg_forest_path_north".equals(event.detail())));
     }
 
     // ==================== Dados (sem paths no dominio; a leitura fica aqui) ====================
@@ -355,6 +384,10 @@ public final class ExplorationDirector extends IgnisScript {
         void configure(ExplorationSimulation simulation, GameObject player, Map<String, double[]> areaOffsets) {
             this.simulation = simulation;
             this.player = player;
+            if (player != null) {
+                player.setVisible(true);
+                player.setOpacity(1);
+            }
             this.areaOffsets = areaOffsets == null ? Map.of() : areaOffsets;
             attachClips(player, CLIP_IDLE, CLIP_MOVE);
         }
