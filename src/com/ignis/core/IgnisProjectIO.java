@@ -104,7 +104,11 @@ public class IgnisProjectIO {
             // aconteceu em 16/07/2026 — um NoClassDefFoundError no auto-save trocou um
             // projeto de 3,5 MB por 140 bytes. O save nunca pode destruir o estado
             // anterior antes de saber que o novo esta inteiro.
-            File tempFile = new File(projectMainFolder, projectName + ".ignis.tmp");
+            // Cada tentativa usa seu proprio temporario. Auto-save, save explicito e
+            // restart podem se encostar; um nome fixo fazia uma tentativa mover/apagar
+            // o arquivo ainda usado pela outra, especialmente sob OneDrive.
+            File tempFile = java.nio.file.Files.createTempFile(
+                    projectMainFolder.toPath(), projectName + ".", ".ignis.tmp").toFile();
             try {
                 try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile))) {
 
@@ -154,14 +158,41 @@ public class IgnisProjectIO {
      * que ainda e muito melhor do que ter truncado o original la atras.</p>
      */
     private static void replaceWithTemp(File tempFile, File target) throws IOException {
-        try {
-            java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException notAtomic) {
-            java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        IOException lastFailure = null;
+        final int attempts = 5;
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                return;
+            } catch (IOException atomicFailure) {
+                lastFailure = atomicFailure;
+                // OneDrive/antivirus podem recusar ATOMIC_MOVE mesmo quando o volume o
+                // anuncia como suportado. Tenta a troca comum antes de aguardar.
+                try {
+                    java.nio.file.Files.move(tempFile.toPath(), target.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    return;
+                } catch (IOException regularFailure) {
+                    lastFailure = regularFailure;
+                }
+            }
+
+            // Se o move ocorreu mas o provedor reportou erro ao finalizar metadados,
+            // o alvo valido ja existe e nao ha mais temporario para repetir.
+            if (!tempFile.exists() && target.isFile()) return;
+            if (attempt < attempts) {
+                try {
+                    Thread.sleep(50L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Save interrompido ao aguardar o arquivo do projeto", interrupted);
+                }
+            }
         }
+        throw new IOException("Falha ao substituir o projeto apos " + attempts
+                + " tentativas: " + target.getAbsolutePath(), lastFailure);
     }
 
     /**
@@ -292,7 +323,7 @@ public class IgnisProjectIO {
             // Copia o ignis-engine-api.jar e todas as libs do repositório (ex: FXEvents) para project/libs/
             File localApiJar = new File(libsFolder, "ignis-engine-api.jar");
             if (apiJarTarget.exists()) {
-                java.nio.file.Files.copy(apiJarTarget.toPath(), localApiJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                copyFileIfChanged(apiJarTarget, localApiJar);
             }
 
             if (reposDir.exists() && reposDir.isDirectory()) {
@@ -302,7 +333,7 @@ public class IgnisProjectIO {
                           .forEach(p -> {
                               try {
                                   File dest = new File(libsFolder, p.getFileName().toString());
-                                  java.nio.file.Files.copy(p, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                                  copyFileIfChanged(p.toFile(), dest);
                               } catch (Exception ignore) {}
                           });
                 }
@@ -318,7 +349,7 @@ public class IgnisProjectIO {
                     "        \"libs/**/*.jar\"\n" +
                     "    ]\n" +
                     "}";
-            java.nio.file.Files.writeString(vscodeSettings.toPath(), settingsContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            writeGeneratedFileIfMissing(vscodeSettings, settingsContent);
 
             // 2. Eclipse .project file
             File eclipseProjectFile = new File(projectFolder, ".project");
@@ -339,7 +370,7 @@ public class IgnisProjectIO {
                     "\t\t<nature>org.eclipse.jdt.core.javanature</nature>\n" +
                     "\t</natures>\n" +
                     "</projectDescription>\n";
-            java.nio.file.Files.writeString(eclipseProjectFile.toPath(), projectContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            writeGeneratedFileIfMissing(eclipseProjectFile, projectContent);
 
             // 3. Eclipse / VSCode Java extension .classpath file
             File eclipseClasspathFile = new File(projectFolder, ".classpath");
@@ -358,7 +389,7 @@ public class IgnisProjectIO {
             
             classpathBuilder.append("\t<classpathentry kind=\"output\" path=\"bin\"/>\n");
             classpathBuilder.append("</classpath>\n");
-            java.nio.file.Files.writeString(eclipseClasspathFile.toPath(), classpathBuilder.toString(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            writeGeneratedFileIfMissing(eclipseClasspathFile, classpathBuilder.toString());
 
             // 4. Maven pom.xml for IntelliJ IDEA and other Maven-capable IDEs
             File pomFile = new File(projectFolder, "pom.xml");
@@ -394,11 +425,41 @@ public class IgnisProjectIO {
 
                 pomBuilder.append("    </dependencies>\n");
                 pomBuilder.append("</project>\n");
-                java.nio.file.Files.writeString(pomFile.toPath(), pomBuilder.toString(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+                writeGeneratedFileIfMissing(pomFile, pomBuilder.toString());
             }
 
         } catch (Exception e) {
             IgnisLogger.error("Failed to generate IDE configuration files: " + e.getMessage());
+        }
+    }
+
+    private static void writeGeneratedFileIfMissing(File target, String content) throws IOException {
+        if (target.exists()) return;
+        try {
+            java.nio.file.Files.writeString(target.toPath(), content,
+                    java.nio.file.StandardOpenOption.CREATE_NEW);
+        } catch (java.nio.file.FileAlreadyExistsException concurrentCreator) {
+            // Outra tentativa de save/configuracao venceu a corrida. O arquivo
+            // existente e deliberadamente preservado.
+        }
+    }
+
+    private static void copyFileIfChanged(File source, File target) throws IOException {
+        if (target.isFile()
+                && source.length() == target.length()
+                && java.nio.file.Files.mismatch(source.toPath(), target.toPath()) == -1L) {
+            return;
+        }
+        File parent = target.getAbsoluteFile().getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        File temporary = java.nio.file.Files.createTempFile(
+                parent.toPath(), target.getName() + ".", ".tmp").toFile();
+        try {
+            java.nio.file.Files.copy(source.toPath(), temporary.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            replaceWithTemp(temporary, target);
+        } finally {
+            temporary.delete();
         }
     }
 

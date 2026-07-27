@@ -3,6 +3,7 @@ package com.ignis.core;
 import javax.tools.*;
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -81,7 +82,13 @@ public class ScriptManager {
         if (!libsFolder.exists()) {
             return Collections.emptyList();
         }
-        File[] jars = libsFolder.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".jar"));
+        File[] jars = libsFolder.listFiles((dir, name) -> {
+            String lower = name.toLowerCase(Locale.ROOT);
+            // Este jar existe para IDEs externas. Em runtime as classes da engine ja
+            // estao no parent classloader; inclui-lo novamente so duplica tipos e
+            // mantem o arquivo bloqueado no Windows durante restart/atualizacao.
+            return lower.endsWith(".jar") && !lower.equals("ignis-engine-api.jar");
+        });
         if (jars == null || jars.length == 0) {
             return Collections.emptyList();
         }
@@ -416,7 +423,7 @@ public class ScriptManager {
         String template = generateScriptTemplate(scriptName);
         
         try {
-            Files.write(scriptFile.toPath(), template.getBytes("UTF-8"));
+            writeAtomically(scriptFile.toPath(), template);
             IgnisLogger.info("Script created: " + scriptFile.getAbsolutePath());
             return true;
         } catch (IOException e) {
@@ -500,11 +507,28 @@ public class ScriptManager {
         File scriptFile = new File(scriptsFolder, scriptName + ".java");
         
         try {
-            Files.write(scriptFile.toPath(), content.getBytes("UTF-8"));
+            writeAtomically(scriptFile.toPath(), content);
             return true;
         } catch (IOException e) {
             IgnisLogger.error("Error saving script: " + e.getMessage());
             return false;
+        }
+    }
+
+    private static void writeAtomically(Path target, String content) throws IOException {
+        Files.createDirectories(target.toAbsolutePath().getParent());
+        Path temporary = Files.createTempFile(target.toAbsolutePath().getParent(),
+                target.getFileName().toString(), ".tmp");
+        try {
+            Files.writeString(temporary, content, StandardCharsets.UTF_8);
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException exception) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

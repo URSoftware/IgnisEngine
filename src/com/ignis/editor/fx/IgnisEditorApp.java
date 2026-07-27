@@ -1179,24 +1179,23 @@ public class IgnisEditorApp extends Application {
         else Platform.runLater(relaunch);
     }
 
-    // Lanca uma copia nova deste editor reusando a linha de comando exata da JVM atual
-    // (ProcessHandle preserva o module-path/--add-modules do JavaFX). So cai no
-    // fallback (java -cp ... mainClass) se o SO nao expuser os argumentos do processo.
+    // Lanca uma copia nova deste editor reusando os argumentos efetivos da JVM atual
+    // (module-path, --add-modules, memoria e agentes). No Windows, ProcessHandle pode
+    // expor o executavel mas omitir os argumentos; isso relancava apenas "java.exe" e
+    // encerrava o editor sem substituto. RuntimeMXBean e a fonte portavel dos argumentos
+    // da VM, enquanto classpath e main class sao acrescentados explicitamente.
     private void spawnEditorProcess() throws Exception {
-        ProcessHandle.Info info = ProcessHandle.current().info();
         java.util.List<String> cmd = new java.util.ArrayList<>();
-        String exe = info.command().orElse(null);
-        if (exe != null) {
-            cmd.add(exe);
-            for (String a : info.arguments().orElse(new String[0])) cmd.add(a);
-        } else {
-            boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
-            cmd.add(new java.io.File(System.getProperty("java.home"),
-                    "bin/java" + (win ? ".exe" : "")).getAbsolutePath());
-            cmd.add("-cp");
-            cmd.add(System.getProperty("java.class.path"));
-            cmd.add("com.ignis.editor.fx.IgnisEditorApp");
-        }
+        boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String executable = ProcessHandle.current().info().command().orElseGet(() ->
+                new java.io.File(System.getProperty("java.home"),
+                        "bin/java" + (win ? ".exe" : "")).getAbsolutePath());
+        cmd.add(executable);
+        cmd.addAll(java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments());
+        cmd.add("-cp");
+        cmd.add(System.getProperty("java.class.path"));
+        cmd.add("com.ignis.editor.fx.IgnisEditorApp");
+
         ProcessBuilder pb = new ProcessBuilder(cmd);
         String cwd = System.getProperty("user.dir");
         if (cwd != null) pb.directory(new java.io.File(cwd));

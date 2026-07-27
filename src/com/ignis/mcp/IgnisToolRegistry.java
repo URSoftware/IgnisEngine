@@ -196,6 +196,7 @@ public final class IgnisToolRegistry {
 
         // Scripts (o claim historico: 'script:PlayerController').
         m.put("write_script", new Guard("script", "scriptName", false));
+        m.put("patch_script", new Guard("script", "scriptName", false));
         m.put("create_script", new Guard("script", "scriptName", false));
 
         // Cameras nomeadas.
@@ -645,7 +646,8 @@ public final class IgnisToolRegistry {
         + "- Z-INDEX: ordem de desenho. Menor atras, maior na frente. Fundos ficam atras.\n"
         + "\n"
         + "## Ordem recomendada\n"
-        + "1. how_to_create_game (isto) + get_editor_status para ver projeto/cena atuais.\n"
+        + "1. how_to_create_game (isto) + get_project_context + get_editor_status para ver\n"
+        + "   os caminhos reais do workspace/projeto e a cena atual. Nunca adivinhe caminhos.\n"
         + "2. list_scenes; crie um mundo por cena com create_scene / troque com switch_scene.\n"
         + "3. Crie objetos: create_object (formas/player), create_text_object, create_tilemap,\n"
         + "   create_background_layer, create_particle_emitter, create_light_object.\n"
@@ -726,6 +728,7 @@ public final class IgnisToolRegistry {
         + "  trabalho de outro agente. Mural, claims e tarefas sobrevivem ao restart do editor.\n";
 
     private void registerDefaults() {
+        ProjectAuthoringTools projectAuthoring = new ProjectAuthoringTools(this);
         // how_to_create_game — guia de orientacao para o agente construir jogos no
         // Editor pela ordem/regras certas (Cena, hierarquia, mundos/cenas, aparecer
         // no viewport, salvar). Disponivel tambem no STDIO (headless) para o agente
@@ -736,6 +739,7 @@ public final class IgnisToolRegistry {
             + "aparecerem na Cena/Hierarchy/Inspector e o programador poder ve-los. LEIA ISTO ANTES de comecar.",
             objectSchema(),
             args -> HOW_TO_CREATE_GAME);
+        projectAuthoring.registerAll();
 
         // get_project_tree
         add("get_project_tree",
@@ -763,7 +767,8 @@ public final class IgnisToolRegistry {
             schemaWith(Map.of("scriptName", "Nome do script (ex: PlayerController)"), List.of("scriptName")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
-                if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
+                String validation = projectAuthoring.validateScriptName(name);
+                if (validation != null) return validation;
                 String content = scriptManager().readScriptContent(name);
                 return content != null ? content : "Erro: script nao encontrado: " + name;
             });
@@ -772,15 +777,40 @@ public final class IgnisToolRegistry {
         Map<String, String> writeScriptProps = new LinkedHashMap<>();
         writeScriptProps.put("scriptName", "Nome do script (ex: PlayerController)");
         writeScriptProps.put("content", "Conteudo Java completo do script");
+        writeScriptProps.put("expectedSha256", "Hash SHA-256 retornado por get_script_info; recusa se o arquivo mudou");
+        writeScriptProps.put("dryRun", "Se true, valida e calcula o novo hash sem gravar");
+        JSONObject writeScriptSchema = schemaWith(writeScriptProps, List.of("scriptName", "content"));
+        writeScriptSchema.getJSONObject("properties").put("dryRun", new JSONObject()
+                .put("type", "boolean")
+                .put("description", writeScriptProps.get("dryRun")));
         add("write_script",
-            "Sobrescreve o conteudo-fonte de um script existente.",
-            schemaWith(writeScriptProps, List.of("scriptName", "content")),
+            "Sobrescreve atomicamente um script existente. Prefira expectedSha256 para nao apagar edicao concorrente; "
+            + "para mudanca localizada, prefira patch_script.",
+            writeScriptSchema,
             args -> {
                 String name = args.optString("scriptName", "").trim();
                 String content = args.optString("content", "");
-                if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
+                String validation = projectAuthoring.validateScriptName(name);
+                if (validation != null) return validation;
+                File script = projectAuthoring.scriptFile(name);
+                if (!script.isFile()) return "Erro: script nao encontrado: " + name
+                        + ". Use create_script antes de write_script.";
+                String currentHash = projectAuthoring.sha256(script);
+                String expectedHash = args.optString("expectedSha256", "").trim();
+                if (!expectedHash.isEmpty() && !expectedHash.equalsIgnoreCase(currentHash)) {
+                    return "CONFLITO: o script mudou desde a leitura. esperado=" + expectedHash
+                            + ", atual=" + currentHash + ". Leia novamente antes de editar.";
+                }
+                String nextHash = projectAuthoring.sha256(content);
+                if (args.optBoolean("dryRun", false)) {
+                    return "DRY-RUN: write_script validado; nenhuma gravacao.\npath="
+                            + projectAuthoring.canonicalPath(script)
+                            + "\nsha256Before=" + currentHash + "\nsha256After=" + nextHash;
+                }
                 boolean ok = scriptManager().saveScriptContent(name, content);
-                return ok ? "Script salvo: " + name : "Erro ao salvar script: " + name;
+                return ok ? "Script salvo atomicamente: " + name + "\npath="
+                        + projectAuthoring.canonicalPath(script)
+                        + "\nsha256=" + nextHash : "Erro ao salvar script: " + name;
             });
 
         // create_script
@@ -791,9 +821,14 @@ public final class IgnisToolRegistry {
             schemaWith(createScriptProps, List.of("scriptName")),
             args -> {
                 String name = args.optString("scriptName", "").trim();
-                if (name.isEmpty()) return "Erro: 'scriptName' obrigatorio.";
+                String validation = projectAuthoring.validateScriptName(name);
+                if (validation != null) return validation;
                 boolean ok = scriptManager().createNewScript(name);
-                return ok ? "Script criado: " + name : "Erro: script ja existe ou nome invalido: " + name;
+                File script = projectAuthoring.scriptFile(name);
+                return ok ? "Script criado atomicamente: " + name + "\npath="
+                        + projectAuthoring.canonicalPath(script)
+                        + "\nsha256=" + projectAuthoring.sha256(script)
+                        : "Erro: script ja existe ou nome invalido: " + name;
             });
 
         // compile_project
@@ -1225,7 +1260,6 @@ public final class IgnisToolRegistry {
     // ----------------------------------------------------------------------
     // Sistema de mundos (Fase 1: limites do mapa + barreiras em grade)
     // ----------------------------------------------------------------------
-
 
     // Resolve um caminho relativo garantindo que permaneca dentro do projeto (anti path-traversal).
     File resolveInProject(String relative) {

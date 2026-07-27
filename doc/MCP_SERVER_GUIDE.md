@@ -1,9 +1,9 @@
 # Servidor MCP e Bridge HTTP do IgnisEngine
 
-> Documento vivo — atualizado em 02/07/2026. Descreve a interface de **IA & MCP**
+> Documento vivo — atualizado em 26/07/2026. Descreve a interface de **IA & MCP**
 > nas Configurações do editor, o servidor MCP e o bridge HTTP local que expõe as
-> ferramentas do motor para agentes de IA. **67 ferramentas** no registry (26
-> disponíveis sempre, 41 adicionais com o editor vivo) + 9 exclusivas do STDIO
+> ferramentas do motor para agentes de IA. **174 ferramentas** no registry com o
+> editor vivo (30 disponíveis também em headless) + 9 exclusivas do STDIO
 > (processamento WAV e edição de imagem em camadas).
 
 ---
@@ -98,7 +98,7 @@ curl -X POST http://127.0.0.1:8790/mcp/call \
 
 ## 4. Ferramentas registradas
 
-### 4.1 Sempre disponíveis (27) — `IgnisToolRegistry.registerDefaults()`
+### 4.1 Sempre disponíveis (30) — `IgnisToolRegistry.registerDefaults()`
 
 Funcionam mesmo no modo headless (`--mcp <projeto>`, transporte STDIO), pois operam
 em arquivos do projeto ou em singletons estáticos do motor — não exigem o editor
@@ -110,19 +110,29 @@ JavaFX aberto.
 |-----------|-----------|-----------|
 | `how_to_create_game` | — | Guia passo a passo de como criar jogos no Editor (Cena, hierarquia, mundos/cenas, regras para o objeto aparecer, Play x persistência). **Leia antes de começar.** |
 
-**Projeto, scripts e imagem (9)**
+**Projeto, scripts e imagem (12)**
 
 | Ferramenta | Argumentos | O que faz |
 |-----------|-----------|-----------|
+| `get_project_context` | — | Retorna os caminhos absolutos canônicos do workspace, runtime, `.ignis`, scripts, dados, assets e libs, além da política de autoria recomendada |
 | `get_project_tree` | — | Árvore recursiva de arquivos/pastas do projeto |
 | `list_scripts` | — | Lista os IgnisScripts disponíveis |
 | `read_script` | `scriptName` | Lê o código-fonte de um script |
-| `write_script` | `scriptName`, `content` | Sobrescreve o código de um script |
-| `create_script` | `scriptName` | Cria script novo pelo template do motor |
+| `get_script_info` | `scriptName` | Caminho, tamanho, modificação e SHA-256 para controle de concorrência |
+| `patch_script` | `scriptName`, `oldText`, `newText`, `expectedSha256?`, `replaceAll?`, `dryRun?` | Patch textual exato, com recusa de ambiguidade/conflito e gravação atômica |
+| `write_script` | `scriptName`, `content`, `expectedSha256?`, `dryRun?` | Sobrescreve atomicamente um script existente; recusa hash obsoleto |
+| `create_script` | `scriptName` | Cria script novo pelo template do motor, aceitando apenas identificador Java simples |
 | `compile_project` | — | Compila todos os scripts e retorna o total |
 | `read_file` | `path` | Lê arquivo texto (relativo à raiz, com proteção anti path-traversal) |
 | `generate_sprite` | `name`, `shape?`, `width?`, `height?`, `color?`, `outlineColor?`, `symbol?` | Gera um sprite 2D procedural (forma+cor+símbolo) via `Graphics2D`, sem depender de imagem externa |
 | `remove_sprite_background` | `imagePath`, `targetColorHex` (`auto`/cor/lista), `tolerance?` | Remove cor sólida ou quadriculado (checkerboard) do fundo de uma imagem, deixando-a transparente (lógica compartilhada com o STDIO em `ImageTools.removeBackground`) |
+
+Política de autoria: cena, assets e runtime devem usar as ferramentas semânticas do
+MCP. IgnisScripts podem ser alterados por `patch_script`/`write_script`, sempre
+partindo de `get_project_context` e preferencialmente com o SHA-256 retornado por
+`get_script_info`. Código de domínio/build fica fora do runtime e deve ser editado
+pelo filesystem do agente a partir de `workspaceRoot`; o MCP não expõe escrita
+arbitrária de arquivos.
 
 **Áudio (7)** — via `com.ignis.core.IgnisSoundEngine.getInstance()` (singleton estático)
 

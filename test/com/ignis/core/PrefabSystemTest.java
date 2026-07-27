@@ -15,16 +15,24 @@ class PrefabSystemTest {
     Path projectFolder;
 
     @Test
-    void setupIdeConfigForProjects() {
-        java.io.File tensuraDir = new java.io.File("projects/TensuraGame/project");
-        if (tensuraDir.exists()) {
-            IgnisProjectIO.setupIdeConfig(tensuraDir);
-            assertTrue(new java.io.File(tensuraDir, "libs/ignis-engine-api.jar").exists());
-            assertTrue(new java.io.File(tensuraDir, ".vscode/settings.json").exists());
-            assertTrue(new java.io.File(tensuraDir, ".classpath").exists());
-            assertTrue(new java.io.File(tensuraDir, ".project").exists());
-            assertTrue(new java.io.File(tensuraDir, "pom.xml").exists());
-        }
+    void setupIdeConfigForProjects() throws Exception {
+        java.io.File isolatedProject = projectFolder.resolve("project").toFile();
+        assertTrue(isolatedProject.mkdirs());
+
+        IgnisProjectIO.setupIdeConfig(isolatedProject);
+
+        assertTrue(new java.io.File(isolatedProject, "libs/ignis-engine-api.jar").exists());
+        assertTrue(new java.io.File(isolatedProject, ".vscode/settings.json").exists());
+        assertTrue(new java.io.File(isolatedProject, ".classpath").exists());
+        assertTrue(new java.io.File(isolatedProject, ".project").exists());
+        assertTrue(new java.io.File(isolatedProject, "pom.xml").exists());
+
+        // Configuracao existente pertence ao usuario e nao pode ser truncada quando a
+        // engine abre o projeto novamente.
+        Path settings = isolatedProject.toPath().resolve(".vscode/settings.json");
+        Files.writeString(settings, "{\"editor.formatOnSave\":true}");
+        IgnisProjectIO.setupIdeConfig(isolatedProject);
+        assertEquals("{\"editor.formatOnSave\":true}", Files.readString(settings));
     }
 
     private Path writePrefab(String name, int width, String spritePath) throws Exception {

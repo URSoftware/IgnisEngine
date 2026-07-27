@@ -5,6 +5,13 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,6 +40,29 @@ class IgnisProjectIOSaveTest {
         @Override
         public org.json.JSONObject toJSON() {
             throw new IllegalStateException("falha simulada na serializacao");
+        }
+    }
+
+    /** Faz duas serializacoes chegarem juntas depois de seus temporarios serem abertos. */
+    private static final class CenaSincronizada extends Scene {
+        private final CyclicBarrier barrier;
+        private final AtomicBoolean firstSerialization = new AtomicBoolean(true);
+
+        CenaSincronizada(String nome, CyclicBarrier barrier) {
+            super(nome);
+            this.barrier = barrier;
+        }
+
+        @Override
+        public org.json.JSONObject toJSON() {
+            if (firstSerialization.compareAndSet(true, false)) {
+                try {
+                    barrier.await(5, TimeUnit.SECONDS);
+                } catch (Exception exception) {
+                    throw new IllegalStateException("falha ao sincronizar saves concorrentes", exception);
+                }
+            }
+            return super.toJSON();
         }
     }
 
@@ -92,5 +122,46 @@ class IgnisProjectIOSaveTest {
 
         Project recarregado = IgnisProjectIO.load(ignis, new Game());
         assertEquals("Segunda", recarregado.getScenes().get(0).getSceneName());
+    }
+
+    @Test
+    void concurrentSavesUseIndependentTemporaryFiles(@org.junit.jupiter.api.io.TempDir Path root) throws Exception {
+        File projects = root.resolve("projects").toFile();
+        IgnisProjectIO.setProjectsRootFolderForTest(projects);
+        File ignis = new File(new File(projects, "TesteSave"), "TesteSave.ignis");
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> first = executor.submit(() -> {
+                try {
+                    IgnisProjectIO.save(
+                            projectWith(new CenaSincronizada("Primeira", barrier), ignis), ignis);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            });
+            Future<?> second = executor.submit(() -> {
+                try {
+                    IgnisProjectIO.save(
+                            projectWith(new CenaSincronizada("Segunda", barrier), ignis), ignis);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            });
+
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        Project recarregado = IgnisProjectIO.load(ignis, new Game());
+        String sceneName = recarregado.getScenes().get(0).getSceneName();
+        assertTrue(Set.of("Primeira", "Segunda").contains(sceneName));
+        try (java.util.stream.Stream<Path> files = Files.list(ignis.getParentFile().toPath())) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".ignis.tmp")),
+                    "temporario concorrente ficou orfao no projeto");
+        }
     }
 }
