@@ -4,6 +4,7 @@
   "visualSetId": "goblin_village_scene_v1",
   "coordinateSpace": "local_pixels",
   "viewport": { "width": 640, "height": 512, "safeMargin": 32 },
+  "camera": { "x": 320, "y": 256, "zoom": 1.95 },
   "background": {
     "groundSprite": "assets/sprites/jura_forest_ground.png",
     "groundRect": { "x": 0, "y": 0, "width": 640, "height": 512 },
@@ -21,7 +22,7 @@
   "actors": {
     "player": {
       "objectName": "Rimuru",
-      "spawn": { "x": 304, "y": 384 },
+      "spawn": { "x": 304, "y": 340 },
       "zIndex": 30,
       "animationSet": "rimuru_slime_move"
     },

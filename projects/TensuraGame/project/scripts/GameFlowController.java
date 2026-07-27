@@ -65,6 +65,7 @@ public final class GameFlowController extends IgnisScript {
     };
     private static final String GOBLIN_NPC_OBJECT = "GoblinScoutNPC";
     private static final String FOREST_SCENE_NAME = "JuraForestScene";
+    private static final String VILLAGE_SCENE_NAME = "GoblinVillageScene";
     private static final String FOREST_AREA_ID = "jura_forest_approach";
     private static final String FOREST_ARRIVAL_PENDING = "forest_arrival_pending";
     private static final double FOREST_CAMERA_X = 320.0;
@@ -206,7 +207,8 @@ public final class GameFlowController extends IgnisScript {
             pendingSceneName = null;
             if (!loadScene(targetScene)) {
                 clearUI();
-                setupExplorationHud("Nao foi possivel carregar a Floresta de Jura. Tente interagir novamente.");
+                setupExplorationHud("Nao foi possivel carregar " + targetScene
+                        + ". O progresso foi salvo; tente novamente.");
                 sceneDispatcher.enqueue(SIGNAL_EXPLORATION_ACTIVATE, null);
                 state = FlowState.EXPLORATION;
                 log("GameFlowController: falha ao carregar cena " + targetScene + ".");
@@ -856,16 +858,29 @@ public final class GameFlowController extends IgnisScript {
             player.setOpacity(1);
         }
         ensureRangaIdentity();
-        setupExplorationHud("Vitoria! O herdeiro Ranga foi nomeado e a matilha se uniu a Tempest.");
-        state = FlowState.EXPLORATION;
+        clearUI();
+        showVillageLoadingOverlay();
+        state = FlowState.SCENE_TRANSITION;
+        pendingSceneName = VILLAGE_SCENE_NAME;
 
         CampaignSnapshot snap = new CampaignSnapshot(
                 CampaignSnapshot.CURRENT_SCHEMA_VERSION,
                 "goblin_village_pre_naming", 96.0, 256.0,
                 Set.of("awakening_complete", "veldora_encounter_complete", "goblin_contact_complete", "goblin_village_route_unlocked", "dire_wolf_duel_complete", "ranga_alliance_complete", "ranga_naming_complete"));
-        sceneDispatcher.enqueue(SIGNAL_ENTER_EXPLORATION_SNAPSHOT, snap);
         sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, snap);
-        log("GameFlowController: cutscene de nomeacao concluida. Aldeia Goblin destravada e salva com sucesso.");
+        log("GameFlowController: nomeacao concluida; salvando antes de carregar GoblinVillageScene.");
+    }
+
+    private void showVillageLoadingOverlay() {
+        double width = Math.max(480, getGame().getWidth());
+        double height = Math.max(360, getGame().getHeight());
+        transitionPanel = createPanel(0, 0, width, height);
+        setUIColors(transitionPanel, new Color(3, 11, 14, 245), null, null);
+        transitionLabel = createLabel("Seguindo para a Aldeia Goblin...", 0, 0, 520, 42);
+        transitionLabel.setAlignment(UILabel.Alignment.CENTER);
+        transitionLabel.setFont("SansSerif", Font.BOLD, 20);
+        transitionLabel.setTextColor(new Color(215, 244, 198));
+        transitionLabel.setPosition((width - 520) / 2.0, (height - 42) / 2.0);
     }
 
     /**
