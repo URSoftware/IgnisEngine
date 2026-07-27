@@ -134,6 +134,10 @@ public class Scene {
             entityJson.put("tag", entity.getTag());
             entityJson.put("layer", entity.getLayer());
 
+            if (entity.isPrefabInstance()) {
+                entityJson.put("prefabLink", entity.getPrefabLink().toJson());
+            }
+
             // Hierarquia pai-filho: guarda o pai por id + o offset local (Fase C).
             // O vinculo e religado num segundo passo do fromJSON, apos todas as
             // entidades existirem.
@@ -171,7 +175,7 @@ public class Scene {
             // rodou): persiste o vinculo pelo nome, com as variaveis pendentes se
             // houver — sem isto o anexo sumia do .ignis ao salvar.
             for (String scriptName : entity.getScriptNames()) {
-                if (serializedScripts.contains(scriptName) || "SpriteComponent".equals(scriptName)) {
+                if (serializedScripts.contains(scriptName)) {
                     continue;
                 }
                 JSONObject compJson = new JSONObject();
@@ -260,6 +264,11 @@ public class Scene {
             entity.setVisible(entityJson.optBoolean("visible", entityJson.optBoolean("visibleCheck", true)));
             entity.setTag(entityJson.optString("tag", ""));
             entity.setLayer(entityJson.optString("layer", "Default"));
+
+            if (entityJson.has("prefabLink")) {
+                PrefabLink link = PrefabLink.fromJson(entityJson.getJSONObject("prefabLink"));
+                entity.setPrefabLink(link);
+            }
 
             // CARREGAMENTO DE COMPONENTES E SUPORTE A MIGRACAO RETROATIVA
             if (entityJson.has("components")) {

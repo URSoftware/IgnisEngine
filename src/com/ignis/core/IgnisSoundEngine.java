@@ -433,15 +433,181 @@ public class IgnisSoundEngine {
         }
     }
     
-    private void setClipVolume(Clip clip, float volume) {
+    public void setClipVolume(Clip clip, float volume) {
+        if (clip == null) return;
         try {
-            FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-            // Converter volume linear para decibéis
-            float dB = (float) (Math.log10(Math.max(volume, 0.0001)) * 20.0);
-            dB = clamp(dB, gainControl.getMinimum(), gainControl.getMaximum());
-            gainControl.setValue(dB);
+            if (clip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+                // Converter volume linear para decibéis
+                float dB = (float) (Math.log10(Math.max(volume, 0.0001)) * 20.0);
+                dB = clamp(dB, gainControl.getMinimum(), gainControl.getMaximum());
+                gainControl.setValue(dB);
+            }
         } catch (Exception e) {
             // Controle de volume não disponível
+        }
+    }
+
+    public void setClipPan(Clip clip, float pan) {
+        if (clip == null) return;
+        try {
+            if (clip.isControlSupported(FloatControl.Type.PAN)) {
+                FloatControl panControl = (FloatControl) clip.getControl(FloatControl.Type.PAN);
+                float clampedPan = clamp(pan, panControl.getMinimum(), panControl.getMaximum());
+                panControl.setValue(clampedPan);
+            }
+        } catch (Exception e) {
+            // Controle de balanço estéreo não disponível
+        }
+    }
+
+    public void setClipPitch(Clip clip, float pitch) {
+        if (clip == null) return;
+        try {
+            if (clip.isControlSupported(FloatControl.Type.SAMPLE_RATE)) {
+                FloatControl rateControl = (FloatControl) clip.getControl(FloatControl.Type.SAMPLE_RATE);
+                float defaultRate = rateControl.getValue();
+                float targetRate = clamp(defaultRate * pitch, rateControl.getMinimum(), rateControl.getMaximum());
+                rateControl.setValue(targetRate);
+            }
+        } catch (Exception e) {
+            // Controle de pitch/frequência não disponível
+        }
+    }
+
+    /**
+     * Cria e inicia a reprodução de um áudio retornando um controlador {@link AudioHandle}.
+     */
+    public AudioHandle playHandle(String filePath, float volume, float pan, float pitch, boolean loop, Runnable onComplete) {
+        if (!initialized || filePath == null || filePath.trim().isEmpty()) return null;
+        try {
+            Clip clip = loadClip(filePath);
+            if (clip == null) return null;
+
+            AudioHandle handle = new AudioHandle(this, clip, filePath, volume, pan, pitch, loop, onComplete);
+
+            if (loop) {
+                clip.loop(Clip.LOOP_CONTINUOUSLY);
+            }
+
+            activeSoundEffects.add(clip);
+
+            clip.addLineListener(event -> {
+                if (event.getType() == LineEvent.Type.STOP && !loop && !handle.isPaused()) {
+                    activeSoundEffects.remove(clip);
+                    clip.close();
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                    String callbackKey = getCallbackKey(filePath);
+                    Runnable cb = soundCallbacks.get(callbackKey);
+                    if (cb != null) {
+                        cb.run();
+                    }
+                }
+            });
+
+            clip.start();
+            return handle;
+        } catch (Exception e) {
+            IgnisLogger.error("[IgnisSoundEngine] Erro ao criar AudioHandle: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Objeto de controle de áudio ativo para atualização dinâmica por frame (volume, panning, pitch, pause/resume/stop).
+     */
+    public static class AudioHandle {
+        private final IgnisSoundEngine engine;
+        private final Clip clip;
+        private final String filePath;
+        private float baseVolume;
+        private float pan;
+        private float pitch;
+        private final boolean loop;
+        private boolean paused = false;
+        private long pausePosition = 0;
+        private final Runnable onComplete;
+
+        public AudioHandle(IgnisSoundEngine engine, Clip clip, String filePath, float volume, float pan, float pitch, boolean loop, Runnable onComplete) {
+            this.engine = engine;
+            this.clip = clip;
+            this.filePath = filePath;
+            this.baseVolume = volume;
+            this.pan = pan;
+            this.pitch = pitch;
+            this.loop = loop;
+            this.onComplete = onComplete;
+            applyControls();
+        }
+
+        public void applyControls() {
+            if (clip != null && clip.isOpen()) {
+                float effectiveVolume = baseVolume * engine.getSfxVolume() * engine.getMasterVolume();
+                engine.setClipVolume(clip, effectiveVolume);
+                engine.setClipPan(clip, pan);
+                engine.setClipPitch(clip, pitch);
+            }
+        }
+
+        public void setVolume(float volume) {
+            this.baseVolume = Math.max(0.0f, Math.min(1.0f, volume));
+            applyControls();
+        }
+
+        public void setPan(float pan) {
+            this.pan = Math.max(-1.0f, Math.min(1.0f, pan));
+            applyControls();
+        }
+
+        public void setPitch(float pitch) {
+            this.pitch = Math.max(0.1f, Math.min(3.0f, pitch));
+            applyControls();
+        }
+
+        public float getVolume() { return baseVolume; }
+        public float getPan() { return pan; }
+        public float getPitch() { return pitch; }
+        public String getFilePath() { return filePath; }
+
+        public void stop() {
+            if (clip != null && clip.isOpen()) {
+                clip.stop();
+                clip.close();
+            }
+            if (engine != null) {
+                engine.activeSoundEffects.remove(clip);
+            }
+        }
+
+        public void pause() {
+            if (clip != null && clip.isRunning()) {
+                pausePosition = clip.getMicrosecondPosition();
+                clip.stop();
+                paused = true;
+            }
+        }
+
+        public void resume() {
+            if (clip != null && paused) {
+                clip.setMicrosecondPosition(pausePosition);
+                if (loop) clip.loop(Clip.LOOP_CONTINUOUSLY);
+                else clip.start();
+                paused = false;
+            }
+        }
+
+        public boolean isPlaying() {
+            return clip != null && clip.isRunning();
+        }
+
+        public boolean isPaused() {
+            return paused;
+        }
+
+        public Clip getClip() {
+            return clip;
         }
     }
 

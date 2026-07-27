@@ -9,7 +9,7 @@ import java.awt.geom.AffineTransform;
  * Componente especializado de renderização de sprites e formas geométricas primitivas.
  * Isola a lógica visual. Desenha o sprite ou a forma na posição atual do GameObject.
  */
-public class SpriteComponent extends IgnisScript {
+public class SpriteComponent extends Component {
     
     @Serialize
     private Texture2D texture;

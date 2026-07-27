@@ -201,9 +201,19 @@ final class EditorMenuBuilder {
         MenuItem instPrefab = new MenuItem("Instanciar Prefab…");
         instPrefab.setOnAction(e -> app.instantiatePrefabDialog());
 
+        MenuItem applyOverrides = new MenuItem("Aplicar Overrides ao Prefab");
+        applyOverrides.setOnAction(e -> app.applySelectedPrefabOverrides());
+
+        MenuItem revertPrefab = new MenuItem("Reverter para o Prefab Base");
+        revertPrefab.setOnAction(e -> app.revertSelectedPrefabOverrides());
+
+        MenuItem unpackPrefab = new MenuItem("Desvincular Prefab (Unpack)");
+        unpackPrefab.setOnAction(e -> app.unpackSelectedPrefab());
+
         menu.getItems().addAll(dup, ren, del,
                 new SeparatorMenuItem(), copyItem, pasteItem, new SeparatorMenuItem(), ordenar,
-                new SeparatorMenuItem(), savePrefab, instPrefab);
+                new SeparatorMenuItem(), savePrefab, instPrefab,
+                new SeparatorMenuItem(), applyOverrides, revertPrefab, unpackPrefab);
         return menu;
     }
 

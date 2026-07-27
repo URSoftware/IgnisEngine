@@ -338,6 +338,57 @@ final class InspectorSectionBuilder {
         return sec;
     }
 
+    /** Secao do Inspector para TilemapRendererComponent nativo. */
+    javafx.scene.Node buildTilemapRendererComponentSection(GameObject go, com.ignis.core.TilemapRendererComponent tmComp) {
+        VBox sec = new VBox(6);
+        sec.getChildren().add(sectionTitle("TilemapRendererComponent"));
+
+        Label info = new Label(String.format("%d x %d células de %dx%d px · %d camada(s)",
+                tmComp.getCols(), tmComp.getRows(), tmComp.getTileW(), tmComp.getTileH(), tmComp.getLayerCount()));
+        info.getStyleClass().add("toolbar-label");
+
+        TextField tileset = new TextField(tmComp.getTilesetPath() != null ? tmComp.getTilesetPath() : "");
+        tileset.setPromptText("assets/tilesets/dungeon.png");
+        Runnable applyTs = () -> { tmComp.setTilesetPath(tileset.getText().trim()); app.markProjectDirty(); };
+        tileset.setOnAction(e -> applyTs.run());
+        tileset.focusedProperty().addListener((o, a, f) -> { if (!f) applyTs.run(); });
+
+        Button addLayer = new Button("Adicionar camada");
+        addLayer.setOnAction(e -> {
+            tmComp.addLayer();
+            app.markProjectDirty();
+            app.rebuildInspectorExtras(app.selected);
+        });
+        Button clearLayer = new Button("Limpar camada 0");
+        clearLayer.setOnAction(e -> {
+            tmComp.clearLayer(0);
+            app.markProjectDirty();
+        });
+
+        // Botão para gerar colisores compostos por Greedy Meshing
+        Button greedyBtn = new Button("Gerar Colisores Compostos (Greedy Meshing)");
+        greedyBtn.setTooltip(new Tooltip("Funde blocos sólidos adjacentes da Camada 0 em colisores retangulares consolidados"));
+        greedyBtn.getStyleClass().add("btn-primary");
+        greedyBtn.setOnAction(e -> {
+            java.util.List<com.ignis.core.ColliderComponent> colliders = tmComp.generateGreedyColliders(0);
+            if (!colliders.isEmpty()) {
+                for (com.ignis.core.ColliderComponent cc : colliders) {
+                    go.addComponent(cc);
+                }
+                app.markProjectDirty();
+                app.rebuildInspectorExtras(go);
+                app.setStatus(colliders.size() + " colisores compostos gerados por Greedy Meshing.");
+            } else {
+                app.setStatus("Nenhum bloco sólido encontrado na Camada 0 para gerar colisores.");
+            }
+        });
+
+        sec.getChildren().addAll(labeledInspectorRow("Tileset", tileset), info,
+                new HBox(6, addLayer, clearLayer),
+                greedyBtn);
+        return sec;
+    }
+
     /** Secao do Inspector para texto no mundo (Fase D, item 3.9). */
     javafx.scene.Node buildTextObjectSection(com.ignis.core.TextObject txt) {
         VBox sec = new VBox(6);
@@ -501,9 +552,8 @@ final class InspectorSectionBuilder {
 
         sec.getChildren().addAll(list, new HBox(6, attach, remove, open));
 
-        // Renderizar painel de variaveis para cada script instanciado (pulando SpriteComponent)
+        // Renderizar painel de variaveis para cada script instanciado
         for (com.ignis.core.IgnisScript script : go.getScripts()) {
-            if (script instanceof SpriteComponent) continue;
             javafx.scene.Node varsNode = app.createScriptVariablesNode(script);
             if (varsNode != null) {
                 sec.getChildren().add(varsNode);

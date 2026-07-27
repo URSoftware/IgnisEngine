@@ -68,8 +68,8 @@ public class ScriptManager {
         if (!compiledFolder.exists()) {
             compiledFolder.mkdirs();
         }
-        // libsFolder e opcional por design - so criamos se o projeto ja pediu para
-        // usa-la (evita poluir todo projeto sem libs privadas com uma pasta vazia).
+        // Configura automaticamente ignis-engine-api.jar e arquivos IDE (.vscode, .classpath, pom.xml)
+        IgnisProjectIO.setupIdeConfig(projectFolder);
     }
 
     /**

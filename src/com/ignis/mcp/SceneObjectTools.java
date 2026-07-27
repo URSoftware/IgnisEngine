@@ -403,6 +403,49 @@ final class SceneObjectTools {
                 boolean exists = pm.prefabExists(args.optString("prefabName", ""));
                 return exists ? "Existe." : "Nao existe.";
             });
+
+        // apply_prefab_overrides
+        reg.add("apply_prefab_overrides",
+            "Propaga as alteracoes de uma instancia de prefab da cena para o arquivo .prefab.json.",
+            IgnisToolRegistry.schemaWith(Map.of("objectName", "Nome do objeto instancia de prefab"), List.of("objectName")),
+            args -> {
+                GameObject go = reg.findObject(args.optString("objectName", ""));
+                if (go == null) return "Erro: objeto nao encontrado.";
+                if (!go.isPrefabInstance()) return "Erro: objeto nao e uma instancia de prefab.";
+                PrefabManager pm = reg.liveGame != null ? reg.liveGame.getPrefabManager() : null;
+                if (pm == null) return "Erro: PrefabManager indisponivel.";
+                boolean ok = pm.applyOverridesToPrefab(go);
+                if (reg.refreshHook != null) reg.refreshHook.run();
+                return ok ? "Overrides aplicados ao prefab " + go.getPrefabLink().getPrefabName() : "Erro ao aplicar overrides.";
+            });
+
+        // revert_prefab_instance
+        reg.add("revert_prefab_instance",
+            "Reverte uma instancia de prefab na cena para os valores do arquivo original.",
+            IgnisToolRegistry.schemaWith(Map.of("objectName", "Nome da instancia de prefab"), List.of("objectName")),
+            args -> {
+                GameObject go = reg.findObject(args.optString("objectName", ""));
+                if (go == null) return "Erro: objeto nao encontrado.";
+                if (!go.isPrefabInstance()) return "Erro: objeto nao e uma instancia de prefab.";
+                PrefabManager pm = reg.liveGame != null ? reg.liveGame.getPrefabManager() : null;
+                if (pm == null) return "Erro: PrefabManager indisponivel.";
+                boolean ok = pm.revertInstanceToPrefab(go);
+                if (reg.refreshHook != null) reg.refreshHook.run();
+                return ok ? "Instancia revertida ao prefab base." : "Erro ao reverter instancia.";
+            });
+
+        // unpack_prefab_instance
+        reg.add("unpack_prefab_instance",
+            "Desvincula uma instancia de prefab, transformando-a em um GameObject autonomo.",
+            IgnisToolRegistry.schemaWith(Map.of("objectName", "Nome da instancia de prefab"), List.of("objectName")),
+            args -> {
+                GameObject go = reg.findObject(args.optString("objectName", ""));
+                if (go == null) return "Erro: objeto nao encontrado.";
+                if (!go.isPrefabInstance()) return "Erro: objeto nao e uma instancia de prefab.";
+                go.unpackPrefab();
+                if (reg.refreshHook != null) reg.refreshHook.run();
+                return "Objeto desvinculado do prefab.";
+            });
     }
 
     private void registerGameObjectExtraTools() {

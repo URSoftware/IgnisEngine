@@ -16,6 +16,11 @@ import com.ignis.core.ColliderComponent;
 import com.ignis.core.HealthComponent;
 import com.ignis.core.AnimationComponent;
 import com.ignis.core.RigidbodyComponent;
+import com.ignis.core.AudioSourceComponent;
+import com.ignis.core.AudioListenerComponent;
+import com.ignis.core.Light2DComponent;
+import com.ignis.core.Raycaster2DComponent;
+import com.ignis.core.TilemapRendererComponent;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
@@ -1840,6 +1845,56 @@ public class IgnisEditorApp extends Application {
                 () -> { addEntityTracked(obj); refreshHierarchy(); selectEntity(obj); markProjectDirty(); });
     }
 
+    void applySelectedPrefabOverrides() {
+        if (selected == null || !selected.isPrefabInstance()) {
+            setStatus("Nenhuma instância de prefab selecionada.");
+            return;
+        }
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm != null && pm.applyOverridesToPrefab(selected)) {
+            setStatus("Overrides aplicados ao Prefab: " + selected.getPrefabLink().getPrefabName());
+            refreshHierarchy();
+            markProjectDirty();
+        }
+    }
+
+    void revertSelectedPrefabOverrides() {
+        if (selected == null || !selected.isPrefabInstance()) {
+            setStatus("Nenhuma instância de prefab selecionada.");
+            return;
+        }
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm != null && pm.revertInstanceToPrefab(selected)) {
+            setStatus("Instância revertida para o Prefab base.");
+            refreshHierarchy();
+            markProjectDirty();
+        }
+    }
+
+    void unpackSelectedPrefab() {
+        if (selected == null || !selected.isPrefabInstance()) {
+            setStatus("Nenhuma instância de prefab selecionada.");
+            return;
+        }
+        String name = selected.getPrefabLink().getPrefabName();
+        selected.unpackPrefab();
+        setStatus("Objeto desvinculado do Prefab (" + name + ").");
+        refreshHierarchy();
+        markProjectDirty();
+    }
+
+    void openPrefabMode(String prefabName) {
+        if (prefabName == null || prefabName.trim().isEmpty()) return;
+        com.ignis.core.PrefabManager pm = getPrefabManager();
+        if (pm == null) return;
+        PrefabModeStage stage = new PrefabModeStage(prefabName, pm, () -> {
+            refreshAssetBrowser();
+            refreshHierarchy();
+            markProjectDirty();
+        });
+        stage.showAndWait();
+    }
+
     // Nome unico entre as entidades (ignora 'except', util ao renomear o proprio objeto).
     private String uniqueNameExcept(String base, GameObject except) {
         java.util.Set<String> existing = new java.util.HashSet<>();
@@ -2305,11 +2360,38 @@ public class IgnisEditorApp extends Application {
                 goItem.getChildren().add(new TreeItem<>("RigidbodyComponent"));
             }
 
+            // Sub-item de AudioSourceComponent se anexado
+            if (go.getComponent(AudioSourceComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("AudioSourceComponent"));
+            }
+
+            // Sub-item de AudioListenerComponent se anexado
+            if (go.getComponent(AudioListenerComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("AudioListenerComponent"));
+            }
+
+            // Sub-item de Light2DComponent se anexado
+            if (go.getComponent(Light2DComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("Light2DComponent"));
+            }
+
+            // Sub-item de Raycaster2DComponent se anexado
+            if (go.getComponent(Raycaster2DComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("Raycaster2DComponent"));
+            }
+
+            // Sub-item de TilemapRendererComponent se anexado
+            if (go.getComponent(TilemapRendererComponent.class) != null) {
+                goItem.getChildren().add(new TreeItem<>("TilemapRendererComponent"));
+            }
+
             // Outros componentes / scripts
             for (com.ignis.core.Component comp : go.getComponents()) {
                 if (comp instanceof SpriteComponent || comp instanceof ColliderComponent
                         || comp instanceof HealthComponent || comp instanceof AnimationComponent
-                        || comp instanceof RigidbodyComponent) {
+                        || comp instanceof RigidbodyComponent || comp instanceof AudioSourceComponent
+                        || comp instanceof AudioListenerComponent || comp instanceof Light2DComponent
+                        || comp instanceof Raycaster2DComponent || comp instanceof TilemapRendererComponent) {
                     continue;
                 }
                 if (comp instanceof com.ignis.core.IgnisScript) {
@@ -2600,6 +2682,11 @@ public class IgnisEditorApp extends Application {
                 if (animationComp != null) {
                     inspectorExtras.getChildren().add(createScriptVariablesNode(animationComp));
                 }
+            } else if (selectedComponentName.equals("TilemapRendererComponent")) {
+                TilemapRendererComponent tmComp = go.getComponent(TilemapRendererComponent.class);
+                if (tmComp != null) {
+                    inspectorExtras.getChildren().add(inspector.buildTilemapRendererComponentSection(go, tmComp));
+                }
             } else if (!selectedComponentName.equals("Transform")) {
                 // Pode ser um script customizado
                 com.ignis.core.IgnisScript targetScript = null;
@@ -2642,6 +2729,10 @@ public class IgnisEditorApp extends Application {
             RigidbodyComponent rigidbodyComp = go.getComponent(RigidbodyComponent.class);
             if (rigidbodyComp != null) {
                 inspectorExtras.getChildren().add(inspector.buildRigidbodyComponentSection(go, rigidbodyComp));
+            }
+            TilemapRendererComponent tmRendererComp = go.getComponent(TilemapRendererComponent.class);
+            if (tmRendererComp != null && !(go instanceof com.ignis.core.TilemapObject)) {
+                inspectorExtras.getChildren().add(inspector.buildTilemapRendererComponentSection(go, tmRendererComp));
             }
             if (go instanceof com.ignis.core.Camera) {
                 inspectorExtras.getChildren().add(inspector.buildCameraSection((com.ignis.core.Camera) go));
@@ -2798,7 +2889,32 @@ public class IgnisEditorApp extends Application {
                 available.add("RigidbodyComponent");
             }
 
-            // 7. Scripts disponiveis
+            // 7. AudioSourceComponent (emissor de som) se nao anexado
+            if (go.getComponent(AudioSourceComponent.class) == null) {
+                available.add("AudioSourceComponent");
+            }
+
+            // 8. AudioListenerComponent (ouvinte de som) se nao anexado
+            if (go.getComponent(AudioListenerComponent.class) == null) {
+                available.add("AudioListenerComponent");
+            }
+
+            // 9. Light2DComponent (iluminacao dinamica 2D) se nao anexado
+            if (go.getComponent(Light2DComponent.class) == null) {
+                available.add("Light2DComponent");
+            }
+
+            // 10. Raycaster2DComponent (sensor por raio 2D) se nao anexado
+            if (go.getComponent(Raycaster2DComponent.class) == null) {
+                available.add("Raycaster2DComponent");
+            }
+
+            // 11. TilemapRendererComponent (grade de tiles 2D) se nao anexado
+            if (go.getComponent(TilemapRendererComponent.class) == null) {
+                available.add("TilemapRendererComponent");
+            }
+
+            // 12. Scripts disponiveis
             for (String scriptName : sm.listAvailableScripts()) {
                 if (!go.getScriptNames().contains(scriptName)) {
                     available.add(scriptName);
@@ -2822,6 +2938,11 @@ public class IgnisEditorApp extends Application {
                 else if (selected.equals("AnimationComponent")) nativeComp = new AnimationComponent();
                 else if (selected.equals("CanvasComponent")) nativeComp = new com.ignis.core.CanvasComponent();
                 else if (selected.equals("RigidbodyComponent")) nativeComp = new RigidbodyComponent();
+                else if (selected.equals("AudioSourceComponent")) nativeComp = new AudioSourceComponent();
+                else if (selected.equals("AudioListenerComponent")) nativeComp = new AudioListenerComponent();
+                else if (selected.equals("Light2DComponent")) nativeComp = new Light2DComponent();
+                else if (selected.equals("Raycaster2DComponent")) nativeComp = new Raycaster2DComponent();
+                else if (selected.equals("TilemapRendererComponent")) nativeComp = new TilemapRendererComponent();
 
                 if (nativeComp != null) {
                     final com.ignis.core.Component comp = nativeComp;
@@ -3253,7 +3374,6 @@ public class IgnisEditorApp extends Application {
                 }
             }
             for (String scriptName : scriptNames) {
-                if ("SpriteComponent".equals(scriptName)) continue; // legado: nunca foi script de usuario
                 com.ignis.core.IgnisScript newInstance = sm.createScriptInstance(scriptName, obj, game);
                 if (newInstance != null) {
                     obj.addComponent(newInstance);

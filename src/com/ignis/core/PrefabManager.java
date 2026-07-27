@@ -77,6 +77,7 @@ public class PrefabManager {
             // Salvar duas vezes dentro do mesmo tick de mtime (resolucao do FS pode
             // ser de 1s) deixaria o cache servindo a versao antiga: invalida na mao.
             invalidatePrefabCache(prefabName);
+            propagateChanges(prefabName);
 
             com.ignis.core.IgnisLogger.info("Prefab salvo com sucesso: " + prefabFile.getName());
             return true;
@@ -164,11 +165,147 @@ public class PrefabManager {
         try {
             JSONObject prefabJson = prefabJson(prefabFile);
 
-            return deserializeGameObject(prefabJson, x, y);
+            GameObject obj = deserializeGameObject(prefabJson, x, y);
+            if (obj != null) {
+                obj.setPrefabLink(new PrefabLink(prefabName));
+                if (x >= 0) obj.getPrefabLink().setOverride("x");
+                if (y >= 0) obj.getPrefabLink().setOverride("y");
+            }
+            return obj;
 
         } catch (Exception e) {
             IgnisLogger.error("Failed to instantiate prefab: " + e.getMessage(), e);
             return null;
+        }
+    }
+
+    /**
+     * Propaga alterações do prefab para todas as instâncias vivas no jogo, preservando overrides.
+     */
+    public void propagateChanges(String prefabName) {
+        if (game == null || game.getEntities() == null) return;
+        File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
+        if (!prefabFile.exists()) return;
+
+        try {
+            JSONObject prefabJson = prefabJson(prefabFile);
+            JSONObject transform = prefabJson.optJSONObject("transform");
+
+            for (GameObject obj : game.getEntities()) {
+                if (obj.isPrefabInstance() && prefabName.equals(obj.getPrefabLink().getPrefabName())) {
+                    PrefabLink link = obj.getPrefabLink();
+
+                    if (transform != null) {
+                        if (!link.isOverridden("x")) obj.x = transform.optDouble("x", obj.getX());
+                        if (!link.isOverridden("y")) obj.y = transform.optDouble("y", obj.getY());
+                        if (!link.isOverridden("rotation")) obj.setRotation(transform.optDouble("rotation", 0));
+                        if (!link.isOverridden("width")) obj.setWidth(transform.optInt("width", obj.getWidth()));
+                        if (!link.isOverridden("height")) obj.setHeight(transform.optInt("height", obj.getHeight()));
+                    }
+
+                    if (prefabJson.has("spritePath") && !link.isOverridden("spritePath")) {
+                        obj.setSpritePath(prefabJson.getString("spritePath"));
+                    }
+
+                    if (prefabJson.has("tag") && !link.isOverridden("tag")) {
+                        obj.setTag(prefabJson.getString("tag"));
+                    }
+                    if (prefabJson.has("layer") && !link.isOverridden("layer")) {
+                        obj.setLayer(prefabJson.getString("layer"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            IgnisLogger.error("Failed to propagate prefab changes: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Propaga as alterações da instância para o arquivo do prefab e limpa os overrides.
+     */
+    public boolean applyOverridesToPrefab(GameObject instance) {
+        if (instance == null || !instance.isPrefabInstance()) return false;
+        String prefabName = instance.getPrefabLink().getPrefabName();
+        boolean saved = savePrefab(instance, prefabName);
+        if (saved) {
+            instance.getPrefabLink().clearAllOverrides();
+            propagateChanges(prefabName);
+        }
+        return saved;
+    }
+
+    /**
+     * Reverte uma instância inteira para o estado base do prefab.
+     */
+    public boolean revertInstanceToPrefab(GameObject instance) {
+        if (instance == null || !instance.isPrefabInstance()) return false;
+        String prefabName = instance.getPrefabLink().getPrefabName();
+        File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
+        if (!prefabFile.exists()) return false;
+
+        try {
+            JSONObject json = prefabJson(prefabFile);
+            JSONObject transform = json.optJSONObject("transform");
+
+            if (transform != null) {
+                instance.setX(transform.optDouble("x", 0));
+                instance.setY(transform.optDouble("y", 0));
+                instance.setRotation(transform.optDouble("rotation", 0));
+                instance.setWidth(transform.optInt("width", 32));
+                instance.setHeight(transform.optInt("height", 32));
+            }
+            if (json.has("spritePath")) {
+                instance.setSpritePath(json.getString("spritePath"));
+            }
+            if (json.has("tag")) instance.setTag(json.getString("tag"));
+            if (json.has("layer")) instance.setLayer(json.getString("layer"));
+
+            instance.getPrefabLink().clearAllOverrides();
+            return true;
+        } catch (Exception e) {
+            IgnisLogger.error("Failed to revert prefab instance: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Reverte uma única propriedade sobreescrita de uma instância de prefab.
+     */
+    public boolean revertProperty(GameObject instance, String propertyName) {
+        if (instance == null || !instance.isPrefabInstance() || propertyName == null) return false;
+        String prefabName = instance.getPrefabLink().getPrefabName();
+        File prefabFile = new File(prefabsFolder, prefabName + ".prefab.json");
+        if (!prefabFile.exists()) return false;
+
+        try {
+            JSONObject json = prefabJson(prefabFile);
+            JSONObject transform = json.optJSONObject("transform");
+
+            switch (propertyName) {
+                case "x":
+                    if (transform != null) instance.setX(transform.optDouble("x", 0));
+                    break;
+                case "y":
+                    if (transform != null) instance.setY(transform.optDouble("y", 0));
+                    break;
+                case "rotation":
+                    if (transform != null) instance.setRotation(transform.optDouble("rotation", 0));
+                    break;
+                case "spritePath":
+                    if (json.has("spritePath")) instance.setSpritePath(json.getString("spritePath"));
+                    break;
+                case "tag":
+                    if (json.has("tag")) instance.setTag(json.getString("tag"));
+                    break;
+                case "layer":
+                    if (json.has("layer")) instance.setLayer(json.getString("layer"));
+                    break;
+            }
+            instance.getPrefabLink().removeOverride(propertyName);
+            return true;
+        } catch (Exception e) {
+            IgnisLogger.error("Failed to revert property: " + e.getMessage());
+            return false;
         }
     }
     

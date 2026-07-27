@@ -185,6 +185,16 @@ final class SceneOverlayRenderer {
             if (e instanceof LightObject && e.isVisible()) {
                 lights.add((LightObject) e);
             }
+            Light2DComponent lightComp = e.getComponent(Light2DComponent.class);
+            if (lightComp != null && lightComp.isEnabled() && e.isVisible() && !"Global".equalsIgnoreCase(lightComp.getLightType())) {
+                LightObject synth = new LightObject();
+                synth.setX(e.getX());
+                synth.setY(e.getY());
+                synth.setRadius(lightComp.getRadius());
+                synth.setIntensity(lightComp.getIntensity());
+                synth.setLightColor(lightComp.getColor());
+                lights.add(synth);
+            }
         }
 
         // Transform mundo->dispositivo: captura a mesma que a camera aplicou as
