@@ -1,0 +1,13 @@
+{
+  "curveType": "EASE_IN_OUT",
+  "frames": [
+    { "duration": 0.18, "sprite": "assets/sprites/ranga_01.png" },
+    { "duration": 0.18, "sprite": "assets/sprites/ranga_02.png" },
+    { "duration": 0.18, "sprite": "assets/sprites/ranga_03.png" },
+    { "duration": 0.18, "sprite": "assets/sprites/ranga_04.png" },
+    { "duration": 0.24, "sprite": "assets/sprites/ranga_03.png" },
+    { "duration": 0.30, "sprite": "assets/sprites/ranga_01.png" }
+  ],
+  "loop": false,
+  "name": "cutscene_ranga_naming_v1"
+}

@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "sceneName": "GoblinVillageScene",
+  "visualSetId": "goblin_village_scene_v1",
+  "coordinateSpace": "local_pixels",
+  "viewport": { "width": 640, "height": 512, "safeMargin": 32 },
+  "background": {
+    "groundSprite": "assets/sprites/jura_forest_ground.png",
+    "groundRect": { "x": 0, "y": 0, "width": 640, "height": 512 },
+    "tint": "#173D2B",
+    "zIndex": -120
+  },
+  "layers": {
+    "farCanopy": -100,
+    "groundProps": -40,
+    "buildings": 0,
+    "actors": 30,
+    "interactionFx": 60,
+    "dialogue": 100
+  },
+  "actors": {
+    "player": {
+      "objectName": "Rimuru",
+      "spawn": { "x": 304, "y": 384 },
+      "zIndex": 30,
+      "animationSet": "rimuru_slime_move"
+    },
+    "goblinElder": {
+      "objectName": "GoblinElder",
+      "spawn": { "x": 156, "y": 220 },
+      "zIndex": 35,
+      "animationSet": "goblin_elder_idle"
+    },
+    "ranga": {
+      "objectName": "Ranga",
+      "spawn": { "x": 438, "y": 254 },
+      "zIndex": 36,
+      "initiallyVisible": false,
+      "animationSet": "ranga_run"
+    },
+    "goblinScout": {
+      "objectName": "GoblinScoutNPC",
+      "spawn": { "x": 500, "y": 160 },
+      "zIndex": 34,
+      "initiallyVisible": true,
+      "animationSet": "goblin_scout_idle"
+    }
+  },
+  "props": [
+    {
+      "objectName": "VillageEntrancePalisade",
+      "sprite": "assets/sprites/props/goblin_village/goblin_village_palisade_neutral_v1.png",
+      "states": {
+        "REINFORCE_ENTRANCE": [
+          "assets/sprites/props/goblin_village/goblin_village_palisade_reinforced_v1.png",
+          "assets/sprites/props/goblin_village/goblin_village_palisade_spiked_v1.png"
+        ]
+      },
+      "rect": { "x": 72, "y": 104, "width": 160, "height": 64 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageCouncilFire",
+      "sprite": "assets/sprites/buildings/tempest_council_fire_01.png",
+      "animation": "tempest_council_fire",
+      "rect": { "x": 270, "y": 184, "width": 64, "height": 64 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageProjectBoard",
+      "sprite": "assets/sprites/buildings/tempest_project_board_empty.png",
+      "states": {
+        "project_available": "assets/sprites/buildings/tempest_project_board_important.png",
+        "project_complete": "assets/sprites/buildings/tempest_project_board_complete.png"
+      },
+      "rect": { "x": 90, "y": 300, "width": 64, "height": 64 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageScoutTent",
+      "sprite": "assets/sprites/props/goblin_village/goblin_village_tent_scout_v1.png",
+      "rect": { "x": 486, "y": 302, "width": 64, "height": 48 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageSuppliesTent",
+      "sprite": "assets/sprites/props/goblin_village/goblin_village_tent_supplies_v1.png",
+      "rect": { "x": 548, "y": 350, "width": 64, "height": 48 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageWatchPost",
+      "sprite": "assets/sprites/buildings/tempest_watch_post_00.png",
+      "states": {
+        "built": "assets/sprites/buildings/tempest_watch_post_100.png",
+        "active": "assets/sprites/buildings/tempest_watch_post_active.png"
+      },
+      "rect": { "x": 548, "y": 90, "width": 80, "height": 96 },
+      "zIndex": 0
+    },
+    {
+      "objectName": "VillageTorchPair",
+      "sprite": "assets/sprites/props/goblin_village/goblin_village_torch_unlit_v1.png",
+      "litSprite": "assets/sprites/props/goblin_village/goblin_village_torch_lit_v1.png",
+      "animation": "goblin_village_torch",
+      "rect": { "x": 244, "y": 250, "width": 48, "height": 80 },
+      "zIndex": 5
+    }
+  ],
+  "narrativePresentation": {
+    "firstVisit": "cutscene-naming-first-village.json",
+    "rangaNamingClip": "cutscene_ranga_naming_v1",
+    "nameExchangeVfx": "vfx_name_exchange_magicule_wave",
+    "rangaCallSound": "sounds/ranga_call.wav",
+    "ambientMusic": "music/tempest_forest_theme.wav"
+  },
+  "interactions": [
+    { "id": "elder_council", "objectName": "GoblinElder", "verb": "TALK", "requires": [] },
+    { "id": "project_board", "objectName": "VillageProjectBoard", "verb": "INSPECT", "requires": ["goblin_village_route_ready"] },
+    { "id": "council_fire", "objectName": "VillageCouncilFire", "verb": "TALK", "requires": ["ranga_named_and_village_route_ready"] },
+    { "id": "ranga_companion", "objectName": "Ranga", "verb": "TALK", "requires": ["ranga_named"] },
+    { "id": "village_exit", "objectName": "VillageEntrancePalisade", "verb": "TRAVEL", "requires": ["goblin_village_route_ready"] }
+  ],
+  "stateVisuals": {
+    "pre_naming": { "rangaVisible": false, "projectBoard": "empty", "watchPost": "base" },
+    "ranga_named": { "rangaVisible": true, "projectBoard": "empty", "watchPost": "base" },
+    "first_project_available": { "rangaVisible": true, "projectBoard": "project_available", "watchPost": "base" },
+    "first_project_complete": { "rangaVisible": true, "projectBoard": "project_complete", "watchPost": "built" }
+  },
+  "invariants": [
+    "GoblinVillageScene owns village props; MainScene and JuraForestScene never render them.",
+    "Rimuru, Ranga, GoblinElder and GoblinScout are unique actors and are never cloned by a cutscene.",
+    "State changes replace the sprite of one prop instead of creating a second prop.",
+    "All coordinates are local to GoblinVillageScene and the player remains inside the safe margin.",
+    "No chroma-key, solid gray backdrop or opaque full-screen overlay is allowed in gameplay.",
+    "Cutscene completion and skip converge on the same idempotent state before input returns."
+  ]
+}

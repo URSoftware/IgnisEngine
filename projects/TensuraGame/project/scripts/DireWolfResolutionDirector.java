@@ -149,6 +149,13 @@ public final class DireWolfResolutionDirector extends IgnisScript {
                 leader.setOpacity(1);
             }
 
+            // Forca recriacao: clearUI() do GameFlowController limpa o UICanvas
+            // GLOBAL (compartilhado), nao so o proprio. Sem isto, uma segunda chamada
+            // a play() nesta mesma sessao de Play (retomada de save re-entrando na
+            // cutscene, por exemplo) pularia setupUi() e apontaria para widgets
+            // orfaos ja removidos do canvas — mesma causa raiz corrigida em
+            // BattleDirector.beginDuel().
+            uiReady = false;
             setupUi();
             setUiVisible(true);
             applyBeatState(sequence.currentBeat());

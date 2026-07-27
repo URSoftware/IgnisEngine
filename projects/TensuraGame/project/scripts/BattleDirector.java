@@ -1,3 +1,6 @@
+import com.ignis.animation.AnimationIO;
+import com.ignis.animation.Animator;
+import com.ignis.animation.SpriteAnimation;
 import com.ignis.core.AssetResolver;
 import com.ignis.core.GameObject;
 import com.ignis.core.IgnisScript;
@@ -22,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,7 +37,14 @@ import java.util.Set;
  *
  * <p>Adaptador FINO: toda regra de jogo vive em {@link BattleSimulation} e a
  * classificacao de tempo de reacao em {@link ReactionWindow}, ambos do jar de
- * dominio. Este script traduz snapshot -> HUD visual e input -> comando de dominio.
+ * dominio. Este script traduz snapshot -> HUD/VFX visual e input -> comando de
+ * dominio, atraves de uma maquina explicita {@code COMMAND -> ACTION -> REACTION ->
+ * COMMAND}: todo comando e calculado EXATAMENTE UMA VEZ (em {@link #beginAction}), o
+ * resultado fica retido em {@link #pendingResult} e so e revelado ao fim do beat de
+ * apresentacao (VFX/pose), quando {@link #resolveAction} decide o proximo modo. Input
+ * de comando (1-6, SPACE de reacao) e ignorado fora de {@code COMMAND}/{@code
+ * REACTION} porque {@link #tick} so despacha para o handler do modo atual — bloqueio
+ * estrutural, nao uma checagem redundante.</p>
  */
 public final class BattleDirector extends IgnisScript {
 
@@ -45,10 +56,32 @@ public final class BattleDirector extends IgnisScript {
     private static final Set<VillagePreparation> DEFAULT_PREPARATIONS = Set.of(
             VillagePreparation.REINFORCE_ENTRANCE, VillagePreparation.LIGHT_FLANK);
 
+    // Entrada de QA/depuracao APENAS: o fluxo narrativo real dispara o duelo via
+    // SIGNAL_ENTER_DUEL (GameFlowController -> BattleDirector). F10 nunca e
+    // referenciado por outro script nem por save/progressao — pode ser removido do
+    // build de producao sem quebrar nada; existe so para permitir QA determinista
+    // (fita de input/click_ui) sem depender do fluxo narrativo completo.
+    private static final String DEBUG_START_KEY = "F10";
+
+    // Pausa minima de leitura de um beat de ACAO sem VFX proprio (ex.: Analisar) e
+    // piso para nao cortar VFX curto demais antes do jogador conseguir ler o HUD.
+    private static final double MIN_ACTION_SECONDS = 0.6;
+
     private static final String PORTRAIT_PATH = "assets/sprites/ui/battle/dire_wolf_leader_portrait_v1.png";
     private static final String BITE_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_bite_v1.png";
     private static final String PACK_CALL_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_pack_call_v1.png";
     private static final String CHARGE_TELEGRAPH_PATH = "assets/sprites/ui/battle/dire_wolf_telegraph_charge_v1.png";
+
+    // Clipes de VFX/pose reutilizados dos assets ja entregues pelo Codex (nenhum
+    // asset novo inventado). "hit"/"surrender" sao os MESMOS clipes que
+    // DireWolfResolutionDirector usa na cutscene de resolucao — reuso semantico
+    // deliberado, nao coincidencia de nome.
+    private static final String CLIP_HYDROLAMINA = "battle_hydrolamina_v1";
+    private static final String CLIP_GUARD_REACTION = "battle_guard_reaction_v1";
+    private static final String CLIP_WOLF_STRIKE = "battle_dire_wolf_strike_v1";
+    private static final String CLIP_LEADER_HIT = "dire_wolf_leader_reaction_hit_v1";
+    private static final String CLIP_LEADER_SURRENDER = "dire_wolf_leader_reaction_surrender_v1";
+    private static final String CLIP_LEADER_IDLE = "dire_wolf_leader_idle";
 
     private final Map<String, BattleCommand> keyToCommand = new LinkedHashMap<>();
     private final Map<String, String> commandKey = new LinkedHashMap<>();
@@ -56,6 +89,7 @@ public final class BattleDirector extends IgnisScript {
     private final Map<String, String> commandHint = new LinkedHashMap<>();
     private final Map<String, String> outcomeText = new LinkedHashMap<>();
     private final Map<String, String> gradeLabel = new LinkedHashMap<>();
+    private final Map<String, SpriteAnimation> clipCache = new HashMap<>();
 
     private JSONObject config;
     private double telegraphSeconds = 1.1;
@@ -66,6 +100,15 @@ public final class BattleDirector extends IgnisScript {
     private double reactionElapsed;
     private String statusMessage = "";
     private boolean completionDelivered;
+
+    // Estado do beat de ACAO em curso: o comando ja foi calculado (beginAction);
+    // ACAO so espera o efeito visual terminar (ou o jogador pular) antes de revelar
+    // o resultado guardado em pendingResult.
+    private double actionElapsed;
+    private BattleActionResult pendingResult;
+    private String pendingReactionGrade;
+    private final List<GameObject> activeVfxThisBeat = new ArrayList<>();
+    private boolean leaderPoseChangedThisBeat;
 
     private boolean uiReady;
     private UIPanel shade;
@@ -83,23 +126,35 @@ public final class BattleDirector extends IgnisScript {
     private UIImage packCallTelegraphImage;
     private UIImage chargeTelegraphImage;
     private GameObject leaderActor;
+    private GameObject hydrolaminaVfx;
+    private GameObject guardReactionVfx;
+    private GameObject wolfStrikeVfx;
 
     public void start() {
         config = readJson(BATTLE_DATA);
         parseConfig(config);
+        preloadClips();
         onSceneSignal(SIGNAL_ENTER_DUEL, this::beginDuelFromSignal);
-        log("BattleDirector: inicializado. Depuracao pronta (F10).");
+        log("BattleDirector: inicializado. " + DEBUG_START_KEY + " e entrada de QA/debug apenas.");
     }
 
     public void tick() {
         if (mode == Mode.INACTIVE) {
-            if (isKeyJustPressed("F10")) {
+            // isKeyPressed (nivel), nao isKeyJustPressed: o loop do jogo continua
+            // ticando em background mesmo com o mundo pausado (GameLoop.run() nao
+            // depende de gameState), entao uma injecao MCP de borda pode ser
+            // consumida por um tick de fundo antes do advance_frames controlado ler
+            // o "just pressed". Nivel e imune a essa corrida e beginDuel() ja e
+            // idempotente (guarda mode != INACTIVE), entao repetir a checagem em
+            // varios frames com a tecla ainda "pressionada" e inofensivo.
+            if (isKeyPressed(DEBUG_START_KEY)) {
                 beginDuel(DEFAULT_PREPARATIONS);
             }
             return;
         }
         switch (mode) {
             case COMMAND -> tickCommand();
+            case ACTION -> tickAction();
             case REACTION -> tickReaction();
             case RESULT -> tickResult();
             default -> { }
@@ -120,7 +175,14 @@ public final class BattleDirector extends IgnisScript {
         completionDelivered = false;
         reactionElapsed = 0;
         statusMessage = "Escolha um comando. Leia a intencao do lider antes de agir.";
-        ensureLeaderActor();
+        ensureActors();
+        // Forca recriacao da UI a cada duelo: IgnisScript.clearUI() limpa o UICanvas
+        // GLOBAL (compartilhado por todos os scripts, nao so o do chamador). No
+        // retorno jogavel apos derrota, GameFlowController chama clearUI() antes de
+        // permitir um novo duelo — sem este reset, uiReady continuaria true e
+        // setupUi() pularia a criacao, deixando os campos apontando para widgets
+        // orfaos (removidos do canvas, nunca mais renderizados).
+        uiReady = false;
         setupUi();
         setUiVisible(true);
         mode = Mode.COMMAND;
@@ -145,7 +207,7 @@ public final class BattleDirector extends IgnisScript {
         return chosen.size() == 2 ? chosen : DEFAULT_PREPARATIONS;
     }
 
-    // ==================== Ciclo de comando ====================
+    // ==================== COMMAND: escolha do jogador ====================
 
     private void tickCommand() {
         for (Map.Entry<String, BattleCommand> entry : keyToCommand.entrySet()) {
@@ -164,39 +226,184 @@ public final class BattleDirector extends IgnisScript {
             refreshHud();
             return;
         }
-        applyCommand(command, ReactionTiming.NONE, null);
+        beginAction(command, ReactionTiming.NONE, null);
     }
+
+    // ==================== REACTION: janela de defesa ====================
 
     private void tickReaction() {
         reactionElapsed += getDeltaTime();
         if (isKeyJustPressed("SPACE")) {
             double offset = reactionElapsed - telegraphSeconds;
             ReactionTiming timing = reactionWindow.classify(offset);
-            applyCommand(BattleCommand.DEFEND, timing, timing.name());
+            beginAction(BattleCommand.DEFEND, timing, timing.name());
             return;
         }
         if (reactionElapsed > telegraphSeconds + reactionWindow.activeRadius()) {
-            applyCommand(BattleCommand.DEFEND, ReactionTiming.NONE, ReactionTiming.NONE.name());
+            beginAction(BattleCommand.DEFEND, ReactionTiming.NONE, ReactionTiming.NONE.name());
         }
     }
 
-    private void applyCommand(BattleCommand command, ReactionTiming timing, String reactionGrade) {
+    // ==================== ACTION: calculo unico + apresentacao ====================
+
+    /**
+     * Calcula o comando no dominio EXATAMENTE UMA VEZ e decide a apresentacao.
+     * Comando invalido/recusado (ex.: magicules insuficientes) nao gasta turno e nao
+     * tem efeito para apresentar: volta direto a COMMAND sem passar por ACTION.
+     */
+    private void beginAction(BattleCommand command, ReactionTiming timing, String reactionGrade) {
+        BattleIntention priorIntention = battle.currentIntention();
         BattleActionResult result = battle.executeCommand(command, timing);
-        StringBuilder message = new StringBuilder(result.message());
-        if (reactionGrade != null) {
+
+        if (!result.valid()) {
+            statusMessage = result.message();
+            refreshHud();
+            mode = Mode.COMMAND;
+            return;
+        }
+
+        pendingResult = result;
+        pendingReactionGrade = reactionGrade;
+        actionElapsed = 0;
+        mode = Mode.ACTION;
+        statusMessage = commandLabel.getOrDefault(command.name(), command.commandName()) + "...";
+
+        presentAction(command, priorIntention);
+        refreshHud();
+    }
+
+    /** Avanca o beat de ACAO: espera o VFX/pose terminar (ou skip) antes de revelar. */
+    private void tickAction() {
+        actionElapsed += getDeltaTime();
+        boolean skip = isKeyJustPressed("ENTER") || isKeyJustPressed("SPACE");
+        boolean animationsFinished = activeVfxThisBeat.stream()
+                .allMatch(go -> !go.getOrCreateAnimator().isPlaying());
+        if (skip || (animationsFinished && actionElapsed >= MIN_ACTION_SECONDS)) {
+            resolveAction();
+        }
+    }
+
+    /** Fim do beat: esconde VFX, restaura a pose do lider e revela o resultado retido. */
+    private void resolveAction() {
+        hideVfx(hydrolaminaVfx);
+        hideVfx(guardReactionVfx);
+        hideVfx(wolfStrikeVfx);
+        if (leaderPoseChangedThisBeat) {
+            playClip(leaderActor, CLIP_LEADER_IDLE);
+            leaderPoseChangedThisBeat = false;
+        }
+        activeVfxThisBeat.clear();
+
+        if (pendingResult == null) {
+            mode = Mode.COMMAND; // guarda defensiva; beginAction sempre preenche antes de entrar em ACTION
+            return;
+        }
+
+        StringBuilder message = new StringBuilder(pendingResult.message());
+        if (pendingReactionGrade != null) {
             message.append("  (Reacao: ")
-                    .append(gradeLabel.getOrDefault(reactionGrade, reactionGrade))
+                    .append(gradeLabel.getOrDefault(pendingReactionGrade, pendingReactionGrade))
                     .append(')');
         }
         statusMessage = message.toString();
-        refreshHud();
+        pendingResult = null;
+        pendingReactionGrade = null;
 
-        if (battle.outcome() != BattleOutcome.IN_PROGRESS) {
-            mode = Mode.RESULT;
-            return;
-        }
-        mode = Mode.COMMAND;
+        // mode PRECISA mudar antes de refreshHud(): o override de outcomeText/
+        // "[E] encerrar" dentro de refreshHud() checa mode == RESULT, entao chamar
+        // na ordem errada mostraria a mensagem crua do turno em vez do desfecho.
+        mode = (battle.outcome() != BattleOutcome.IN_PROGRESS) ? Mode.RESULT : Mode.COMMAND;
+        refreshHud();
     }
+
+    /**
+     * Decide e dispara o VFX/pose de cada comando. {@code priorIntention} e a
+     * intencao do lider ANTES de {@code executeCommand} (que ja a substitui pela do
+     * proximo turno) — e o unico jeito de saber se o contra-ataque deste turno e
+     * real, usando a MESMA condicao que o dominio usa para aplica-lo (secao 4 de
+     * {@code BattleSimulation.executeCommand}), em vez de inferir por delta de HP.
+     */
+    private void presentAction(BattleCommand command, BattleIntention priorIntention) {
+        boolean counterIncoming = priorIntention != null
+                && priorIntention.requiresReaction()
+                && priorIntention.baseDamage() > 0;
+
+        switch (command) {
+            case WATER_BLADE -> {
+                playVfx(hydrolaminaVfx, CLIP_HYDROLAMINA);
+                trackVfx(hydrolaminaVfx);
+                if (playClip(leaderActor, CLIP_LEADER_HIT)) {
+                    leaderPoseChangedThisBeat = true;
+                    trackVfx(leaderActor);
+                }
+                if (counterIncoming) {
+                    playVfx(wolfStrikeVfx, CLIP_WOLF_STRIKE);
+                    trackVfx(wolfStrikeVfx);
+                }
+            }
+            case GOBLIN_SUPPORT -> {
+                if (playClip(leaderActor, CLIP_LEADER_HIT)) {
+                    leaderPoseChangedThisBeat = true;
+                    trackVfx(leaderActor);
+                }
+                if (counterIncoming) {
+                    playVfx(wolfStrikeVfx, CLIP_WOLF_STRIKE);
+                    trackVfx(wolfStrikeVfx);
+                }
+            }
+            case DEFEND -> {
+                playVfx(guardReactionVfx, CLIP_GUARD_REACTION);
+                trackVfx(guardReactionVfx);
+                if (counterIncoming) {
+                    playVfx(wolfStrikeVfx, CLIP_WOLF_STRIKE);
+                    trackVfx(wolfStrikeVfx);
+                }
+            }
+            case PREDATOR -> {
+                if (playClip(leaderActor, CLIP_LEADER_HIT)) {
+                    leaderPoseChangedThisBeat = true;
+                    trackVfx(leaderActor);
+                }
+            }
+            case NEGOTIATE -> {
+                if (playClip(leaderActor, CLIP_LEADER_SURRENDER)) {
+                    leaderPoseChangedThisBeat = true;
+                    trackVfx(leaderActor);
+                }
+            }
+            case ANALYZE -> {
+                // Sem VFX: nada acontece com o lider. O beat vira so a pausa legivel
+                // de MIN_ACTION_SECONDS antes de revelar a analise no HUD.
+            }
+        }
+    }
+
+    private void trackVfx(GameObject go) {
+        if (go != null) activeVfxThisBeat.add(go);
+    }
+
+    private void playVfx(GameObject vfx, String clipName) {
+        if (vfx == null) return;
+        if (!playClip(vfx, clipName)) return;
+        vfx.setVisible(true);
+        vfx.setOpacity(1);
+    }
+
+    private void hideVfx(GameObject vfx) {
+        if (vfx != null) vfx.setVisible(false);
+    }
+
+    /** Toca {@code clipName} no Animator de {@code actor}. @return false se ausente. */
+    private boolean playClip(GameObject actor, String clipName) {
+        SpriteAnimation anim = clipCache.get(clipName);
+        if (actor == null || anim == null) return false;
+        Animator animator = actor.getOrCreateAnimator();
+        animator.addAnimation(anim);
+        animator.play(anim.getName());
+        return true;
+    }
+
+    // ==================== RESULT: fim do duelo ====================
 
     private void tickResult() {
         if (isKeyJustPressed("E") || isKeyJustPressed("ENTER")) {
@@ -210,6 +417,9 @@ public final class BattleDirector extends IgnisScript {
         BattleOutcome outcome = battle.outcome();
         setUiVisible(false);
         hideAllTelegraphs();
+        hideVfx(hydrolaminaVfx);
+        hideVfx(guardReactionVfx);
+        hideVfx(wolfStrikeVfx);
         if (leaderActor != null) {
             leaderActor.setVisible(false);
         }
@@ -344,14 +554,29 @@ public final class BattleDirector extends IgnisScript {
         layoutUi();
     }
 
-    private void ensureLeaderActor() {
+    /**
+     * Resolve os atores/VFX unicos da cena e os posiciona relativos ao jogador, para
+     * que fiquem dentro da safe area independente de onde o duelo comecar (mesma
+     * logica ja validada na tarefa #11 para o lider; aqui estendida aos 3 VFX).
+     */
+    private void ensureActors() {
         if (leaderActor == null) {
             leaderActor = findObject("DireWolfLeader");
         }
+        if (hydrolaminaVfx == null) {
+            hydrolaminaVfx = findObject("BattleHydrolaminaVfx");
+        }
+        if (guardReactionVfx == null) {
+            guardReactionVfx = findObject("BattleGuardReactionVfx");
+        }
+        if (wolfStrikeVfx == null) {
+            wolfStrikeVfx = findObject("BattleWolfStrikeVfx");
+        }
+
+        GameObject player = findObject("Rimuru");
         if (leaderActor != null) {
             leaderActor.setVisible(true);
             leaderActor.setOpacity(1);
-            GameObject player = findObject("Rimuru");
             if (player != null) {
                 double px = player.getX();
                 double py = player.getY();
@@ -362,10 +587,23 @@ public final class BattleDirector extends IgnisScript {
                 setCameraPosition(px + 80, py - 10);
             }
         }
+        // Hidrolamina e o ataque de Rimuru: centraliza no lider, alvo do golpe.
+        centerOn(hydrolaminaVfx, leaderActor);
+        // Guarda e investida acontecem em Rimuru: guarda bloqueia, investida atinge.
+        centerOn(wolfStrikeVfx, player);
+        centerOn(guardReactionVfx, player);
+    }
+
+    private void centerOn(GameObject vfx, GameObject anchor) {
+        if (vfx == null || anchor == null) return;
+        double cx = anchor.getX() + anchor.getWidth() / 2.0;
+        double cy = anchor.getY() + anchor.getHeight() / 2.0;
+        vfx.setX(cx - vfx.getWidth() / 2.0);
+        vfx.setY(cy - vfx.getHeight() / 2.0);
     }
 
     private void updateTelegraphs() {
-        if (mode != Mode.INACTIVE && mode != Mode.RESULT && battle != null) {
+        if (mode != Mode.INACTIVE && mode != Mode.RESULT && mode != Mode.ACTION && battle != null) {
             BattleIntention intention = battle.currentIntention();
             boolean isReacting = mode == Mode.REACTION || intention.requiresReaction();
             if (isReacting) {
@@ -465,6 +703,23 @@ public final class BattleDirector extends IgnisScript {
         }
     }
 
+    private void preloadClips() {
+        preloadClip(CLIP_HYDROLAMINA);
+        preloadClip(CLIP_GUARD_REACTION);
+        preloadClip(CLIP_WOLF_STRIKE);
+        preloadClip(CLIP_LEADER_HIT);
+        preloadClip(CLIP_LEADER_SURRENDER);
+        preloadClip(CLIP_LEADER_IDLE);
+    }
+
+    private void preloadClip(String clipName) {
+        File file = AssetResolver.resolve("assets/animations/" + clipName + ".anim.json");
+        if (file == null || !file.exists()) return;
+        try {
+            clipCache.put(clipName, AnimationIO.load(file));
+        } catch (Exception ignored) { }
+    }
+
     private JSONObject readJson(String relativePath) {
         File file = AssetResolver.resolve(relativePath);
         try {
@@ -477,6 +732,7 @@ public final class BattleDirector extends IgnisScript {
     private enum Mode {
         INACTIVE,
         COMMAND,
+        ACTION,
         REACTION,
         RESULT
     }
