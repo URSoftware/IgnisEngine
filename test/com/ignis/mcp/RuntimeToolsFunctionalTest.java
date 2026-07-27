@@ -40,6 +40,25 @@ class RuntimeToolsFunctionalTest {
         return registry.get(tool).handler.execute(args);
     }
 
+    @Test
+    void pauseDoMundoPausaAudioGlobalEStopLimpaEstado() {
+        com.ignis.core.IgnisSoundEngine audio = com.ignis.core.IgnisSoundEngine.getInstance();
+        audio.stopAllAudio();
+
+        game.playWorld();
+        game.pauseWorld();
+        assertTrue(audio.isAudioPaused(), "pause do mundo deve bloquear BGM e SFX");
+
+        game.pauseWorld();
+        assertTrue(audio.isAudioPaused(), "pause repetido deve ser idempotente");
+
+        game.resumeWorld();
+        assertFalse(audio.isAudioPaused(), "resume deve liberar novos SFX");
+
+        game.stopWorld();
+        assertFalse(audio.isAudioPaused(), "stop deve limpar a pausa global");
+    }
+
     // ------------------------------------------------------------------
     // run_input_tape
     // ------------------------------------------------------------------

@@ -784,7 +784,7 @@ public class Game extends Canvas {
             }
         } else if (gameState == GameState.PAUSED) {
             // Resuming from pause - resume audio
-            IgnisSoundEngine.getInstance().resumeMusic();
+            IgnisSoundEngine.getInstance().resumeAllAudio();
         }
         gameState = GameState.PLAYING;
     }
@@ -797,8 +797,8 @@ public class Game extends Canvas {
         if (gameState == GameState.PLAYING) {
             gameState = GameState.PAUSED;
             
-            // Pause audio
-            IgnisSoundEngine.getInstance().pauseMusic();
+            // Pause BGM and every active SFX voice with the world.
+            IgnisSoundEngine.getInstance().pauseAllAudio();
         }
     }
 
@@ -810,7 +810,7 @@ public class Game extends Canvas {
             gameState = GameState.PLAYING;
             
             // Resume audio
-            IgnisSoundEngine.getInstance().resumeMusic();
+            IgnisSoundEngine.getInstance().resumeAllAudio();
         }
     }
 
@@ -821,8 +821,7 @@ public class Game extends Canvas {
         gameState = GameState.EDITING;
         
         // Stop all audio
-        IgnisSoundEngine.getInstance().stopMusic();
-        IgnisSoundEngine.getInstance().stopAllSounds();
+        IgnisSoundEngine.getInstance().stopAllAudio();
         
         // Limpar a interface de usuário criada pelos scripts
         if (uiCanvas != null) {

@@ -59,6 +59,8 @@ public class IgnisSoundEngine {
     private boolean initialized = false;
     private boolean musicPaused = false;
     private long musicPausePosition = 0;
+    /** True while the game world is paused; blocks new SFX voices. */
+    private volatile boolean audioPaused = false;
     
     // Callbacks
     private Map<String, Runnable> soundCallbacks;
@@ -120,13 +122,23 @@ public class IgnisSoundEngine {
      * @param onComplete Callback ao finalizar (ignorado se loop=true)
      */
     public void playSound(String filePath, float volume, boolean loop, Runnable onComplete) {
-        if (!initialized) return;
+        if (!initialized || audioPaused) return;
         
         audioExecutor.submit(() -> {
             try {
                 Clip clip = loadClip(filePath);
                 if (clip == null) return;
-                
+
+                // Loading is asynchronous. Re-check under the same monitor used
+                // by pauseAllAudio so a voice cannot start after the pause edge.
+                synchronized (this) {
+                    if (!initialized || audioPaused) {
+                        clip.close();
+                        return;
+                    }
+
+                    // The actual clip setup remains inside this monitor.
+
                 // Aplicar volume
                 setClipVolume(clip, volume * sfxVolume * masterVolume);
                 
@@ -144,20 +156,23 @@ public class IgnisSoundEngine {
                         activeSoundEffects.remove(clip);
                         clip.close();
                         
-                        if (onComplete != null) {
-                            onComplete.run();
-                        }
-                        
-                        // Executar callback registrado
-                        String callbackKey = getCallbackKey(filePath);
-                        Runnable callback = soundCallbacks.get(callbackKey);
-                        if (callback != null) {
-                            callback.run();
+                        if (!audioPaused) {
+                            if (onComplete != null) {
+                                onComplete.run();
+                            }
+
+                            // Executar callback registrado
+                            String callbackKey = getCallbackKey(filePath);
+                            Runnable callback = soundCallbacks.get(callbackKey);
+                            if (callback != null) {
+                                callback.run();
+                            }
                         }
                     }
                 });
                 
                 clip.start();
+                }
                 
             } catch (Exception e) {
                 IgnisLogger.error("[IgnisSoundEngine] Erro ao reproduzir som: " + e.getMessage());
@@ -168,7 +183,7 @@ public class IgnisSoundEngine {
     /**
      * Para todos os efeitos sonoros.
      */
-    public void stopAllSounds() {
+    public synchronized void stopAllSounds() {
         synchronized (activeSoundEffects) {
             for (Clip clip : new ArrayList<>(activeSoundEffects)) {
                 if (clip.isOpen()) {
@@ -205,15 +220,18 @@ public class IgnisSoundEngine {
      * @param loop Se deve repetir em loop
      * @param onComplete Callback ao finalizar (ignorado se loop=true)
      */
-    public void playMusic(String filePath, boolean loop, Runnable onComplete) {
-        if (!initialized) return;
+    public synchronized void playMusic(String filePath, boolean loop, Runnable onComplete) {
+        if (!initialized || audioPaused) return;
         
         // Parar música atual se existir
         stopMusic();
         
         try {
-            backgroundMusic = loadClip(filePath);
-            if (backgroundMusic == null) return;
+            // Keep a local reference until setup is complete. The shared field
+            // can be cleared by a lifecycle edge after this method returns.
+            Clip clip = loadClip(filePath);
+            if (clip == null) return;
+            backgroundMusic = clip;
             
             currentMusicPath = filePath;
             musicLooping = loop;
@@ -221,16 +239,17 @@ public class IgnisSoundEngine {
             musicPausePosition = 0;
             
             // Aplicar volume
-            setClipVolume(backgroundMusic, musicVolume * masterVolume);
+            setClipVolume(clip, musicVolume * masterVolume);
             
             // Configurar loop
             if (loop) {
-                backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
+                clip.loop(Clip.LOOP_CONTINUOUSLY);
             }
             
             // Listener para callback
-            backgroundMusic.addLineListener(event -> {
-                if (event.getType() == LineEvent.Type.STOP && !musicLooping && !musicPaused) {
+            clip.addLineListener(event -> {
+                if (event.getType() == LineEvent.Type.STOP && backgroundMusic == clip
+                        && !musicLooping && !musicPaused) {
                     if (onComplete != null) {
                         onComplete.run();
                     }
@@ -244,7 +263,7 @@ public class IgnisSoundEngine {
                 }
             });
             
-            backgroundMusic.start();
+            clip.start();
             IgnisLogger.info("[IgnisSoundEngine] Música iniciada: " + filePath);
             
         } catch (Exception e) {
@@ -255,11 +274,13 @@ public class IgnisSoundEngine {
     /**
      * Pausa a música de fundo.
      */
-    public void pauseMusic() {
-        if (backgroundMusic != null && backgroundMusic.isRunning()) {
-            musicPausePosition = backgroundMusic.getMicrosecondPosition();
-            backgroundMusic.stop();
+    public synchronized void pauseMusic() {
+        Clip clip = backgroundMusic;
+        if (clip != null && clip.isOpen() && !musicPaused) {
+            musicPausePosition = clip.getMicrosecondPosition();
+            // Set before stop(): some mixers emit STOP synchronously.
             musicPaused = true;
+            clip.stop();
             IgnisLogger.info("[IgnisSoundEngine] Música pausada");
         }
     }
@@ -267,23 +288,57 @@ public class IgnisSoundEngine {
     /**
      * Retoma a música de fundo.
      */
-    public void resumeMusic() {
-        if (backgroundMusic != null && musicPaused) {
-            backgroundMusic.setMicrosecondPosition(musicPausePosition);
-            if (musicLooping) {
-                backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
-            } else {
-                backgroundMusic.start();
-            }
+    public synchronized void resumeMusic() {
+        Clip clip = backgroundMusic;
+        if (clip != null && clip.isOpen() && musicPaused) {
+                clip.setMicrosecondPosition(musicPausePosition);
+                if (musicLooping) {
+                    clip.loop(Clip.LOOP_CONTINUOUSLY);
+                } else {
+                    clip.start();
+                }
             musicPaused = false;
             IgnisLogger.info("[IgnisSoundEngine] Música retomada");
         }
+    }
+
+    /** Pauses BGM and stops SFX voices while the world is paused. */
+    public synchronized void pauseAllAudio() {
+        if (audioPaused) return;
+        audioPaused = true;
+        pauseMusic();
+        stopAllSounds();
+    }
+
+    /** Allows new SFX voices and resumes the paused BGM. */
+    public synchronized void resumeAllAudio() {
+        if (!audioPaused) return;
+        audioPaused = false;
+        resumeMusic();
+    }
+
+    public synchronized boolean isAudioPaused() {
+        return audioPaused;
+    }
+
+    /** Returns the number of currently registered SFX voices. */
+    public int getActiveSoundEffectCount() {
+        synchronized (activeSoundEffects) {
+            return activeSoundEffects.size();
+        }
+    }
+
+    /** Stops all channels and clears the global pause flag. */
+    public synchronized void stopAllAudio() {
+        audioPaused = false;
+        stopMusic();
+        stopAllSounds();
     }
     
     /**
      * Para a música de fundo.
      */
-    public void stopMusic() {
+    public synchronized void stopMusic() {
         if (backgroundMusic != null) {
             backgroundMusic.stop();
             backgroundMusic.close();
@@ -299,7 +354,7 @@ public class IgnisSoundEngine {
      * Verifica se há música tocando.
      * @return true se música está tocando
      */
-    public boolean isMusicPlaying() {
+    public synchronized boolean isMusicPlaying() {
         return backgroundMusic != null && backgroundMusic.isRunning();
     }
     
@@ -307,7 +362,7 @@ public class IgnisSoundEngine {
      * Verifica se a música está pausada.
      * @return true se música está pausada
      */
-    public boolean isMusicPaused() {
+    public synchronized boolean isMusicPaused() {
         return musicPaused;
     }
     
@@ -315,7 +370,7 @@ public class IgnisSoundEngine {
      * Retorna o caminho da música atual.
      * @return caminho do arquivo de música ou null se não há música
      */
-    public String getCurrentMusicPath() {
+    public synchronized String getCurrentMusicPath() {
         return currentMusicPath;
     }
 
@@ -371,9 +426,10 @@ public class IgnisSoundEngine {
         return sfxVolume;
     }
     
-    private void updateMusicVolume() {
-        if (backgroundMusic != null && backgroundMusic.isOpen()) {
-            setClipVolume(backgroundMusic, musicVolume * masterVolume);
+    private synchronized void updateMusicVolume() {
+        Clip clip = backgroundMusic;
+        if (clip != null && clip.isOpen()) {
+            setClipVolume(clip, musicVolume * masterVolume);
         }
     }
     
@@ -566,8 +622,7 @@ public class IgnisSoundEngine {
     public void shutdown() {
         IgnisLogger.info("[IgnisSoundEngine] Finalizando motor de áudio...");
         
-        stopMusic();
-        stopAllSounds();
+        stopAllAudio();
         
         audioExecutor.shutdown();
         try {

@@ -61,6 +61,9 @@ Métodos de áudio expostos em `IgnisScript` para controle via scripts:
 | `stopMusic()` | Interrompe a música de fundo atual. |
 | `pauseMusic()` | Pausa temporariamente a reprodução da música (preserva posição). |
 | `resumeMusic()` | Retoma a música pausada do ponto exato onde parou. |
+| `pauseAllAudio()` | Pausa BGM, encerra SFX ativos e bloqueia novos SFX durante a pausa do mundo. |
+| `resumeAllAudio()` | Libera novos SFX e retoma o BGM pausado. |
+| `stopAllAudio()` | Para BGM e SFX e limpa o estado de pausa global. |
 | `setMasterVolume(float vol)` | Altera o volume global do jogo (0.0 a 1.0). |
 | `setMusicVolume(float vol)` | Altera o volume do canal de músicas (BGM) (0.0 a 1.0). |
 | `setSFXVolume(float vol)` | Altera o volume do canal de efeitos sonoros (SFX) (0.0 a 1.0). |

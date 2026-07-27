@@ -102,8 +102,7 @@ final class SoundTools {
             "Para todos os efeitos sonoros e a musica de fundo.",
             IgnisToolRegistry.objectSchema(),
             args -> {
-                IgnisSoundEngine.getInstance().stopAllSounds();
-                IgnisSoundEngine.getInstance().stopMusic();
+                IgnisSoundEngine.getInstance().stopAllAudio();
                 return "Todos os audios foram parados.";
             });
 
@@ -171,7 +170,9 @@ final class SoundTools {
                 String musicPath = eng.getCurrentMusicPath();
                 String musicState = eng.isMusicPlaying() ? "tocando: " + musicPath
                         : eng.isMusicPaused() ? "pausada: " + musicPath : "parada";
-                return "Musica: " + musicState + "\nVolumes -> master=" + eng.getMasterVolume()
+                return "Audio global: " + (eng.isAudioPaused() ? "pausado" : "ativo")
+                        + "\nMusica: " + musicState + "\nSFX ativos: " + eng.getActiveSoundEffectCount()
+                        + "\nVolumes -> master=" + eng.getMasterVolume()
                         + " musica=" + eng.getMusicVolume() + " sfx=" + eng.getSfxVolume();
             });
     }
