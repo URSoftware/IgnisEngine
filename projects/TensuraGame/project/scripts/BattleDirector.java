@@ -1,3 +1,18 @@
+import java.awt.Color;
+import java.awt.Font;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import com.ignis.core.AssetResolver;
 import com.ignis.core.GameObject;
 import com.ignis.core.IgnisScript;
@@ -13,20 +28,6 @@ import com.rimurusurvivors.domain.RandomSource;
 import com.rimurusurvivors.domain.ReactionTiming;
 import com.rimurusurvivors.domain.ReactionWindow;
 import com.rimurusurvivors.domain.VillagePreparation;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.awt.Color;
-import java.awt.Font;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Diretor do duelo por turnos reativo contra o Lider da Matilha (Floresta de Jura).

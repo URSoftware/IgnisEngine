@@ -261,9 +261,21 @@ public class IgnisProjectIO {
                 folder.mkdirs();
             }
         }
+        setupIdeConfig(projectFolder);
+    }
 
-        // Setup VSCode Java settings for IgnisEngine autocompletion
-        File vscodeSettings = new File(new File(projectFolder, ".vscode"), "settings.json");
+    /**
+     * Generates and syncs self-contained IDE configurations (.vscode, .classpath, .project, pom.xml)
+     * and exports the latest ignis-engine-api.jar into project/libs/.
+     */
+    public static void setupIdeConfig(File projectFolder) {
+        if (projectFolder == null || !projectFolder.exists()) return;
+
+        File libsFolder = new File(projectFolder, "libs");
+        if (!libsFolder.exists()) {
+            libsFolder.mkdirs();
+        }
+
         try {
             String enginePath = new File(".").getAbsolutePath().replace("\\", "/");
             if (enginePath.endsWith("/.")) {
@@ -271,21 +283,44 @@ public class IgnisProjectIO {
             }
             
             File classesDir = new File(enginePath, "target/classes");
-            File apiJar = new File(enginePath, "target/ignis-engine-api.jar");
+            File reposDir = new File(enginePath, "libs/repository");
+            File apiJarTarget = new File(enginePath, "target/ignis-engine-api.jar");
             if (classesDir.exists() && classesDir.isDirectory()) {
-                packFolderToJar(classesDir, apiJar);
+                packFolderToJar(classesDir, apiJarTarget, reposDir);
             }
 
+            // Copia o ignis-engine-api.jar e todas as libs do repositório (ex: FXEvents) para project/libs/
+            File localApiJar = new File(libsFolder, "ignis-engine-api.jar");
+            if (apiJarTarget.exists()) {
+                java.nio.file.Files.copy(apiJarTarget.toPath(), localApiJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            if (reposDir.exists() && reposDir.isDirectory()) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(reposDir.toPath())) {
+                    stream.filter(java.nio.file.Files::isRegularFile)
+                          .filter(p -> p.toString().endsWith(".jar"))
+                          .forEach(p -> {
+                              try {
+                                  File dest = new File(libsFolder, p.getFileName().toString());
+                                  java.nio.file.Files.copy(p, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                              } catch (Exception ignore) {}
+                          });
+                }
+            }
+
+            // 1. VSCode configurations
+            File vscodeDir = new File(projectFolder, ".vscode");
+            if (!vscodeDir.exists()) vscodeDir.mkdirs();
+            File vscodeSettings = new File(vscodeDir, "settings.json");
             String settingsContent = "{\n" +
                     "    \"java.project.referencedLibraries\": [\n" +
-                    "        \"" + enginePath + "/target/ignis-engine-api.jar\",\n" +
-                    "        \"" + enginePath + "/target/*.jar\",\n" +
-                    "        \"" + enginePath + "/libs/repository/**/*.jar\"\n" +
+                    "        \"libs/*.jar\",\n" +
+                    "        \"libs/**/*.jar\"\n" +
                     "    ]\n" +
                     "}";
             java.nio.file.Files.writeString(vscodeSettings.toPath(), settingsContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
 
-            // Generate Eclipse JDT .project and .classpath for bulletproof VSCode support
+            // 2. Eclipse .project file
             File eclipseProjectFile = new File(projectFolder, ".project");
             String projectContent = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                     "<projectDescription>\n" +
@@ -306,24 +341,18 @@ public class IgnisProjectIO {
                     "</projectDescription>\n";
             java.nio.file.Files.writeString(eclipseProjectFile.toPath(), projectContent, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
 
+            // 3. Eclipse / VSCode Java extension .classpath file
             File eclipseClasspathFile = new File(projectFolder, ".classpath");
             StringBuilder classpathBuilder = new StringBuilder();
             classpathBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
             classpathBuilder.append("<classpath>\n");
             classpathBuilder.append("\t<classpathentry kind=\"src\" path=\"scripts\"/>\n");
             classpathBuilder.append("\t<classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n");
-            classpathBuilder.append("\t<classpathentry kind=\"lib\" path=\"").append(apiJar.getAbsolutePath().replace("\\", "/")).append("\"/>\n");
             
-            File repos = new File(enginePath, "libs/repository");
-            if (repos.exists() && repos.isDirectory()) {
-                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(repos.toPath())) {
-                    stream.filter(java.nio.file.Files::isRegularFile)
-                          .filter(p -> p.toString().endsWith(".jar"))
-                          .forEach(p -> {
-                              classpathBuilder.append("\t<classpathentry kind=\"lib\" path=\"")
-                                              .append(p.toAbsolutePath().toString().replace("\\", "/"))
-                                              .append("\"/>\n");
-                          });
+            File[] jars = libsFolder.listFiles((dir, name) -> name.endsWith(".jar"));
+            if (jars != null) {
+                for (File jar : jars) {
+                    classpathBuilder.append("\t<classpathentry kind=\"lib\" path=\"libs/").append(jar.getName()).append("\"/>\n");
                 }
             }
             
@@ -331,30 +360,115 @@ public class IgnisProjectIO {
             classpathBuilder.append("</classpath>\n");
             java.nio.file.Files.writeString(eclipseClasspathFile.toPath(), classpathBuilder.toString(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
 
+            // 4. Maven pom.xml for IntelliJ IDEA and other Maven-capable IDEs
+            File pomFile = new File(projectFolder, "pom.xml");
+            if (!pomFile.exists()) {
+                StringBuilder pomBuilder = new StringBuilder();
+                pomBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+                pomBuilder.append("<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n");
+                pomBuilder.append("         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n");
+                pomBuilder.append("         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n");
+                pomBuilder.append("    <modelVersion>4.0.0</modelVersion>\n");
+                pomBuilder.append("    <groupId>com.ignis.project</groupId>\n");
+                pomBuilder.append("    <artifactId>").append(projectFolder.getName().toLowerCase().replaceAll("[^a-z0-9_-]", "-")).append("-scripts</artifactId>\n");
+                pomBuilder.append("    <version>1.0.0</version>\n");
+                pomBuilder.append("    <properties>\n");
+                pomBuilder.append("        <maven.compiler.source>17</maven.compiler.source>\n");
+                pomBuilder.append("        <maven.compiler.target>17</maven.compiler.target>\n");
+                pomBuilder.append("    </properties>\n");
+                pomBuilder.append("    <dependencies>\n");
+
+                if (jars != null) {
+                    int idx = 1;
+                    for (File jar : jars) {
+                        String artId = jar.getName().replace(".jar", "").toLowerCase().replaceAll("[^a-z0-9_-]", "-");
+                        pomBuilder.append("        <dependency>\n");
+                        pomBuilder.append("            <groupId>com.ignis.lib</groupId>\n");
+                        pomBuilder.append("            <artifactId>").append(artId).append("</artifactId>\n");
+                        pomBuilder.append("            <version>1.0.0</version>\n");
+                        pomBuilder.append("            <scope>system</scope>\n");
+                        pomBuilder.append("            <systemPath>${project.basedir}/libs/").append(jar.getName()).append("</systemPath>\n");
+                        pomBuilder.append("        </dependency>\n");
+                    }
+                }
+
+                pomBuilder.append("    </dependencies>\n");
+                pomBuilder.append("</project>\n");
+                java.nio.file.Files.writeString(pomFile.toPath(), pomBuilder.toString(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+            }
+
         } catch (Exception e) {
-            IgnisLogger.error("Failed to generate VSCode settings and Eclipse project files: " + e.getMessage());
+            IgnisLogger.error("Failed to generate IDE configuration files: " + e.getMessage());
         }
     }
 
-    private static void packFolderToJar(File sourceFolder, File targetJar) throws IOException {
-        // Only pack if the jar doesn't exist or is older than the classes root
-        if (targetJar.exists() && targetJar.lastModified() > sourceFolder.lastModified()) {
+    private static void packFolderToJar(File sourceFolder, File targetJar, File reposFolder) throws IOException {
+        if (!sourceFolder.exists()) return;
+        if (targetJar.getParentFile() != null && !targetJar.getParentFile().exists()) {
+            targetJar.getParentFile().mkdirs();
+        }
+        if (targetJar.exists() && !hasNewerFiles(sourceFolder, targetJar.lastModified())) {
             return;
         }
         try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(targetJar))) {
-            packFolderToJarRecursively(sourceFolder, sourceFolder, zos);
+            java.util.Set<String> addedEntries = new java.util.HashSet<>();
+            packFolderToJarRecursively(sourceFolder, sourceFolder, zos, addedEntries);
+
+            if (reposFolder != null && reposFolder.exists() && reposFolder.isDirectory()) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(reposFolder.toPath())) {
+                    stream.filter(java.nio.file.Files::isRegularFile)
+                          .filter(p -> p.toString().endsWith(".jar"))
+                          .forEach(p -> mergeJarIntoZip(p.toFile(), zos, addedEntries));
+                }
+            }
         }
     }
 
-    private static void packFolderToJarRecursively(File rootFolder, File currentFolder, java.util.zip.ZipOutputStream zos) throws IOException {
+    private static void mergeJarIntoZip(File jarFile, java.util.zip.ZipOutputStream zos, java.util.Set<String> addedEntries) {
+        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(new java.io.FileInputStream(jarFile))) {
+            java.util.zip.ZipEntry entry;
+            byte[] buffer = new byte[8192];
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (entry.isDirectory() || name.startsWith("META-INF/") || addedEntries.contains(name)) {
+                    continue;
+                }
+                addedEntries.add(name);
+                zos.putNextEntry(new java.util.zip.ZipEntry(name));
+                int len;
+                while ((len = zis.read(buffer)) > 0) {
+                    zos.write(buffer, 0, len);
+                }
+                zos.closeEntry();
+            }
+        } catch (Exception ignore) {
+        }
+    }
+
+    private static boolean hasNewerFiles(File folder, long timeBound) {
+        File[] files = folder.listFiles();
+        if (files == null) return false;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                if (hasNewerFiles(f, timeBound)) return true;
+            } else if (f.lastModified() > timeBound) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void packFolderToJarRecursively(File rootFolder, File currentFolder, java.util.zip.ZipOutputStream zos, java.util.Set<String> addedEntries) throws IOException {
         File[] files = currentFolder.listFiles();
         if (files == null) return;
         
         for (File file : files) {
             if (file.isDirectory()) {
-                packFolderToJarRecursively(rootFolder, file, zos);
+                packFolderToJarRecursively(rootFolder, file, zos, addedEntries);
             } else {
                 String entryName = rootFolder.toPath().relativize(file.toPath()).toString().replace("\\", "/");
+                if (addedEntries.contains(entryName)) continue;
+                addedEntries.add(entryName);
                 java.util.zip.ZipEntry ze = new java.util.zip.ZipEntry(entryName);
                 zos.putNextEntry(ze);
                 java.nio.file.Files.copy(file.toPath(), zos);

@@ -1,0 +1,15 @@
+{
+  "transform": {
+    "rotation": 0,
+    "x": 66,
+    "width": 28,
+    "y": 194,
+    "height": 28
+  },
+  "prefabName": "Rimuru",
+  "spritePath": "assets/sprites/rimuru_slime_04.png",
+  "name": "Rimuru",
+  "type": "GameObject",
+  "properties": {},
+  "prefabVersion": "1.0"
+}

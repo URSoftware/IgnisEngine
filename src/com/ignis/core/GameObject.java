@@ -80,6 +80,9 @@ public class GameObject {
     // Sprite shown before the animator took over, restored when play stops.
     private transient String spritePathBeforeAnimation = null;
 
+    // Prefab linkage and overrides tracking
+    protected PrefabLink prefabLink = null;
+
     public GameObject(String name, Game game, double x, double y, int width, int height) {
         this.id = java.util.UUID.randomUUID().toString();
         this.name = name;
@@ -149,6 +152,7 @@ public class GameObject {
 
     public void render(Graphics g) {
         if (!visible) return;
+        renderTilemapComponent(g);
         renderSpriteComponent(g);
     }
 
@@ -182,6 +186,28 @@ public class GameObject {
         return name;
     }
 
+    public PrefabLink getPrefabLink() {
+        return prefabLink;
+    }
+
+    public void setPrefabLink(PrefabLink prefabLink) {
+        this.prefabLink = prefabLink;
+    }
+
+    public boolean isPrefabInstance() {
+        return prefabLink != null;
+    }
+
+    public void notifyOverride(String propertyName) {
+        if (prefabLink != null && propertyName != null && !propertyName.trim().isEmpty()) {
+            prefabLink.setOverride(propertyName);
+        }
+    }
+
+    public void unpackPrefab() {
+        this.prefabLink = null;
+    }
+
     public double getX() {
         return x;
     }
@@ -192,10 +218,12 @@ public class GameObject {
 
     public void setX(double x) {
         this.x = x;
+        notifyOverride("x");
     }
 
     public void setY(double y) {
         this.y = y;
+        notifyOverride("y");
     }
 
     public int getWidth() {
@@ -223,6 +251,7 @@ public class GameObject {
         this.rotation = rotation % 360;
         if (this.rotation < 0)
             this.rotation += 360;
+        notifyOverride("rotation");
     }
 
     public Game getGame() {
@@ -256,6 +285,7 @@ public class GameObject {
                 spriteComp.setTexture(null);
             }
         }
+        notifyOverride("spritePath");
     }
     
     public boolean isVisible() {
@@ -264,6 +294,7 @@ public class GameObject {
 
     public void setVisible(boolean visible) {
         this.visible = visible;
+        notifyOverride("visible");
     }
 
     /**
@@ -293,6 +324,7 @@ public class GameObject {
 
     public void setTag(String tag) {
         this.tag = tag != null ? tag : "";
+        notifyOverride("tag");
     }
 
     /** True se a tag do objeto e igual (ignora caixa) a {@code tag}. */
@@ -307,6 +339,7 @@ public class GameObject {
 
     public void setLayer(String layer) {
         this.layer = (layer != null && !layer.isEmpty()) ? layer : "Default";
+        notifyOverride("layer");
     }
 
     // ==================== HIERARQUIA PAI-FILHO ====================
@@ -509,8 +542,8 @@ public class GameObject {
                     }
                 }
                 // scriptNames guarda apenas SCRIPTS DE USUARIO (recarregaveis pelo
-                // ScriptManager). Componentes nativos como SpriteComponent (que
-                // estende IgnisScript por legado) ficam fora — senao os reloads de
+                // ScriptManager). Componentes nativos como SpriteComponent (que agora
+                // estende Component diretamente) ficam fora — senao os reloads de
                 // Play/abertura tentam instancia-los como script de projeto e falham.
                 String name = script.getClass().getSimpleName();
                 if (!isNativeComponent(component) && !scriptNames.contains(name)) {
@@ -592,6 +625,15 @@ public class GameObject {
         SpriteComponent spriteComp = getComponent(SpriteComponent.class);
         if (spriteComp != null) {
             spriteComp.draw((java.awt.Graphics2D) g);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean renderTilemapComponent(java.awt.Graphics g) {
+        TilemapRendererComponent tmComp = getComponent(TilemapRendererComponent.class);
+        if (tmComp != null) {
+            tmComp.draw((java.awt.Graphics2D) g);
             return true;
         }
         return false;
