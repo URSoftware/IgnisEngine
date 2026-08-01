@@ -426,13 +426,13 @@ public final class IgnisToolRegistry {
             } catch (Exception e) {
                 return "Erro ao executar '" + name + "': " + e.getMessage();
             }
-            if (before != null && (r == null || !r.startsWith("Erro"))) {
+            if (before != null && !isFailureResult(r)) {
                 r = r + "\n" + diffScenes(before, snapshotScene());
             }
             return r;
         });
         // Toda ferramenta mutavel informa o modo em que rodou (contrato do roadmap).
-        if (sceneMutating && result != null && !result.startsWith("Erro")) {
+        if (sceneMutating && result != null && !isFailureResult(result)) {
             result = result + " [modo=" + mode + "]";
         }
         // Auditoria: cada chamada de agente aparece no Console do editor
@@ -440,10 +440,23 @@ public final class IgnisToolRegistry {
         // o log com conteudos grandes (ex: write_script).
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         String argsPreview = safeArgs.isEmpty() ? "" : " " + truncate(safeArgs.toString(), 120);
-        boolean isError = result != null && result.startsWith("Erro");
+        boolean isError = isFailureResult(result);
         IgnisLogger.info("[MCP] " + who + name + argsPreview + " -> "
                 + (isError ? "ERRO" : "ok") + " (" + ms + "ms)");
         return result;
+    }
+
+    /**
+     * Classifica recusas semanticas devolvidas pelas ferramentas. Os handlers
+     * usam texto por compatibilidade com os clientes antigos; os transportes
+     * consultam este metodo para nao anunciarem uma recusa como sucesso.
+     */
+    public static boolean isFailureResult(String result) {
+        if (result == null) return false;
+        String normalized = result.stripLeading();
+        return normalized.startsWith("Erro")
+                || normalized.startsWith("RECUSADO")
+                || normalized.startsWith("CONFLITO");
     }
 
     private static String truncate(String s, int max) {

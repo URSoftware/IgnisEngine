@@ -135,7 +135,11 @@ public final class McpHttpBridge {
                 return;
             }
             String result = registry.call(name, arguments);
-            respond(ex, 200, new JSONObject().put("ok", true).put("name", name).put("result", result));
+            if (IgnisToolRegistry.isFailureResult(result)) {
+                respond(ex, 200, new JSONObject().put("ok", false).put("name", name).put("error", result));
+            } else {
+                respond(ex, 200, new JSONObject().put("ok", true).put("name", name).put("result", result));
+            }
         } catch (IllegalArgumentException iae) {
             respond(ex, 404, new JSONObject().put("ok", false).put("error", iae.getMessage()));
         } catch (Exception e) {

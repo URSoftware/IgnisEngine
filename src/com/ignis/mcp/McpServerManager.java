@@ -115,7 +115,7 @@ public final class McpServerManager {
                         JSONObject jsonArgs = (args != null && args.arguments() != null)
                                 ? new JSONObject(args.arguments()) : new JSONObject();
                         String result = registry.call(toolName, jsonArgs);
-                        boolean isError = result != null && result.startsWith("Erro");
+                        boolean isError = IgnisToolRegistry.isFailureResult(result);
                         return new CallToolResult(List.<Content>of(new TextContent(
                                 result != null ? result : "(sem resultado)")), isError, null, null);
                     } catch (Exception e) {
