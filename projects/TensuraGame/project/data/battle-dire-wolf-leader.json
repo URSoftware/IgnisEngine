@@ -4,6 +4,20 @@
   "subtitle": "Leia a intencao, defenda no tempo certo e busque a rendicao.",
   "timingMode": "strategic",
   "reactionTelegraphSeconds": 1.1,
+  "timingModes": {
+    "strategic": { "scale": 1.0, "label": "Normal" },
+    "wide": { "scale": 1.6, "label": "Amplo" },
+    "story": { "scale": 0, "label": "Modo historia" }
+  },
+  "actionSeconds": {
+    "minimum": 0.6,
+    "ANALYZE": 0.7,
+    "WATER_BLADE": 1.1,
+    "DEFEND": 1.0,
+    "GOBLIN_SUPPORT": 0.9,
+    "PREDATOR": 1.3,
+    "NEGOTIATE": 1.2
+  },
   "commands": [
     { "key": "1", "command": "ANALYZE",        "label": "Analisar",          "hint": "Grande Sabio revela intencao e condicao de rendicao (nao gasta turno)." },
     { "key": "2", "command": "WATER_BLADE",     "label": "Hidrolamina",       "hint": "Dano preciso e forte queda de moral. Custa 10 magiaules." },

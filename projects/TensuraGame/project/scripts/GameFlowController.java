@@ -67,7 +67,6 @@ public final class GameFlowController extends IgnisScript {
     private static final String FOREST_SCENE_NAME = "JuraForestScene";
     private static final String VILLAGE_SCENE_NAME = "GoblinVillageScene";
     private static final String FOREST_AREA_ID = "jura_forest_approach";
-    private static final String FOREST_ARRIVAL_PENDING = "forest_arrival_pending";
     private static final double FOREST_CAMERA_X = 320.0;
     private static final double FOREST_CAMERA_Y = 256.0;
     private static final double FOREST_CAMERA_ZOOM = 1.95;
@@ -100,6 +99,9 @@ public final class GameFlowController extends IgnisScript {
     // Sinais da persistencia de campanha (CampaignSaveDirector).
     private static final String SIGNAL_SAVE_REQUEST = "TENSURA_CAMPAIGN_SAVE_REQUEST";
     private static final String SIGNAL_LOAD_REQUEST = "TENSURA_CAMPAIGN_LOAD_REQUEST";
+    private static final String SIGNAL_NEW_GAME = "TENSURA_CAMPAIGN_NEW_GAME";
+    private static final String SIGNAL_NEW_GAME_READY =
+            "TENSURA_CAMPAIGN_NEW_GAME_READY";
     private static final String SIGNAL_SAVED = "TENSURA_CAMPAIGN_SAVED";
     private static final String SIGNAL_LOADED = "TENSURA_CAMPAIGN_LOADED";
     private static final String SIGNAL_LOAD_EMPTY = "TENSURA_CAMPAIGN_LOAD_EMPTY";
@@ -115,6 +117,7 @@ public final class GameFlowController extends IgnisScript {
     private boolean forestScene;
     private boolean sceneReadyToLoad;
     private String pendingSceneName;
+    private boolean newGamePending;
 
     private CampaignSnapshot loadedSnapshot;
     private String saveWarningMessage;
@@ -175,6 +178,12 @@ public final class GameFlowController extends IgnisScript {
             }
         });
         onSceneSignal(SIGNAL_LOAD_EMPTY, payload -> onCampaignLoadEmpty());
+        onSceneSignal(SIGNAL_NEW_GAME_READY, payload -> {
+            if (newGamePending && payload instanceof CampaignSnapshot) {
+                newGamePending = false;
+                startAwakening();
+            }
+        });
         onSceneSignal(SIGNAL_SAVE_WARNING, payload -> {
             if (payload instanceof String warning) {
                 onCampaignSaveWarning(warning);
@@ -190,6 +199,7 @@ public final class GameFlowController extends IgnisScript {
             if (payload instanceof String failure) {
                 onCampaignSaveWarning(failure);
             }
+            newGamePending = false;
             pendingSceneName = null;
             sceneReadyToLoad = false;
         });
@@ -328,7 +338,7 @@ public final class GameFlowController extends IgnisScript {
             bootstrapForestScene(new CampaignSnapshot(
                     CampaignSnapshot.CURRENT_SCHEMA_VERSION,
                     FOREST_AREA_ID, 304.0, 58.0,
-                    Set.of("awakening_complete", "veldora_encounter_complete", FOREST_ARRIVAL_PENDING)));
+                    Set.of("awakening_complete", "veldora_encounter_complete")));
         }
     }
 
@@ -416,6 +426,23 @@ public final class GameFlowController extends IgnisScript {
     // ==================== Roteamento de modo ====================
 
     private void beginAwakening() {
+        if (state != FlowState.MENU || newGamePending) return;
+        newGamePending = true;
+        String startAreaId = mapRoot.getString("startArea");
+        JSONObject startAreaJson = findAreaJson(mapRoot, startAreaId);
+        double spawnX = startAreaJson.getDouble("spawnX");
+        double spawnY = startAreaJson.getDouble("spawnY");
+        CampaignSnapshot initialSnapshot = new CampaignSnapshot(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                startAreaId,
+                spawnX,
+                spawnY,
+                Set.of());
+        sceneDispatcher.enqueue(SIGNAL_NEW_GAME, initialSnapshot);
+        log("GameFlowController: aguardando persistencia do Novo Jogo.");
+    }
+
+    private void startAwakening() {
         if (state != FlowState.MENU) return;
         String startAreaId = mapRoot.getString("startArea");
         JSONObject startAreaJson = findAreaJson(mapRoot, startAreaId);
@@ -532,7 +559,7 @@ public final class GameFlowController extends IgnisScript {
             CampaignSnapshot pendingArrival = new CampaignSnapshot(
                     CampaignSnapshot.CURRENT_SCHEMA_VERSION,
                     FOREST_AREA_ID, 304.0, 58.0,
-                    Set.of("awakening_complete", "veldora_encounter_complete", FOREST_ARRIVAL_PENDING));
+                    Set.of("awakening_complete", "veldora_encounter_complete"));
             sceneDispatcher.enqueue(SIGNAL_SAVE_REQUEST, pendingArrival);
             log("GameFlowController: saida confirmada; salvando antes de carregar JuraForestScene.");
             return;

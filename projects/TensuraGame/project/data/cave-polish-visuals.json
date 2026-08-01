@@ -1,9 +1,18 @@
 {
-  "version": 2,
-  "visualSetId": "cave_seal_polish_v2",
+  "version": 3,
+  "visualSetId": "cave_seal_polish_v3",
   "source": "assets/source/cave_polish_dressing_chroma_v1.png",
+  "sources": {
+    "awakeningExpandedChroma": "assets/source/cave_awakening_expanded_chroma_source_v3.png",
+    "awakeningExpandedAlpha": "assets/source/cave_awakening_expanded_alpha_source_v3.png",
+    "galleryExpandedChroma": "assets/source/cave_gallery_expanded_chroma_source_v3.png",
+    "galleryExpandedAlpha": "assets/source/cave_gallery_expanded_alpha_source_v3.png"
+  },
+  "mapExpansionContract": "data/cave-map-expansion-contract.json",
   "assets": {
     "backdrop": "assets/sprites/backgrounds/cave_backdrop_texture_v3.png",
+    "awakeningExpandedBackground": "assets/sprites/backgrounds/cave_awakening_expanded_background_v3.png",
+    "galleryExpandedBackground": "assets/sprites/backgrounds/cave_gallery_expanded_background_v3.png",
     "ceilingStalactites": "assets/sprites/props/cave_polish/cave_ceiling_stalactites_cyan_v1.png",
     "ceilingOverhang": "assets/sprites/props/cave_polish/cave_ceiling_overhang_cyan_v1.png",
     "crystalVein": "assets/sprites/props/cave_polish/cave_crystal_vein_cyan_v1.png",
@@ -19,6 +28,224 @@
     "galleryEnvironmentOverlay": "CaveGalleryEnvironmentOverlayV2",
     "awakeningRune": "CaveAwakeningRuneRing"
   },
+  "plannedAwakeningExpansion": {
+    "status": "prepared_not_synced",
+    "areaId": "cave_awakening",
+    "targetCells": {
+      "cols": 30,
+      "rows": 20,
+      "cellSize": 32
+    },
+    "targetPixels": {
+      "width": 960,
+      "height": 640
+    },
+    "legacyCoreOffsetPixels": {
+      "x": 160,
+      "y": 128
+    },
+    "imageSpaceLandmarks": [
+      {
+        "id": "awakening_historic_core",
+        "role": "legacy spawn and central readability",
+        "x": 480,
+        "y": 320
+      },
+      {
+        "id": "awakening_water_spring_pocket",
+        "role": "optional water discovery",
+        "x": 128,
+        "y": 448
+      },
+      {
+        "id": "awakening_magicule_concentration_pocket",
+        "role": "optional magicule discovery",
+        "x": 768,
+        "y": 96
+      },
+      {
+        "id": "awakening_east_gallery_route",
+        "role": "main route toward cave_gallery",
+        "x": 896,
+        "y": 352
+      }
+    ],
+    "integrationGate": [
+      "Do not resize or replace the live CaveAwakeningEnvironmentOverlayV2 object before MCP task #25 updates the logical map, anchors, collision and camera.",
+      "The legacy 640x384 core maps into the expanded area with the declared 160x128 offset so old semantic coordinates can be migrated deliberately.",
+      "The expanded background is presentation only and never defines collision.",
+      "Synchronize the scene only in EDITING after isolated QA saves from task #21 are active."
+    ]
+  },
+  "plannedGalleryExpansion": {
+    "status": "prepared_not_synced",
+    "areaId": "cave_gallery",
+    "targetCells": {
+      "cols": 20,
+      "rows": 24,
+      "cellSize": 32
+    },
+    "targetPixels": {
+      "width": 640,
+      "height": 768
+    },
+    "legacyCoreOffsetPixels": {
+      "x": 160,
+      "y": 128
+    },
+    "imageSpaceLandmarks": [
+      {
+        "id": "gallery_south_approach",
+        "role": "entry and tension corridor",
+        "x": 176,
+        "y": 720
+      },
+      {
+        "id": "gallery_veldora_seal",
+        "role": "dialogue and cutscene focal chamber",
+        "x": 240,
+        "y": 208
+      },
+      {
+        "id": "gallery_post_veldora_branch",
+        "role": "route that separates return movement from the approach",
+        "x": 480,
+        "y": 416
+      },
+      {
+        "id": "gallery_forest_exit_route",
+        "role": "distinct exit toward Jura",
+        "x": 528,
+        "y": 688
+      }
+    ],
+    "integrationGate": [
+      "Do not resize or replace CaveGalleryEnvironmentOverlayV2 before MCP task #25 updates the logical gallery, anchors, collision and camera.",
+      "The legacy 320x512 core maps into the expanded gallery with the declared 160x128 offset so the existing seal and exit coordinates have an explicit migration candidate.",
+      "The expanded background is presentation only and never defines collision.",
+      "Validate all 24 Veldora dialogue beats and the post-Veldora exit route after the logical migration."
+    ]
+  },
+  "awakeningCutscenePolish": {
+    "contractRevision": 1,
+    "status": "runtime_accepted_2026_07_29",
+    "sequence": "data/cutscene-awakening.json",
+    "acceptance": "data/cutscene-polish-acceptance.json",
+    "storyboardDocumentationOnly": "assets/source/cutscene_awakening_storyboard_v1.png",
+    "liveObjects": {
+      "backdrop": {
+        "name": "CaveBackdrop",
+        "behavior": "cover the viewport below the map whenever camera framing can reveal space outside the tilemap"
+      },
+      "environmentOverlay": {
+        "name": "CaveAwakeningEnvironmentOverlayV2",
+        "behavior": "remain visible below Rimuru, VFX and UI for the whole sequence and first playable frame"
+      },
+      "ambientMagicules": {
+        "name": "CaveMagiculeMotesAmbient",
+        "animation": "cave_magicule_motes_ambient",
+        "behavior": "continue looping during the Great Sage manual gate; never restart on dismissal"
+      },
+      "formationRune": {
+        "name": "CaveAwakeningRuneRing",
+        "animation": "cave_awakening_rune_ring",
+        "behavior": "hidden before convergence, visible through body formation, hidden by first perception and after every finalizer"
+      }
+    },
+    "cuePresentation": [
+      {
+        "cue": "darkness_and_drops",
+        "visual": "near-black veil with readable cave silhouettes; no opaque flash",
+        "audio": "cave_water_ripple_01 at low volume"
+      },
+      {
+        "cue": "magicule_convergence",
+        "visual": "show the existing formation rune and a 64x64 magicule cluster centered on the future actor",
+        "audio": "magicule_collect_soft"
+      },
+      {
+        "cue": "slime_body_formation",
+        "visual": "replace the cluster with the reveal clip while preserving the actor center and bottom pivot",
+        "audio": "slime_land_soft_01"
+      },
+      {
+        "cue": "first_perception",
+        "visual": "hide the formation rune, open the camera and keep ambient motes moving"
+      },
+      {
+        "cue": "great_sage_analysis",
+        "visual": "play vfx_great_sage_scan at 192x192 behind the readable analysis panel",
+        "audio": "great_sage_scan_short"
+      },
+      {
+        "cue": "veldora_foreshadow",
+        "visual": "dismiss analysis and scan before shifting toward the violet route; never leave a blank hold",
+        "audio": "veldora_distant_rumble"
+      },
+      {
+        "cue": "control_handoff",
+        "visual": "match exploration camera zoom 1.6, actor center, opacity 1 and 28x28 gameplay footprint"
+      }
+    ],
+    "pixelScaleAudit": [
+      {
+        "asset": "assets/sprites/props/prop_magicule_cluster_01.png",
+        "sourcePixels": {
+          "width": 32,
+          "height": 32
+        },
+        "currentRuntimePixels": {
+          "width": 72,
+          "height": 72
+        },
+        "currentScale": 2.25,
+        "requiredRuntimePixels": {
+          "width": 64,
+          "height": 64
+        },
+        "result": "fractional_scale_must_be_corrected"
+      },
+      {
+        "asset": "assets/sprites/vfx/great_sage_scan_01.png",
+        "sourcePixels": {
+          "width": 384,
+          "height": 384
+        },
+        "currentRuntimePixels": {
+          "width": 168,
+          "height": 168
+        },
+        "currentScale": 0.4375,
+        "requiredRuntimePixels": {
+          "width": 192,
+          "height": 192
+        },
+        "result": "fractional_scale_must_be_corrected"
+      },
+      {
+        "asset": "assets/sprites/rimuru_slime_01.png",
+        "sourcePixels": {
+          "width": 32,
+          "height": 32
+        },
+        "gameplayRuntimePixels": {
+          "width": 28,
+          "height": 28
+        },
+        "result": "legacy_gameplay_scale_preserved_in_task_22",
+        "acceptance": "formation pulse must keep the same center and settle to the existing 28x28 gameplay footprint before control"
+      }
+    ],
+    "runtimeAcceptance": [
+      "The storyboard remains documentation-only and is never loaded by the runtime.",
+      "No cue freezes CaveMagiculeMotesAmbient or the cave environment.",
+      "CaveAwakeningRuneRing is absent before convergence and after first perception, natural completion and accepted skip.",
+      "AwakeningMagicules renders at 64x64 and AwakeningGreatSageScan at 192x192 using nearest-neighbor.",
+      "The analysis panel stays within a 24px safe margin and never hides Rimuru's center.",
+      "The last cutscene frame and first exploration frame share camera zoom 1.6, actor center, opacity and footprint.",
+      "Natural completion and accepted skip leave no AwakeningMagicules or AwakeningGreatSageScan runtime object."
+    ]
+  },
   "placementRules": [
     "Decorative props do not add collision or change exploration coordinates.",
     "Ceiling silhouettes render above the tilemap but behind dialogue and cutscene UI.",
@@ -27,6 +254,10 @@
     "The cave exit glow becomes prominent only after veldora_absorbed_exit_unlocked.",
     "Environment overlays keep the central exploration routes and the Veldora seal center transparent.",
     "Violet light is localized to Veldora's seal; cyan marks water, crystals and ambient magicules.",
-    "The awakening rune has no collider and remains behind Rimuru during gameplay and cutscenes."
+    "The awakening rune has no collider and remains behind Rimuru during gameplay and cutscenes.",
+    "The expanded awakening composition preserves a broad central route and gives the water spring and magicule concentration distinct optional pockets.",
+    "The expanded awakening background remains unsynchronized until the logical 30x20 area, camera bounds and save-anchor migration are accepted.",
+    "The expanded gallery separates approach, seal chamber and forest exit while preserving one continuous readable route.",
+    "The expanded gallery remains unsynchronized until the logical 20x24 area, camera bounds and save-anchor migration are accepted."
   ]
 }

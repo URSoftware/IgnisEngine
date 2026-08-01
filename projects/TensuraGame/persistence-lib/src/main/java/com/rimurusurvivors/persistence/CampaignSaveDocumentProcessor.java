@@ -22,7 +22,7 @@ public final class CampaignSaveDocumentProcessor implements SaveDocumentProcesso
     @Override
     public SaveDocument process(SaveDocument document) {
         SaveDocument migrated = migrations.migrateToCurrent(document);
-        campaignCodec.decode(migrated);
+        campaignCodec.decodeState(migrated);
         return migrated;
     }
 }

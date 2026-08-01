@@ -13,6 +13,7 @@ public record SaveLoadResult(
     public enum Source {
         PRIMARY,
         BACKUP,
+        RECOVERED_TEMPORARY,
         NONE
     }
 

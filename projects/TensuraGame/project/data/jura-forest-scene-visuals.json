@@ -1,8 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "sceneName": "JuraForestScene",
   "bootstrapObject": "JuraForestSceneBootstrap",
-  "visualSetId": "jura_forest_scene_v2",
+  "visualSetId": "jura_forest_scene_v3",
   "background": {
     "objectName": "JuraForestBackgroundV2",
     "sprite": "assets/sprites/backgrounds/jura_forest_approach_background_v2.png",
@@ -11,6 +11,52 @@
     "width": 640,
     "height": 512,
     "zIndex": -100
+  },
+  "expandedBackground": {
+    "status": "prepared_not_synced",
+    "source": "assets/source/jura_forest_scene/jura_forest_expanded_background_source_v3.png",
+    "sprite": "assets/sprites/backgrounds/jura_forest_expanded_background_v3.png",
+    "targetCells": {
+      "cols": 40,
+      "rows": 24,
+      "cellSize": 32
+    },
+    "targetPixels": {
+      "width": 1280,
+      "height": 768
+    },
+    "imageSpaceLandmarks": [
+      {
+        "id": "jura_cave_exit",
+        "role": "preserved arrival anchor",
+        "x": 640,
+        "y": 656
+      },
+      {
+        "id": "jura_stream_crossing",
+        "role": "navigation lesson and contextual collection",
+        "x": 400,
+        "y": 384
+      },
+      {
+        "id": "jura_contact_clearing",
+        "role": "goblin contact and duel stage",
+        "x": 1008,
+        "y": 256
+      },
+      {
+        "id": "jura_north_trail",
+        "role": "future village route within the current chapter",
+        "x": 640,
+        "y": 48
+      }
+    ],
+    "integrationGate": [
+      "Do not replace JuraForestBackgroundV2 before MCP task #25 updates the 40x24 logical map, semantic anchors, collision and camera bounds.",
+      "Migrate cave exit, arrival, goblin contact and duel positions by semantic anchor; do not assume one global pixel offset for the regenerated composition.",
+      "The background is presentation only and never defines collision.",
+      "Keep GoblinScoutNPC and DireWolfLeader unique and validate the duel safe area in both supported viewports."
+    ]
   },
   "actors": {
     "player": { "objectName": "Rimuru", "spawnX": 304, "spawnY": 58, "zIndex": 30 },
@@ -40,6 +86,8 @@
     "Cinematic completion and skip converge on the same idempotent forest state.",
     "No dialogue is visible during the two-second forest silence hold.",
     "Battle input is disabled while ACTION or REACTION presentation is playing.",
-    "The forest background and battle stage never reveal the main menu behind a dark overlay."
+    "The forest background and battle stage never reveal the main menu behind a dark overlay.",
+    "The expanded forest keeps cave exit, stream crossing and contact clearing as separate readable sectors.",
+    "The expanded background remains unsynchronized until the logical 40x24 map and save-anchor migration are accepted."
   ]
 }

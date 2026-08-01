@@ -1,14 +1,14 @@
 {
-  "version": 1,
+  "version": 3,
   "sceneName": "GoblinVillageScene",
-  "visualSetId": "goblin_village_scene_v1",
+  "visualSetId": "goblin_village_scene_v3",
   "coordinateSpace": "local_pixels",
-  "viewport": { "width": 640, "height": 512, "safeMargin": 32 },
-  "camera": { "x": 320, "y": 256, "zoom": 1.95 },
+  "viewport": { "width": 1024, "height": 768, "safeMargin": 48 },
+  "camera": { "x": 512, "y": 384, "zoom": 1.45 },
   "background": {
-    "groundSprite": "assets/sprites/jura_forest_ground.png",
-    "groundRect": { "x": 0, "y": 0, "width": 640, "height": 512 },
-    "tint": "#173D2B",
+    "groundSprite": "assets/sprites/backgrounds/goblin_village_ground_background_v3.png",
+    "groundRect": { "x": 0, "y": 0, "width": 1024, "height": 768 },
+    "tint": "#FFFFFF",
     "zIndex": -120
   },
   "layers": {
@@ -19,33 +19,100 @@
     "interactionFx": 60,
     "dialogue": 100
   },
+  "layout": {
+    "sectors": {
+      "northEntrance": { "x": 430, "y": 32, "width": 164, "height": 142 },
+      "centralCouncil": { "x": 400, "y": 270, "width": 224, "height": 190 },
+      "shelterPlot": { "x": 128, "y": 486, "width": 256, "height": 184 },
+      "workshopPlot": { "x": 640, "y": 476, "width": 256, "height": 190 },
+      "supplyLane": { "x": 800, "y": 318, "width": 176, "height": 300 }
+    },
+    "compatibilityAnchors": {
+      "legacyPlayerSpawn": { "x": 304, "y": 340 },
+      "legacyElder": { "x": 156, "y": 220 },
+      "legacyVillageExit": { "x": 96, "y": 256 }
+    }
+  },
   "actors": {
     "player": {
       "objectName": "Rimuru",
-      "spawn": { "x": 304, "y": 340 },
+      "spawn": { "x": 512, "y": 650 },
       "zIndex": 30,
       "animationSet": "rimuru_slime_move"
     },
     "goblinElder": {
       "objectName": "GoblinElder",
-      "spawn": { "x": 156, "y": 220 },
+      "spawn": { "x": 452, "y": 346 },
       "zIndex": 35,
       "animationSet": "goblin_elder_idle"
     },
     "ranga": {
       "objectName": "Ranga",
-      "spawn": { "x": 438, "y": 254 },
+      "spawn": { "x": 608, "y": 368 },
       "zIndex": 36,
       "initiallyVisible": false,
       "animationSet": "ranga_run"
     },
     "goblinScout": {
       "objectName": "GoblinScoutNPC",
-      "spawn": { "x": 500, "y": 160 },
+      "spawn": { "x": 548, "y": 170 },
       "zIndex": 34,
       "initiallyVisible": true,
       "animationSet": "goblin_scout_idle"
     }
+  },
+  "ambientResidents": {
+    "status": "prepared_not_synced",
+    "invariants": [
+      "Ambient residents are unnamed visual population and never replace or clone narrative actors.",
+      "They have no collider and never block the golden path, council fire or project interactions.",
+      "A resident changes route or visibility on the same object instead of spawning a duplicate."
+    ],
+    "residents": [
+      {
+        "objectName": "VillageAmbientBuilder",
+        "role": "builder",
+        "sprite": "assets/sprites/npcs/goblin_village/goblin_village_ambient_builder_v1.png",
+        "spawn": { "x": 748, "y": 590 },
+        "route": [
+          { "x": 704, "y": 590 },
+          { "x": 804, "y": 590 }
+        ],
+        "zIndex": 33,
+        "collider": false,
+        "visibleFromState": "first_project_available",
+        "projectAffinity": "town_project_workshop"
+      },
+      {
+        "objectName": "VillageAmbientCarrier",
+        "role": "supply_carrier",
+        "sprite": "assets/sprites/npcs/goblin_village/goblin_village_ambient_carrier_v1.png",
+        "spawn": { "x": 868, "y": 430 },
+        "route": [
+          { "x": 876, "y": 430 },
+          { "x": 676, "y": 430 },
+          { "x": 548, "y": 530 }
+        ],
+        "zIndex": 33,
+        "collider": false,
+        "visibleFromState": "ranga_named",
+        "projectAffinity": "shared_materials"
+      },
+      {
+        "objectName": "VillageAmbientCaregiver",
+        "role": "caregiver",
+        "sprite": "assets/sprites/npcs/goblin_village/goblin_village_ambient_caregiver_v1.png",
+        "spawn": { "x": 286, "y": 590 },
+        "route": [
+          { "x": 286, "y": 590 },
+          { "x": 356, "y": 520 }
+        ],
+        "zIndex": 33,
+        "collider": false,
+        "visibleFromState": "ranga_named",
+        "projectAffinity": "town_project_shelter"
+      }
+    ]
   },
   "props": [
     {
@@ -57,14 +124,14 @@
           "assets/sprites/props/goblin_village/goblin_village_palisade_spiked_v1.png"
         ]
       },
-      "rect": { "x": 72, "y": 104, "width": 160, "height": 64 },
+      "rect": { "x": 432, "y": 82, "width": 160, "height": 64 },
       "zIndex": 0
     },
     {
       "objectName": "VillageCouncilFire",
       "sprite": "assets/sprites/buildings/tempest_council_fire_01.png",
       "animation": "tempest_council_fire",
-      "rect": { "x": 270, "y": 184, "width": 64, "height": 64 },
+      "rect": { "x": 480, "y": 330, "width": 64, "height": 64 },
       "zIndex": 0
     },
     {
@@ -74,19 +141,66 @@
         "project_available": "assets/sprites/buildings/tempest_project_board_important.png",
         "project_complete": "assets/sprites/buildings/tempest_project_board_complete.png"
       },
-      "rect": { "x": 90, "y": 300, "width": 64, "height": 64 },
+      "rect": { "x": 350, "y": 424, "width": 64, "height": 64 },
       "zIndex": 0
+    },
+    {
+      "objectName": "VillageShelterProject",
+      "sprite": "assets/sprites/buildings/tempest_house_wood_00.png",
+      "states": {
+        "00": "assets/sprites/buildings/tempest_house_wood_00.png",
+        "50": "assets/sprites/buildings/tempest_house_wood_50.png",
+        "100": "assets/sprites/buildings/tempest_house_wood_100.png",
+        "active": "assets/sprites/buildings/tempest_house_wood_active.png"
+      },
+      "rect": { "x": 192, "y": 526, "width": 128, "height": 96 },
+      "zIndex": 0,
+      "initiallyVisible": false
+    },
+    {
+      "objectName": "VillageWorkshopProject",
+      "sprite": "assets/sprites/buildings/tempest_workshop_00.png",
+      "states": {
+        "00": "assets/sprites/buildings/tempest_workshop_00.png",
+        "50": "assets/sprites/buildings/tempest_workshop_50.png",
+        "100": "assets/sprites/buildings/tempest_workshop_100.png",
+        "active": "assets/sprites/buildings/tempest_workshop_active.png"
+      },
+      "rect": { "x": 704, "y": 520, "width": 128, "height": 96 },
+      "zIndex": 0,
+      "initiallyVisible": false
+    },
+    {
+      "objectName": "VillageMaterialsWood",
+      "sprite": "assets/sprites/props/goblin_village/tempest_material_stack_wood.png",
+      "rect": { "x": 432, "y": 562, "width": 32, "height": 32 },
+      "zIndex": 4,
+      "initiallyVisible": false
+    },
+    {
+      "objectName": "VillageMaterialsStone",
+      "sprite": "assets/sprites/props/goblin_village/tempest_material_stack_stone.png",
+      "rect": { "x": 464, "y": 562, "width": 32, "height": 32 },
+      "zIndex": 4,
+      "initiallyVisible": false
+    },
+    {
+      "objectName": "VillageMaterialsCanvas",
+      "sprite": "assets/sprites/props/goblin_village/tempest_material_stack_canvas.png",
+      "rect": { "x": 496, "y": 562, "width": 32, "height": 32 },
+      "zIndex": 4,
+      "initiallyVisible": false
     },
     {
       "objectName": "VillageScoutTent",
       "sprite": "assets/sprites/props/goblin_village/goblin_village_tent_scout_v1.png",
-      "rect": { "x": 486, "y": 302, "width": 64, "height": 48 },
+      "rect": { "x": 836, "y": 392, "width": 64, "height": 48 },
       "zIndex": 0
     },
     {
       "objectName": "VillageSuppliesTent",
       "sprite": "assets/sprites/props/goblin_village/goblin_village_tent_supplies_v1.png",
-      "rect": { "x": 548, "y": 350, "width": 64, "height": 48 },
+      "rect": { "x": 868, "y": 472, "width": 64, "height": 48 },
       "zIndex": 0
     },
     {
@@ -96,7 +210,7 @@
         "built": "assets/sprites/buildings/tempest_watch_post_100.png",
         "active": "assets/sprites/buildings/tempest_watch_post_active.png"
       },
-      "rect": { "x": 548, "y": 90, "width": 80, "height": 96 },
+      "rect": { "x": 736, "y": 106, "width": 80, "height": 96 },
       "zIndex": 0
     },
     {
@@ -104,7 +218,7 @@
       "sprite": "assets/sprites/props/goblin_village/goblin_village_torch_unlit_v1.png",
       "litSprite": "assets/sprites/props/goblin_village/goblin_village_torch_lit_v1.png",
       "animation": "goblin_village_torch",
-      "rect": { "x": 244, "y": 250, "width": 48, "height": 80 },
+      "rect": { "x": 428, "y": 300, "width": 48, "height": 80 },
       "zIndex": 5
     }
   ],
@@ -128,12 +242,145 @@
     "first_project_available": { "rangaVisible": true, "projectBoard": "project_available", "watchPost": "base" },
     "first_project_complete": { "rangaVisible": true, "projectBoard": "project_complete", "watchPost": "built" }
   },
+  "projectVisuals": {
+    "town_project_shelter": {
+      "objectName": "VillageShelterProject",
+      "states": ["00", "50", "100", "active"],
+      "materialObjects": ["VillageMaterialsWood", "VillageMaterialsStone"],
+      "colliderBase": { "x": 16, "y": 72, "width": 96, "height": 20 }
+    },
+    "town_project_workshop": {
+      "objectName": "VillageWorkshopProject",
+      "states": ["00", "50", "100", "active"],
+      "materialObjects": [
+        "VillageMaterialsWood",
+        "VillageMaterialsStone",
+        "VillageMaterialsCanvas"
+      ],
+      "colliderBase": { "x": 14, "y": 70, "width": 100, "height": 22 }
+    },
+    "town_project_palisade": {
+      "objectName": "VillageEntrancePalisade",
+      "supportObjectName": "VillageWatchPost",
+      "states": {
+        "00": "assets/sprites/props/goblin_village/goblin_village_palisade_neutral_v1.png",
+        "50": "assets/sprites/props/goblin_village/goblin_village_palisade_reinforced_v1.png",
+        "100": "assets/sprites/props/goblin_village/goblin_village_palisade_spiked_v1.png",
+        "active": "assets/sprites/props/goblin_village/goblin_village_palisade_spiked_v1.png"
+      },
+      "supportStates": {
+        "00": "assets/sprites/buildings/tempest_watch_post_00.png",
+        "50": "assets/sprites/buildings/tempest_watch_post_50.png",
+        "100": "assets/sprites/buildings/tempest_watch_post_100.png",
+        "active": "assets/sprites/buildings/tempest_watch_post_active.png"
+      },
+      "materialObjects": ["VillageMaterialsWood", "VillageMaterialsStone"]
+    }
+  },
+  "persistentUi": {
+    "objectName": "TownCouncilCanvas",
+    "contractRevision": 2,
+    "status": "prepared_not_synced",
+    "sortingOrder": 70,
+    "initiallyVisible": false,
+    "widgets": {
+      "overlay": "TownOverlay",
+      "title": "TownTitleLabel",
+      "page": "TownPageLabel",
+      "body": "TownBodyLabel",
+      "resources": "TownResourcesLabel",
+      "requirements": "TownRequirementsLabel",
+      "benefit": "TownBenefitLabel",
+      "responsible": "TownResponsibleLabel",
+      "preview": "TownPreviewImage",
+      "reportNext": "TownReportNextButton",
+      "openCouncil": "TownOpenCouncilButton",
+      "reportClose": "TownReportCloseButton",
+      "shelterTab": "TownShelterTabButton",
+      "workshopTab": "TownWorkshopTabButton",
+      "palisadeTab": "TownPalisadeTabButton",
+      "confirm": "TownConfirmButton",
+      "councilClose": "TownCouncilCloseButton"
+    },
+    "actions": {
+      "TownReportNextButton": "signal:TENSURA_TOWN_REPORT_NEXT",
+      "TownOpenCouncilButton": "signal:TENSURA_COUNCIL_OPEN",
+      "TownReportCloseButton": "signal:TENSURA_TOWN_REPORT_CLOSE",
+      "TownShelterTabButton": "signal:TENSURA_COUNCIL_PICK_SHELTER",
+      "TownWorkshopTabButton": "signal:TENSURA_COUNCIL_PICK_WORKSHOP",
+      "TownPalisadeTabButton": "signal:TENSURA_COUNCIL_PICK_PALISADE",
+      "TownConfirmButton": "signal:TENSURA_COUNCIL_CONFIRM",
+      "TownCouncilCloseButton": "signal:TENSURA_COUNCIL_CLOSE"
+    },
+    "modalPolicy": {
+      "blocksExplorationInput": true,
+      "inputOwnerWhileVisible": "TownCouncilCanvas",
+      "activationKeys": ["TAB", "SHIFT+TAB", "ENTER", "SPACE"],
+      "restoreExplorationInputOn": ["report_close", "council_close", "scene_transition", "runtime_error"],
+      "restoreExactlyOnce": true
+    },
+    "focusPolicy": {
+      "reportFirstPage": "TownReportNextButton",
+      "reportIntermediatePage": "TownReportNextButton",
+      "reportLastPage": "TownOpenCouncilButton",
+      "councilOpen": "TownShelterTabButton",
+      "reportOrder": [
+        "TownReportNextButton",
+        "TownReportCloseButton"
+      ],
+      "reportLastPageOrder": [
+        "TownOpenCouncilButton",
+        "TownReportCloseButton"
+      ],
+      "councilOrder": [
+        "TownShelterTabButton",
+        "TownWorkshopTabButton",
+        "TownPalisadeTabButton",
+        "TownConfirmButton",
+        "TownCouncilCloseButton"
+      ]
+    },
+    "displayRules": {
+      "reportBeforeLastPage": {
+        "show": ["TownReportNextButton", "TownReportCloseButton"],
+        "hide": ["TownOpenCouncilButton"]
+      },
+      "reportLastPage": {
+        "show": ["TownOpenCouncilButton", "TownReportCloseButton"],
+        "hide": ["TownReportNextButton"]
+      },
+      "council": {
+        "show": [
+          "TownShelterTabButton",
+          "TownWorkshopTabButton",
+          "TownPalisadeTabButton",
+          "TownConfirmButton",
+          "TownCouncilCloseButton"
+        ],
+        "hide": [
+          "TownReportNextButton",
+          "TownOpenCouncilButton",
+          "TownReportCloseButton"
+        ]
+      }
+    },
+    "runtimeAcceptance": {
+      "reportOpenPayloadType": "ReturnReport",
+      "reportOpenCommand": "TownCommand.ApplyReturnReport",
+      "applyReportBeforeRendering": true,
+      "reportApplication": "exactly_once_by_report_id",
+      "maximumConcurrentProjectsInProgress": 1,
+      "confirmDisabledWithoutValidSelection": true,
+      "confirmDisabledWhileAnotherProjectIsInProgress": true
+    }
+  },
   "invariants": [
     "GoblinVillageScene owns village props; MainScene and JuraForestScene never render them.",
     "Rimuru, Ranga, GoblinElder and GoblinScout are unique actors and are never cloned by a cutscene.",
     "State changes replace the sprite of one prop instead of creating a second prop.",
     "All coordinates are local to GoblinVillageScene and the player remains inside the safe margin.",
     "No chroma-key, solid gray backdrop or opaque full-screen overlay is allowed in gameplay.",
-    "Cutscene completion and skip converge on the same idempotent state before input returns."
+    "Cutscene completion and skip converge on the same idempotent state before input returns.",
+    "Legacy anchors are preserved until the save migration maps them to the expanded layout."
   ]
 }

@@ -149,6 +149,16 @@ public final class CutsceneDirector extends IgnisScript {
         private ManualAdvanceGate analysisAdvanceGate;
         private boolean analysisPaused;
         private boolean handoffDelivered;
+        private String sequenceId;
+        private String manualGateCue;
+        private String lastFeedbackCue;
+        // O passo de frame pode cruzar o portao manual e o cue seguinte na MESMA chamada
+        // de advance. O que vier depois do portao fica aqui e so e aplicado quando o
+        // jogador dispensa a analise, para que o feedback responda a dispensa.
+        private final List<String> deferredCues = new ArrayList<>();
+        // Relogio de instrumentacao: soma deltaTime sempre, inclusive durante o portao
+        // manual, para que o carimbo seja monotono mesmo com a timeline congelada.
+        private double traceClockSeconds;
 
         void play(JSONObject data, GameObject player) {
             Objects.requireNonNull(data, "cutscene data");
@@ -173,6 +183,16 @@ public final class CutsceneDirector extends IgnisScript {
             analysisText = analysis.getString("text");
             analysisAdvanceGate = new ManualAdvanceGate(analysis.optDouble("minimumReadSeconds", 1.0));
             analysisPaused = false;
+            sequenceId = data.optString("sequenceId", "cave_awakening");
+            JSONObject rhythm = data.optJSONObject("rhythmContract");
+            manualGateCue = rhythm == null
+                    ? "great_sage_analysis"
+                    : rhythm.optString("manualGateCue", "great_sage_analysis");
+            lastFeedbackCue = cues.size() < 2 ? null : cues.get(cues.size() - 2).id();
+            deferredCues.clear();
+            traceClockSeconds = 0;
+            // Estado inicial do contrato visual: anel oculto antes da convergencia.
+            setFormationRuneVisible(false);
             setupUi();
             attachClip(actor, CLIP_REVEAL);
             attachClip(actor, CLIP_IDLE);
@@ -180,6 +200,7 @@ public final class CutsceneDirector extends IgnisScript {
             actor.setOpacity(0);
             setCameraPosition(actorCenterX, actorCenterY);
             setCameraZoom(1.42);
+            trace("sequence_started", sequenceId, "signal");
             log("Cutscene cave_awakening iniciada: duracao="
                     + data.getDouble("durationSeconds") + "s, cues=" + cues.size());
         }
@@ -188,15 +209,29 @@ public final class CutsceneDirector extends IgnisScript {
         boolean update(
                 double deltaTime, boolean advanceDown, boolean advancePressed, boolean skipPressed) {
             if (timeline == null || handoffDelivered) return false;
+            if (Double.isFinite(deltaTime) && deltaTime > 0) {
+                traceClockSeconds += deltaTime;
+            }
             if (skipPressed) {
                 boolean accepted = timeline.requestSkip();
+                trace(accepted ? "skip_accepted" : "skip_rejected_too_early",
+                        sequenceId, "input:ESCAPE");
                 log("Pedido de skip da cutscene: aceito=" + accepted
                         + ", tempo=" + timeline.elapsedSeconds());
-                if (accepted) analysisPaused = false;
+                if (accepted && analysisPaused) {
+                    trace("manual_gate_dismissed", manualGateCue, "skip");
+                }
+                if (accepted) {
+                    analysisPaused = false;
+                    // Skip converge no mesmo estado final: os cues adiados nao viram
+                    // apresentacao, o finalizador unico cuida do visual.
+                    deferredCues.clear();
+                }
             }
             if (analysisPaused && !timeline.isFinished()) {
                 if (analysisAdvanceGate.update(deltaTime, advanceDown, advancePressed)) {
                     analysisPaused = false;
+                    trace("manual_gate_dismissed", manualGateCue, "input:E_OR_ENTER");
                     hideAnalysis();
                     if (scanVisual != null) {
                         destroy(scanVisual);
@@ -207,20 +242,71 @@ public final class CutsceneDirector extends IgnisScript {
                     updatePresentation();
                     return false;
                 }
+                // Mesmo frame da dispensa: o feedback adiado sai agora, nao no proximo cue.
+                applyPendingCues();
             }
-            for (String cue : timeline.advance(deltaTime)) {
-                applyCue(cue);
+            if (!analysisPaused) {
+                deferredCues.addAll(timeline.advance(deltaTime));
+                applyPendingCues();
             }
             updatePresentation();
             if (analysisPaused) return false;
             if (!timeline.consumeCompletion()) return false;
+            trace("finalizer_committed", sequenceId, "timeline");
             log("Cutscene cave_awakening concluida: tempo=" + timeline.elapsedSeconds());
             finishVisualState();
+            trace("camera_restored", sequenceId, "adapter");
             handoffDelivered = true;
+            // Aqui a cutscene apenas PEDE o controle. O input_restored real e emitido
+            // pelo ExplorationDirector quando a exploracao passa a aceitar teclado.
+            trace("input_restore_requested", sequenceId, "adapter");
             return true;
         }
 
+        /**
+         * Liga/desliga o anel de formacao autoral. O objeto pertence ao Codex: aqui so a
+         * visibilidade muda, nunca sprite, transform, z-index ou instancia.
+         */
+        private void setFormationRuneVisible(boolean visible) {
+            GameObject rune = findObject("CaveAwakeningRuneRing");
+            if (rune == null) {
+                log("CaveAwakeningRuneRing ausente na cena; convergencia segue sem o anel.");
+                return;
+            }
+            rune.setVisible(visible);
+        }
+
+        /** Consome os cues pendentes e para no portao manual, guardando o resto do lote. */
+        private void applyPendingCues() {
+            while (!deferredCues.isEmpty()) {
+                String cue = deferredCues.remove(0);
+                applyCue(cue);
+                if (analysisPaused) {
+                    return;
+                }
+            }
+        }
+
+        /** Instrumentacao do contrato de polimento: id, beat, carimbo monotono e origem. */
+        private void trace(String event, String beatId, String origin) {
+            // t = relogio da sequencia; mono = relogio monotono do processo, unico jeito
+            // de ordenar este trace contra o input_restored emitido pelo ExplorationDirector.
+            log("CUTSCENE_TRACE seq=" + sequenceId
+                    + " beat=" + beatId
+                    + " event=" + event
+                    + " t=" + String.format(java.util.Locale.ROOT, "%.3f", traceClockSeconds)
+                    + " mono=" + String.format(java.util.Locale.ROOT, "%.3f", System.nanoTime() / 1e9)
+                    + " origin=" + origin);
+        }
+
         private void applyCue(String cue) {
+            trace("beat_or_cue_entered", cue, "timeline");
+            if (cue.equals(manualGateCue)) {
+                trace("manual_gate_opened", cue, "timeline");
+            }
+            if (cue.equals(lastFeedbackCue)) {
+                trace("last_visible_or_audible_feedback", cue, "timeline");
+            }
             switch (cue) {
                 case "darkness_and_drops" -> {
                     playSound("assets/sounds/cave_water_ripple_01.wav", 0.22f);
@@ -230,6 +316,7 @@ public final class CutsceneDirector extends IgnisScript {
                 case "slime_body_formation" -> showSlimeFormation();
                 case "first_perception" -> {
                     actor.setOpacity(1);
+                    setFormationRuneVisible(false);
                     setCameraZoom(1.54);
                 }
                 case "great_sage_analysis" -> showGreatSageAnalysis();
@@ -240,7 +327,9 @@ public final class CutsceneDirector extends IgnisScript {
         }
 
         private void showMagiculeConvergence() {
-            magiculeVisual = createRuntimeVisual("AwakeningMagicules", actorCenterX, actorCenterY, 72, 72, 24);
+            // 64x64 = 2x exatos sobre a fonte 32x32, preservando nearest-neighbor.
+            setFormationRuneVisible(true);
+            magiculeVisual = createRuntimeVisual("AwakeningMagicules", actorCenterX, actorCenterY, 64, 64, 24);
             attachClip(magiculeVisual, CLIP_MAGICULE);
             Animator animator = magiculeVisual.getOrCreateAnimator();
             if (clip(CLIP_MAGICULE) != null) animator.play(CLIP_MAGICULE, true);
@@ -260,7 +349,8 @@ public final class CutsceneDirector extends IgnisScript {
         }
 
         private void showGreatSageAnalysis() {
-            scanVisual = createRuntimeVisual("AwakeningGreatSageScan", actorCenterX, actorCenterY, 168, 168, 45);
+            // 192x192 = 0,5 exato sobre a fonte 384x384.
+            scanVisual = createRuntimeVisual("AwakeningGreatSageScan", actorCenterX, actorCenterY, 192, 192, 45);
             attachClip(scanVisual, CLIP_SCAN);
             Animator animator = scanVisual.getOrCreateAnimator();
             if (clip(CLIP_SCAN) != null) animator.play(CLIP_SCAN, false);
@@ -355,10 +445,13 @@ public final class CutsceneDirector extends IgnisScript {
             hideAnalysis();
             if (fadePanel != null) fadePanel.setVisible(false);
             if (skipLabel != null) skipLabel.setVisible(false);
+            // Os tres VFX da sequencia saem juntos, tanto no fim natural quanto no skip:
+            // dois sao runtime e o anel de formacao e objeto autoral, que so e escondido.
             if (magiculeVisual != null) destroy(magiculeVisual);
             if (scanVisual != null) destroy(scanVisual);
             magiculeVisual = null;
             scanVisual = null;
+            setFormationRuneVisible(false);
             actor.setVisible(true);
             actor.setOpacity(1);
             resizeActorCentered(28, 28);

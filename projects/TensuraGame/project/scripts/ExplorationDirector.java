@@ -260,6 +260,12 @@ public final class ExplorationDirector extends IgnisScript {
             uiReady = true;
         }
         active = true;
+        // Instrumentacao do contrato de polimento: este e o instante real em que a
+        // exploracao passa a aceitar input, nao o pedido feito pela cutscene.
+        log("CUTSCENE_TRACE seq=exploration beat=" + simulation.snapshot().areaId()
+                + " event=input_restored mono="
+                + String.format(java.util.Locale.ROOT, "%.3f", System.nanoTime() / 1e9)
+                + " origin=exploration");
         updateDefenseVisuals();
     }
 

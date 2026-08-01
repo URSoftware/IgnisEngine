@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "contractId": "town_council_copy_v1",
+  "canvasObjectName": "TownCouncilCanvas",
+  "report": {
+    "title": "Relatorio de retorno",
+    "pages": [
+      "A floresta rendeu mais do que madeira. Os goblins trouxeram pedra do leito seco, tecido das tendas abandonadas e um punhado de minerio.",
+      "Um dos anciaos aponta quem sabe construir. Com maos treinadas, a aldeia deixa de ser acampamento.",
+      "O Conselho pode escolher uma prioridade. Uma so, por enquanto."
+    ],
+    "nextLabel": "Continuar",
+    "openCouncilLabel": "Abrir o Conselho",
+    "closeLabel": "Depois"
+  },
+  "council": {
+    "title": "Conselho de Tempest",
+    "intro": "Escolha a prioridade da vila.",
+    "confirmLabel": "Confirmar prioridade",
+    "closeLabel": "Sair sem decidir",
+    "noPriorityBody": "Nenhuma prioridade escolhida.",
+    "noPriorityConfirm": "Escolha uma prioridade antes de confirmar.",
+    "pageFormat": "Prioridade %d de %d",
+    "costFormat": "Custo: %s",
+    "responsibleFormat": "Responsavel: %s",
+    "benefitFormat": "Beneficio: %s",
+    "requirementsMetLabel": "Requisitos atendidos.",
+    "requirementsMissingFormat": "Falta: %s",
+    "resourceFormat": "%s %d"
+  },
+  "projects": {
+    "town_project_shelter": {
+      "name": "Abrigo de madeira",
+      "summary": "Casas de verdade no lugar das tendas, com um armazem para guardar o que a floresta der."
+    },
+    "town_project_workshop": {
+      "name": "Oficina comunitaria",
+      "summary": "Bancada, ferramentas e um teto para consertar equipamento sem depender de Dwargon."
+    },
+    "town_project_palisade": {
+      "name": "Palicada e posto de patrulha",
+      "summary": "Cerca reforcada na entrada e um posto de onde a matilha enxerga a trilha inteira."
+    }
+  },
+  "projectStatus": {
+    "LOCKED": "Bloqueado",
+    "AVAILABLE": "Disponivel",
+    "IN_PROGRESS": "Em obras",
+    "COMPLETED": "Concluido"
+  },
+  "specialists": {
+    "specialist_goblin_builder": "Construtores goblin"
+  },
+  "benefits": {
+    "town_benefit_recovery": "Recuperacao entre expedicoes",
+    "town_benefit_field_repairs": "Reparo de equipamento em campo",
+    "town_benefit_defense": "Defesa da entrada"
+  },
+  "milestones": {
+    "ranga_naming_complete": "Nomeacao de Ranga"
+  },
+  "resources": {
+    "wood": "Madeira",
+    "stone": "Pedra",
+    "food": "Alimento",
+    "cloth": "Tecido",
+    "metal": "Metal",
+    "magicules": "Magiaules"
+  },
+  "messages": {
+    "rejectedFormat": "Pedido recusado: %s",
+    "waitingState": "Carregando o estado da vila..."
+  }
+}

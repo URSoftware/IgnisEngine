@@ -52,6 +52,12 @@ def process_background() -> None:
     result.save(BACKGROUND_DIR / "jura_forest_approach_background_v2.png", optimize=True)
 
 
+def process_expanded_background() -> None:
+    source = Image.open(SOURCE_DIR / "jura_forest_expanded_background_source_v3.png")
+    result = quantized_rgb(center_crop_aspect(source, (1280, 768)), (1280, 768), 192)
+    result.save(BACKGROUND_DIR / "jura_forest_expanded_background_v3.png", optimize=True)
+
+
 def process_cinematic() -> None:
     source = Image.open(SOURCE_DIR / "cutscene_cave_exit_story_sheet_source_v1.png")
     for index, frame in enumerate(split_grid(source, 2, 2), start=1):
@@ -72,6 +78,7 @@ def main() -> None:
     CUTSCENE_DIR.mkdir(parents=True, exist_ok=True)
     VFX_DIR.mkdir(parents=True, exist_ok=True)
     process_background()
+    process_expanded_background()
     process_cinematic()
     process_vfx("battle_hydrolamina_sheet_alpha_v1.png", "battle_hydrolamina_v1", 6)
     process_vfx("battle_guard_reaction_sheet_alpha_v1.png", "battle_guard_reaction_v1", 5)

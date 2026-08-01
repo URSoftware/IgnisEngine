@@ -1,18 +1,23 @@
 {
-  "version": 1,
+  "version": 2,
   "sequenceId": "cave_awakening",
-  "durationSeconds": 8.2,
+  "durationSeconds": 5.26,
   "skippableAfterSeconds": 1.0,
   "finalEvent": "awakening_control_handoff",
   "dialogueIsOriginal": true,
+  "rhythmContract": {
+    "acceptance": "data/cutscene-polish-acceptance.json#cave_awakening",
+    "manualGateCue": "great_sage_analysis",
+    "note": "veldora_foreshadow fica 0.01 s depois do portao manual para responder a dispensa ainda no mesmo frame; o intervalo ate control_handoff e o rabo final ficam abaixo de 0.35 s."
+  },
   "cues": [
     { "id": "darkness_and_drops", "atSeconds": 0.0 },
     { "id": "magicule_convergence", "atSeconds": 0.85 },
     { "id": "slime_body_formation", "atSeconds": 2.1 },
     { "id": "first_perception", "atSeconds": 3.55 },
     { "id": "great_sage_analysis", "atSeconds": 4.7 },
-    { "id": "veldora_foreshadow", "atSeconds": 6.2 },
-    { "id": "control_handoff", "atSeconds": 7.8 }
+    { "id": "veldora_foreshadow", "atSeconds": 4.71 },
+    { "id": "control_handoff", "atSeconds": 5.01 }
   ],
   "analysis": {
     "speaker": "Grande Sabio",

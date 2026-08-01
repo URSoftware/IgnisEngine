@@ -6,6 +6,8 @@ from PIL import Image
 PROJECT = Path(__file__).resolve().parents[1] / "project"
 SOURCE = PROJECT / "assets" / "source" / "goblin_village"
 OUTPUT = PROJECT / "assets" / "sprites" / "props" / "goblin_village"
+AMBIENT_SOURCE = SOURCE / "ambient"
+AMBIENT_OUTPUT = PROJECT / "assets" / "sprites" / "npcs" / "goblin_village"
 
 
 def crop_cell(image, box, size, filename):
@@ -33,8 +35,34 @@ def crop_cell(image, box, size, filename):
     return canvas
 
 
+def normalize_ambient_npc(source_name, output_name):
+    npc = Image.open(AMBIENT_SOURCE / source_name).convert("RGBA")
+    alpha = npc.getchannel("A").point(lambda value: 0 if value < 64 else 255)
+    npc.putalpha(alpha)
+
+    bounds = alpha.getbbox()
+    if bounds is None:
+        raise ValueError(f"empty generated NPC: {source_name}")
+
+    npc = npc.crop(bounds)
+    npc.thumbnail((44, 46), Image.Resampling.NEAREST)
+
+    canvas = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+    canvas.alpha_composite(npc, ((48 - npc.width) // 2, 47 - npc.height))
+
+    output_alpha = canvas.getchannel("A").point(lambda value: 0 if value < 128 else 255)
+    color = canvas.convert("RGB").quantize(
+        colors=96,
+        method=Image.Quantize.MEDIANCUT,
+        dither=Image.Dither.NONE,
+    ).convert("RGBA")
+    color.putalpha(output_alpha)
+    color.save(AMBIENT_OUTPUT / output_name, optimize=True)
+
+
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    AMBIENT_OUTPUT.mkdir(parents=True, exist_ok=True)
 
     props = Image.open(SOURCE / "goblin_village_defense_props_alpha_v1.png").convert("RGBA")
     cell_width = props.width // 4
@@ -69,6 +97,17 @@ def main():
             96,
             f"cave_forest_threshold_{index + 1:02d}.png",
         )
+
+    ambient_npcs = {
+        "goblin_village_ambient_builder_alpha_source_v1.png":
+            "goblin_village_ambient_builder_v1.png",
+        "goblin_village_ambient_carrier_alpha_source_v1.png":
+            "goblin_village_ambient_carrier_v1.png",
+        "goblin_village_ambient_caregiver_alpha_source_v1.png":
+            "goblin_village_ambient_caregiver_v1.png",
+    }
+    for source_name, output_name in ambient_npcs.items():
+        normalize_ambient_npc(source_name, output_name)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,25 @@ public final class AtomicCampaignSaveStore {
             }
         }
 
+        if (Files.exists(paths.temporary())) {
+            try {
+                SaveDocument recovered = readValidated(paths.temporary());
+                if (Files.exists(paths.primary())) {
+                    preserveCorruptEvidence(paths);
+                }
+                moveReplacing(paths.temporary(), paths.primary());
+                warnings.add("Recovered a valid interrupted temporary save.");
+                return new SaveLoadResult(
+                        java.util.Optional.of(recovered),
+                        SaveLoadResult.Source.RECOVERED_TEMPORARY,
+                        warnings);
+            } catch (IOException | RuntimeException exception) {
+                warnings.add(
+                        "Interrupted temporary save is invalid: "
+                                + exception.getClass().getSimpleName());
+            }
+        }
+
         return new SaveLoadResult(
                 java.util.Optional.empty(), SaveLoadResult.Source.NONE, warnings);
     }

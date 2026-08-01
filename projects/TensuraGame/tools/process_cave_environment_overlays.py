@@ -6,6 +6,7 @@ from PIL import Image
 PROJECT_ROOT = Path(__file__).resolve().parents[1] / "project"
 SOURCE_DIR = PROJECT_ROOT / "assets" / "source"
 OUTPUT_DIR = PROJECT_ROOT / "assets" / "sprites" / "props" / "cave_polish"
+BACKGROUND_OUTPUT_DIR = PROJECT_ROOT / "assets" / "sprites" / "backgrounds"
 
 
 def normalize_alpha(image: Image.Image, threshold: int = 40) -> Image.Image:
@@ -19,6 +20,12 @@ def save_overlay(source_name: str, output_name: str, size: tuple[int, int]) -> N
     source = normalize_alpha(Image.open(SOURCE_DIR / source_name))
     overlay = source.resize(size, Image.Resampling.NEAREST)
     overlay.save(OUTPUT_DIR / output_name, optimize=True)
+
+
+def save_background(source_name: str, output_name: str, size: tuple[int, int]) -> None:
+    source = normalize_alpha(Image.open(SOURCE_DIR / source_name))
+    background = source.resize(size, Image.Resampling.NEAREST)
+    background.save(BACKGROUND_OUTPUT_DIR / output_name, optimize=True)
 
 
 def save_ring_frames() -> None:
@@ -38,6 +45,7 @@ def save_ring_frames() -> None:
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    BACKGROUND_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     save_overlay(
         "cave_awakening_environment_overlay_alpha_v2.png",
         "cave_awakening_environment_overlay_v2.png",
@@ -47,6 +55,16 @@ def main() -> None:
         "cave_gallery_environment_overlay_alpha_v2.png",
         "cave_gallery_environment_overlay_v2.png",
         (320, 512),
+    )
+    save_background(
+        "cave_awakening_expanded_alpha_source_v3.png",
+        "cave_awakening_expanded_background_v3.png",
+        (960, 640),
+    )
+    save_background(
+        "cave_gallery_expanded_alpha_source_v3.png",
+        "cave_gallery_expanded_background_v3.png",
+        (640, 768),
     )
     save_ring_frames()
 

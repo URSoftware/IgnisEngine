@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "sceneName": "DwargonRoadScene",
+  "bootstrapObject": "DwargonRoadRuntime",
+  "visualSetId": "dwargon_road_scene_v1",
+  "coordinateSpace": "local_pixels",
+  "viewport": { "width": 640, "height": 512, "safeMargin": 32 },
+  "camera": { "x": 320, "y": 256, "zoom": 1.0 },
+  "background": {
+    "objectName": "DwargonRoadBackground",
+    "sprite": "assets/sprites/backgrounds/dwargon_road_background_v1.png",
+    "rect": { "x": 0, "y": 0, "width": 640, "height": 512 },
+    "zIndex": -100
+  },
+  "actors": {
+    "player": {
+      "objectName": "Rimuru",
+      "spawn": { "x": 86, "y": 430 },
+      "zIndex": 30,
+      "animationSet": "rimuru_slime_move"
+    },
+    "ranga": {
+      "objectName": "Ranga",
+      "spawn": { "x": 130, "y": 432 },
+      "zIndex": 31,
+      "requires": ["ranga_naming_complete"],
+      "animationSet": "ranga_run"
+    }
+  },
+  "props": [
+    {
+      "objectName": "DwargonRoadMarker",
+      "sprite": "assets/sprites/props/dwargon/dwargon_road_marker_v1.png",
+      "rect": { "x": 254, "y": 330, "width": 64, "height": 64 },
+      "zIndex": 4
+    }
+  ],
+  "exits": [
+    {
+      "objectName": "DwargonRoadReturnExit",
+      "rect": { "x": 36, "y": 430, "width": 92, "height": 54 },
+      "destinationScene": "JuraForestScene",
+      "checkpoint": "jura_forest_approach"
+    },
+    {
+      "objectName": "DwargonGateApproachExit",
+      "rect": { "x": 506, "y": 52, "width": 98, "height": 72 },
+      "destinationScene": "DwargonGateScene",
+      "checkpoint": "dwargon_gate_reached"
+    }
+  ],
+  "interactions": [
+    {
+      "id": "dwargon_road_marker",
+      "objectName": "DwargonRoadMarker",
+      "verb": "INSPECT"
+    }
+  ],
+  "invariants": [
+    "Rimuru and Ranga are persistent actors and are never cloned for travel presentation.",
+    "All coordinates are local to DwargonRoadScene.",
+    "The lower-left and upper-right exits remain visually readable.",
+    "A checkpoint is persisted before either scene transition."
+  ]
+}

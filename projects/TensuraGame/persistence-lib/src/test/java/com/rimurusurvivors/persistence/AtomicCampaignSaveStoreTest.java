@@ -7,14 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.rimurusurvivors.domain.CampaignSaveCodec;
+import com.rimurusurvivors.domain.CampaignSaveMigrations;
 import com.rimurusurvivors.domain.CampaignSnapshot;
 import com.rimurusurvivors.domain.SaveDocument;
-import com.rimurusurvivors.domain.SaveMigrationChain;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -130,6 +129,71 @@ class AtomicCampaignSaveStoreTest {
     }
 
     @Test
+    void validInterruptedTemporaryIsPromotedWhenNoGoodSaveSurvives() throws IOException {
+        AtomicCampaignSaveStore store = store(() -> { });
+        SaveDocument expected = document(
+                "goblin_village", 96, 256, Set.of("ranga_naming_complete"));
+        Path temporary = temporaryDirectory.resolve("slot-1.tmp");
+        Files.writeString(
+                temporary,
+                new JsonSaveDocumentCodec().encode(expected),
+                StandardCharsets.UTF_8);
+
+        SaveLoadResult loaded = store.load(1);
+
+        assertTrue(loaded.found());
+        assertEquals(expected, loaded.document().orElseThrow());
+        assertEquals(SaveLoadResult.Source.RECOVERED_TEMPORARY, loaded.source());
+        assertTrue(Files.exists(temporaryDirectory.resolve("slot-1.json")));
+        assertFalse(Files.exists(temporary));
+    }
+
+    @Test
+    void temporaryRecoveryPreservesCorruptPrimaryAsEvidence() throws IOException {
+        AtomicCampaignSaveStore store = store(() -> { });
+        Path primary = temporaryDirectory.resolve("slot-1.json");
+        Path temporary = temporaryDirectory.resolve("slot-1.tmp");
+        byte[] corruptBytes = "broken-primary".getBytes(StandardCharsets.UTF_8);
+        Files.write(primary, corruptBytes);
+        SaveDocument expected = document("goblin_village", 96, 256, Set.of());
+        Files.writeString(
+                temporary,
+                new JsonSaveDocumentCodec().encode(expected),
+                StandardCharsets.UTF_8);
+
+        SaveLoadResult loaded = store.load(1);
+
+        assertEquals(SaveLoadResult.Source.RECOVERED_TEMPORARY, loaded.source());
+        assertEquals(expected, loaded.document().orElseThrow());
+        assertArrayEquals(
+                corruptBytes,
+                Files.readAllBytes(temporaryDirectory.resolve("slot-1.corrupt")));
+    }
+
+    @Test
+    void schemaOnePrimaryLoadsAsCurrentWithoutRewritingItsEvidence() throws IOException {
+        AtomicCampaignSaveStore store = store(() -> { });
+        SaveDocument legacy = new SaveDocument(1, java.util.Map.of(
+                "campaign.areaId", "jura_forest_approach",
+                "campaign.playerX", "304.0",
+                "campaign.playerY", "58.0",
+                "campaign.milestones.count", "2",
+                "campaign.milestones.0", "awakening_complete",
+                "campaign.milestones.1", "goblin_contact_complete"));
+        Path primary = temporaryDirectory.resolve("slot-1.json");
+        String legacyJson = new JsonSaveDocumentCodec().encode(legacy);
+        Files.writeString(primary, legacyJson, StandardCharsets.UTF_8);
+
+        SaveLoadResult loaded = store.load(1);
+
+        assertEquals(SaveLoadResult.Source.PRIMARY, loaded.source());
+        assertEquals(
+                CampaignSnapshot.CURRENT_SCHEMA_VERSION,
+                loaded.document().orElseThrow().schemaVersion());
+        assertEquals(legacyJson, Files.readString(primary, StandardCharsets.UTF_8));
+    }
+
+    @Test
     void rejectsInvalidSlotAndInvalidCampaignBeforeWriting() {
         AtomicCampaignSaveStore store = store(() -> { });
         assertThrows(IllegalArgumentException.class, () -> store.load(0));
@@ -142,7 +206,7 @@ class AtomicCampaignSaveStoreTest {
 
     private AtomicCampaignSaveStore store(AtomicCampaignSaveStore.BeforeCommitHook hook) {
         SaveDocumentProcessor processor = new CampaignSaveDocumentProcessor(
-                new SaveMigrationChain(CampaignSnapshot.CURRENT_SCHEMA_VERSION, List.of()),
+                CampaignSaveMigrations.currentChain(),
                 new CampaignSaveCodec());
         return new AtomicCampaignSaveStore(
                 temporaryDirectory, new JsonSaveDocumentCodec(), processor, hook);
