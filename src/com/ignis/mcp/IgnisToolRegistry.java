@@ -1037,6 +1037,28 @@ public final class IgnisToolRegistry {
         try {
             String h = hex == null ? "" : hex.trim();
             if (h.isEmpty()) return fallback;
+            String digits = h;
+            if (digits.startsWith("#")) {
+                digits = digits.substring(1);
+            } else if (digits.startsWith("0x") || digits.startsWith("0X")) {
+                digits = digits.substring(2);
+            }
+
+            if (digits.matches("[0-9a-fA-F]{6}")) {
+                return new Color(Integer.parseInt(digits, 16));
+            }
+            if (digits.matches("[0-9a-fA-F]{8}")) {
+                // As ferramentas de UI e a serializacao de UIComponent usam
+                // #RRGGBBAA. Color.decode ignora os oito bits mais altos e
+                // transformava qualquer alpha informado em FF.
+                int rgba = (int) Long.parseLong(digits, 16);
+                int red = (rgba >>> 24) & 0xFF;
+                int green = (rgba >>> 16) & 0xFF;
+                int blue = (rgba >>> 8) & 0xFF;
+                int alpha = rgba & 0xFF;
+                return new Color(red, green, blue, alpha);
+            }
+
             if (!h.startsWith("#") && !h.startsWith("0x") && !h.startsWith("0X")) h = "#" + h;
             return Color.decode(h);
         } catch (Exception e) {

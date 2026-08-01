@@ -566,6 +566,32 @@ final class UiTools {
     // ------------------------------------------------------------------
 
     private void registerStyleTools() {
+        Map<String, String> boundsProps = new LinkedHashMap<>();
+        boundsProps.put("name", "Nome do elemento");
+        boundsProps.put("x", "Nova posicao X em pixels (opcional)");
+        boundsProps.put("y", "Nova posicao Y em pixels (opcional)");
+        boundsProps.put("width", "Nova largura em px, maior que zero (opcional)");
+        boundsProps.put("height", "Nova altura em px, maior que zero (opcional)");
+        boundsProps.put("objectName", "Opcional: o CanvasComponent onde o elemento esta");
+        reg.add("ui_set_bounds",
+            "Ajusta posicao e tamanho de um widget existente sem recria-lo. Campos omitidos preservam o valor atual.",
+            IgnisToolRegistry.schemaWith(boundsProps, List.of("name")),
+            args -> {
+                Target t = resolveTarget(args, false);
+                if (t.error != null) return t.error;
+                UIComponent el = t.canvas.findByName(args.optString("name", ""));
+                if (el == null) return "Erro: elemento nao encontrado: " + args.optString("name", "");
+                double width = args.optDouble("width", el.getWidth());
+                double height = args.optDouble("height", el.getHeight());
+                if (width <= 0 || height <= 0) {
+                    return "Erro: width e height devem ser maiores que zero.";
+                }
+                el.setPosition(args.optDouble("x", el.getX()), args.optDouble("y", el.getY()));
+                el.setSize(width, height);
+                return "Bounds de '" + el.getName() + "' = (" + el.getX() + "," + el.getY()
+                        + ") " + el.getWidth() + "x" + el.getHeight() + "." + suffix(t);
+            });
+
         Map<String, String> anchorProps = new LinkedHashMap<>();
         anchorProps.put("name", "Nome do elemento");
         anchorProps.put("anchorX", "Ancora X no pai (0=esq, 0.5=centro, 1=dir)");
@@ -593,6 +619,10 @@ final class UiTools {
         Map<String, String> styleProps = new LinkedHashMap<>();
         styleProps.put("name", "Nome do elemento");
         styleProps.put("backgroundColor", "Cor de fundo em hex (#RRGGBB ou #RRGGBBAA)");
+        styleProps.put("normalColor", "Cor normal do botao (#RRGGBB ou #RRGGBBAA)");
+        styleProps.put("hoverColor", "Cor do botao sob o cursor (#RRGGBB ou #RRGGBBAA)");
+        styleProps.put("pressedColor", "Cor do botao pressionado (#RRGGBB ou #RRGGBBAA)");
+        styleProps.put("disabledColor", "Cor do botao desabilitado (#RRGGBB ou #RRGGBBAA)");
         styleProps.put("textColor", "Cor do texto em hex");
         styleProps.put("borderColor", "Cor da borda em hex");
         styleProps.put("borderWidth", "Espessura da borda em px");
@@ -611,6 +641,12 @@ final class UiTools {
                 UIComponent el = t.canvas.findByName(args.optString("name", ""));
                 if (el == null) return "Erro: elemento nao encontrado: " + args.optString("name", "");
                 if (args.has("backgroundColor")) el.setBackgroundColor(IgnisToolRegistry.safeColor(args.optString("backgroundColor"), el.getBackgroundColor()));
+                if (el instanceof UIButton button) {
+                    if (args.has("normalColor")) button.setNormalColor(IgnisToolRegistry.safeColor(args.optString("normalColor"), button.getNormalColor()));
+                    if (args.has("hoverColor")) button.setHoverColor(IgnisToolRegistry.safeColor(args.optString("hoverColor"), button.getHoverColor()));
+                    if (args.has("pressedColor")) button.setPressedColor(IgnisToolRegistry.safeColor(args.optString("pressedColor"), button.getPressedColor()));
+                    if (args.has("disabledColor")) button.setDisabledColor(IgnisToolRegistry.safeColor(args.optString("disabledColor"), button.getDisabledColor()));
+                }
                 if (args.has("textColor")) el.setTextColor(IgnisToolRegistry.safeColor(args.optString("textColor"), el.getTextColor()));
                 if (args.has("borderColor")) el.setBorderColor(IgnisToolRegistry.safeColor(args.optString("borderColor"), el.getBorderColor()));
                 if (args.has("borderWidth")) el.setBorderWidth(args.optInt("borderWidth"));

@@ -140,6 +140,42 @@ class UiPersistentAuthoringTest {
     }
 
     @Test
+    void estiloRgbaEstadosDeBotaoEBoundsPersistemSemPerderAlpha() throws Exception {
+        spawn("Player");
+        exec("ui_create_button", new JSONObject().put("name", "menu").put("text", "Menu")
+                .put("objectName", "Player"));
+
+        assertTrue(exec("ui_set_bounds", new JSONObject().put("name", "menu")
+                .put("x", 24).put("y", 32).put("width", 184).put("height", 56)
+                .put("objectName", "Player")).contains("184.0x56.0"));
+        assertTrue(exec("ui_set_style", new JSONObject().put("name", "menu")
+                .put("backgroundColor", "#07111CB8")
+                .put("normalColor", "#152033F2")
+                .put("hoverColor", "#23486EFF")
+                .put("pressedColor", "#0D1624FF")
+                .put("disabledColor", "#15203370")
+                .put("objectName", "Player")).contains("atualizado"));
+
+        UIButton button = (UIButton) game.getEntities().get(0).getComponent(CanvasComponent.class)
+                .getCanvas().findByName("menu");
+        assertEquals(24, button.getX(), 0.001);
+        assertEquals(32, button.getY(), 0.001);
+        assertEquals(184, button.getWidth(), 0.001);
+        assertEquals(56, button.getHeight(), 0.001);
+        assertEquals(184, button.getBackgroundColor().getAlpha());
+        assertEquals(242, button.getNormalColor().getAlpha());
+        assertEquals(112, button.getDisabledColor().getAlpha());
+
+        assertTrue(exec("ui_set_bounds", new JSONObject().put("name", "menu")
+                .put("width", 0).put("objectName", "Player")).startsWith("Erro"));
+
+        UIButton roundTrip = UIButton.fromJSON(button.toJSON());
+        assertEquals(184, roundTrip.getBackgroundColor().getAlpha());
+        assertEquals(242, roundTrip.getNormalColor().getAlpha());
+        assertEquals(112, roundTrip.getDisabledColor().getAlpha());
+    }
+
+    @Test
     void attachEDetachGerenciamOComponente() throws Exception {
         spawn("Player");
         assertTrue(exec("ui_attach_canvas", new JSONObject().put("objectName", "Player")
