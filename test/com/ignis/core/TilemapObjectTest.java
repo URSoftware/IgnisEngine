@@ -1,5 +1,7 @@
 package com.ignis.core;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,6 +86,36 @@ class TilemapObjectTest {
         assertEquals(2, b.getTile(0, 11, 8));
         assertEquals(4, b.getTile(1, 4, 4), "tiles da 2a camada sobrevivem");
         assertEquals(TilemapObject.EMPTY, b.getTile(1, 0, 0));
+        assertEquals(1, countRenderers(b),
+                "round-trip nao pode duplicar o renderer nativo embutido");
+    }
+
+    @Test
+    void cargaColapsaRendererDuplicadoPorVersaoAntiga() {
+        Scene scene = new Scene("T");
+        TilemapObject tm = new TilemapObject();
+        tm.setName("MapaContaminado");
+        tm.configure("assets/tilesets/dungeon.png", 24, 24, 12, 9);
+        tm.setTile(0, 2, 3, 7);
+        scene.addEntity(tm);
+
+        JSONObject contaminated = scene.toJSON();
+        JSONArray components = contaminated.getJSONArray("entities")
+                .getJSONObject(0).getJSONArray("components");
+        components.put(new JSONObject(components.getJSONObject(0).toString()));
+
+        Scene loaded = Scene.fromJSON(contaminated, null);
+        TilemapObject back = (TilemapObject) loaded.findEntityByName("MapaContaminado");
+
+        assertNotNull(back);
+        assertEquals(1, countRenderers(back),
+                "loader deve autocorrigir duplicata ja persistida");
+        assertEquals(7, back.getTile(0, 2, 3),
+                "colapso nao pode perder os dados da grade");
+        JSONArray savedAgain = loaded.toJSON().getJSONArray("entities")
+                .getJSONObject(0).getJSONArray("components");
+        assertEquals(1, savedAgain.length(),
+                "proximo save deve remover a contaminacao do arquivo");
     }
 
     @Test
@@ -111,5 +143,11 @@ class TilemapObjectTest {
     void tilemapNaoECullablePorAabb() {
         assertFalse(new TilemapObject().isCullable(),
                 "tilemap faz culling proprio por tile — nao deve ser cortado pelo AABB");
+    }
+
+    private static long countRenderers(GameObject object) {
+        return object.getComponents().stream()
+                .filter(TilemapRendererComponent.class::isInstance)
+                .count();
     }
 }

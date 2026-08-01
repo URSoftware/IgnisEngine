@@ -284,7 +284,18 @@ public class Scene {
                     // usuario (instanciado depois, pelo ScriptManager).
                     Component nativeComp = instantiateNativeComponent(compType);
                     if (nativeComp != null) {
-                        entity.addComponent(nativeComp);
+                        // Algumas entidades especializadas (por exemplo TilemapObject)
+                        // ja constroem componentes nativos obrigatorios no construtor.
+                        // Reutilizar essa instancia evita duplicar o componente a cada
+                        // load/save. Tambem torna a carga autocorretiva para cenas que
+                        // tenham sido persistidas com a duplicata pelo loader antigo.
+                        Component embeddedComp = findExactComponent(entity,
+                                nativeComp.getClass());
+                        if (embeddedComp != null) {
+                            nativeComp = embeddedComp;
+                        } else {
+                            entity.addComponent(nativeComp);
+                        }
                         if (compJson.has("properties")) {
                             nativeComp.loadProperties(compJson.getJSONObject("properties"),
                                     scene::getEntityById);
@@ -395,6 +406,16 @@ public class Scene {
         }
 
         return scene;
+    }
+
+    private static Component findExactComponent(GameObject entity,
+                                                 Class<?> componentClass) {
+        for (Component component : entity.getComponents()) {
+            if (component.getClass().equals(componentClass)) {
+                return component;
+            }
+        }
+        return null;
     }
 
     /**

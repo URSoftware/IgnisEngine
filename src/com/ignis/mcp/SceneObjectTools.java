@@ -6,6 +6,7 @@ import com.ignis.animation.AnimationIO;
 import com.ignis.animation.Animator;
 import com.ignis.animation.SpriteAnimation;
 import com.ignis.core.Camera;
+import com.ignis.core.Component;
 import com.ignis.core.Game;
 import com.ignis.core.GameObject;
 import com.ignis.core.IgnisSampleCollisions;
@@ -449,6 +450,54 @@ final class SceneObjectTools {
     }
 
     private void registerGameObjectExtraTools() {
+        // rename_object
+        Map<String, String> renameProps = new LinkedHashMap<>();
+        renameProps.put("name", "Nome atual exato do objeto");
+        renameProps.put("newName", "Novo nome exato e unico na cena");
+        reg.add("rename_object",
+            "Renomeia um GameObject existente sem alterar seu ID, componentes ou hierarquia. "
+            + "Recusa nome vazio ou ja usado; referencias autorais por nome devem ser validadas depois.",
+            IgnisToolRegistry.schemaWith(renameProps, List.of("name", "newName")),
+            args -> {
+                String currentName = args.optString("name", "").trim();
+                String newName = args.optString("newName", "").trim();
+                if (currentName.isEmpty()) return "Erro: 'name' obrigatorio.";
+                if (newName.isEmpty()) return "Erro: 'newName' obrigatorio e nao pode ser vazio.";
+                GameObject go = reg.findObject(currentName);
+                if (go == null) return "Erro: objeto nao encontrado: " + currentName;
+                if (currentName.equals(newName)) return "Sem mudanca: objeto ja se chama " + newName;
+                GameObject collision = reg.findObject(newName);
+                if (collision != null && collision != go) {
+                    return "Erro: ja existe objeto com o nome: " + newName;
+                }
+                String id = go.getId();
+                go.setName(newName);
+                if (reg.refreshHook != null) reg.refreshHook.run();
+                return "Objeto renomeado: " + currentName + " -> " + newName
+                        + " (id preservado: " + id + ")";
+            });
+
+        // set_object_metadata
+        Map<String, String> metadataProps = new LinkedHashMap<>();
+        metadataProps.put("name", "Nome do objeto");
+        metadataProps.put("tag", "Tag livre; string vazia limpa a tag (opcional)");
+        metadataProps.put("layer", "Camada nomeada; vazio volta para Default (opcional)");
+        reg.add("set_object_metadata",
+            "Edita tag e/ou camada nomeada de um GameObject sem tocar em transform, visual ou componentes.",
+            IgnisToolRegistry.schemaWith(metadataProps, List.of("name")),
+            args -> {
+                GameObject go = reg.findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                if (!args.has("tag") && !args.has("layer")) {
+                    return "Erro: informe ao menos 'tag' ou 'layer'.";
+                }
+                if (args.has("tag")) go.setTag(args.optString("tag", "").trim());
+                if (args.has("layer")) go.setLayer(args.optString("layer", "").trim());
+                if (reg.refreshHook != null) reg.refreshHook.run();
+                return "Metadados atualizados: " + go.getName() + " (tag='" + go.getTag()
+                        + "', layer='" + go.getLayer() + "')";
+            });
+
         // set_object_visible
         reg.add("set_object_visible",
             "Mostra ou esconde um GameObject (afeta apenas a renderizacao).",
@@ -532,22 +581,78 @@ final class SceneObjectTools {
 
         // get_object_info
         reg.add("get_object_info",
-            "Retorna informacoes completas de um GameObject: transform, tipo, visibilidade, sprite, scripts e collider.",
+            "Retorna informacoes completas de um GameObject: ID, transform, metadados, visibilidade, sprite, scripts, componentes e collider.",
             IgnisToolRegistry.schemaWith(Map.of("name", "Nome do objeto"), List.of("name")),
             args -> {
                 GameObject go = reg.findObject(args.optString("name", ""));
                 if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
                 StringBuilder sb = new StringBuilder();
                 sb.append("nome: ").append(go.getName()).append('\n');
+                sb.append("id: ").append(go.getId()).append('\n');
                 sb.append("tipo: ").append(go.getType()).append('\n');
+                sb.append("tag: ").append(go.getTag()).append('\n');
+                sb.append("layer: ").append(go.getLayer()).append('\n');
                 sb.append("posicao: (").append(go.getX()).append(", ").append(go.getY()).append(")\n");
                 sb.append("tamanho: ").append(go.getWidth()).append('x').append(go.getHeight()).append('\n');
                 sb.append("rotacao: ").append(go.getRotation()).append('\n');
                 sb.append("visivel: ").append(go.isVisible()).append('\n');
                 sb.append("sprite: ").append(go.getSpritePath()).append('\n');
                 sb.append("scripts: ").append(go.getScriptNames()).append('\n');
+                sb.append("componentes: ");
+                List<Component> components = go.getComponents();
+                if (components == null || components.isEmpty()) {
+                    sb.append("[]\n");
+                } else {
+                    List<String> names = new ArrayList<>();
+                    for (Component component : components) {
+                        names.add(component.getClass().getSimpleName());
+                    }
+                    sb.append(names).append('\n');
+                }
                 sb.append("collider: ").append(go.getColliderType())
                   .append(go.hasCollider() ? " (" + go.getCollisionMode() + ")" : "");
+                return sb.toString();
+            });
+
+        // get_object_components
+        reg.add("get_object_components",
+            "Inspeciona os componentes de um objeto por indice, classe, origem nativa/script e chaves "
+            + "serializadas; destaca classes duplicadas sem alterar a cena.",
+            IgnisToolRegistry.schemaWith(Map.of("name", "Nome do objeto"), List.of("name")),
+            args -> {
+                GameObject go = reg.findObject(args.optString("name", ""));
+                if (go == null) return "Erro: objeto nao encontrado: " + args.optString("name", "");
+                List<Component> components = go.getComponents();
+                if (components == null || components.isEmpty()) return "(sem componentes)";
+                Map<String, Integer> counts = new LinkedHashMap<>();
+                for (Component component : components) {
+                    String type = component.getClass().getSimpleName();
+                    counts.put(type, counts.getOrDefault(type, 0) + 1);
+                }
+                StringBuilder sb = new StringBuilder();
+                sb.append("Objeto: ").append(go.getName()).append(" | componentes: ")
+                  .append(components.size()).append('\n');
+                for (int i = 0; i < components.size(); i++) {
+                    Component component = components.get(i);
+                    String type = component.getClass().getSimpleName();
+                    sb.append('[').append(i).append("] ").append(type)
+                      .append(" origem=")
+                      .append(GameObject.isNativeComponent(component) ? "native" : "script");
+                    if (component instanceof IgnisScript) {
+                        sb.append(" enabled=").append(((IgnisScript) component).isEnabled());
+                    }
+                    try {
+                        List<String> keys = new ArrayList<>(component.saveProperties().keySet());
+                        java.util.Collections.sort(keys);
+                        sb.append(" propriedades=").append(keys);
+                    } catch (Exception ex) {
+                        sb.append(" propriedades=<erro: ").append(ex.getMessage()).append('>');
+                    }
+                    if (counts.get(type) > 1) {
+                        sb.append(" [DUPLICADO x").append(counts.get(type)).append(']');
+                    }
+                    sb.append('\n');
+                }
                 return sb.toString();
             });
 
@@ -565,6 +670,25 @@ final class SceneObjectTools {
                     }
                 }
                 return sb.length() == 0 ? "(nenhum objeto do tipo " + type + ")" : sb.toString();
+            });
+
+        // find_objects_by_tag
+        reg.add("find_objects_by_tag",
+            "Busca objetos da cena por tag exata, ignorando maiusculas/minusculas.",
+            IgnisToolRegistry.schemaWith(Map.of("tag", "Tag a buscar"), List.of("tag")),
+            args -> {
+                if (reg.liveGame == null) return "Erro: editor nao disponivel.";
+                String tag = args.optString("tag", "").trim();
+                if (tag.isEmpty()) return "Erro: 'tag' obrigatoria e nao pode ser vazia.";
+                StringBuilder sb = new StringBuilder();
+                for (GameObject go : reg.liveGame.getEntities()) {
+                    if (go.hasTag(tag)) {
+                        sb.append(go.getName()).append(" [").append(go.getType()).append("] @ (")
+                          .append((int) go.getX()).append(',').append((int) go.getY())
+                          .append(") layer=").append(go.getLayer()).append('\n');
+                    }
+                }
+                return sb.length() == 0 ? "(nenhum objeto com tag " + tag + ")" : sb.toString();
             });
 
         // remove_script_from_object

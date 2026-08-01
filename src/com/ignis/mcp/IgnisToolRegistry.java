@@ -96,7 +96,8 @@ public final class IgnisToolRegistry {
     // sessao de colaboracao, sao encaminhadas ao host (host-autoritativo). As
     // demais (list_/get_/read_, audio, coordenacao, scripts) rodam localmente.
     private static final java.util.Set<String> FORWARD_TO_HOST = java.util.Set.of(
-            "create_object", "delete_object", "set_object_transform", "set_object_sprite",
+            "create_object", "delete_object", "rename_object", "set_object_metadata",
+            "set_object_transform", "set_object_sprite",
             "set_sprite_region",
             "set_object_visual", "set_object_visible", "set_object_name_color", "reorder_object_z",
             "attach_script", "remove_script_from_object", "set_object_collider",
@@ -163,7 +164,8 @@ public final class IgnisToolRegistry {
         Map<String, Guard> m = new LinkedHashMap<>();
         // Objetos de cena identificados pelo argumento 'name'.
         for (String t : List.of(
-                "create_object", "delete_object", "set_object_transform", "set_object_sprite",
+                "create_object", "delete_object", "rename_object", "set_object_metadata",
+                "set_object_transform", "set_object_sprite",
                 "set_sprite_region", "set_object_visual", "set_object_visible",
                 "set_object_name_color", "reorder_object_z", "set_object_world_collision",
                 "clear_parent", "create_text_object", "set_text",
@@ -651,8 +653,9 @@ public final class IgnisToolRegistry {
         + "2. list_scenes; crie um mundo por cena com create_scene / troque com switch_scene.\n"
         + "3. Crie objetos: create_object (formas/player), create_text_object, create_tilemap,\n"
         + "   create_background_layer, create_particle_emitter, create_light_object.\n"
-        + "4. De aparencia/comportamento: set_object_sprite, attach_script, attach_animation,\n"
-        + "   set_object_transform, reorder_object_z.\n"
+        + "4. De identidade/aparencia/comportamento: rename_object, set_object_metadata,\n"
+        + "   set_object_sprite, attach_script, attach_animation, set_object_transform,\n"
+        + "   reorder_object_z. Inspecione com get_object_info/get_object_components.\n"
         + "5. Organize a hierarquia com set_parent/clear_parent.\n"
         + "6. Camera: create_camera/set_active_camera/set_camera_follow (o que o jogador ve).\n"
         + "7. validate_scene para achar problemas; corrija.\n"
