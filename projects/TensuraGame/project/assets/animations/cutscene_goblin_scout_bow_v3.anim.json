@@ -1,9 +1,0 @@
-{
-  "curveType": "EASE_IN_OUT",
-  "frames": [
-    { "duration": 0.40, "sprite": "assets/sprites/cutscenes/goblins/goblin_scout_first_contact_canon_v2_05.png" },
-    { "duration": 0.75, "sprite": "assets/sprites/cutscenes/goblins/goblin_scout_first_contact_canon_v2_06.png" }
-  ],
-  "loop": false,
-  "name": "cutscene_goblin_scout_bow_v3"
-}

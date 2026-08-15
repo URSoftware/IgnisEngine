@@ -1,8 +1,0 @@
-{
-  "curveType": "EASE_OUT",
-  "frames": [
-    { "duration": 0.35, "sprite": "assets/sprites/ui/battle/reactions/dire_wolf_leader_reaction_hit_v1.png" }
-  ],
-  "loop": false,
-  "name": "dire_wolf_leader_reaction_hit_v1"
-}

@@ -66,6 +66,7 @@ Thumbs.db
 
 # Local user projects (not part of the repository)
 projects/MyGame/
+projects/TensuraGame/
 
 # AI assistant config
 .claude/
