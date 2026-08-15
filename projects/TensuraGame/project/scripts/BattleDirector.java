@@ -27,6 +27,7 @@ import org.json.JSONObject;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -142,9 +143,11 @@ public final class BattleDirector extends IgnisScript {
 
     private BattleHud hud;
     private String retrySignalName = DEFAULT_RETRY_SIGNAL;
-    // Layout autorado pelo Codex, fotografado no primeiro bind e reusado em todo
-    // recalculo, para reaplicar o layout N vezes dar sempre a mesma tela.
-    private final Map<String, Bounds> authoredBounds = new LinkedHashMap<>();
+    // Estado autorado pelo Codex, fotografado ANTES da primeira mutacao do presenter e
+    // reusado em todo recalculo. Os widgets do BattleHudCanvas sao PERSISTIDOS: o que o
+    // presenter escreve neles o autosave grava no .ignis. Por isso o baseline e unico
+    // por sessao e o presenter e obrigado a devolve-lo antes de ocultar ou encerrar.
+    private final Map<String, WidgetState> authoredState = new LinkedHashMap<>();
 
     private GameObject leaderActor;
     private GameObject hydrolaminaVfx;
@@ -167,6 +170,19 @@ public final class BattleDirector extends IgnisScript {
         onSceneSignal(retrySignalName, payload -> requestRetry());
         log("BattleDirector: inicializado com " + signalToCommand.size() + " sinais de comando e "
                 + retrySignalName + ". " + DEBUG_START_KEY + " e entrada de QA/debug apenas.");
+    }
+
+    /**
+     * Stop no meio do duelo nao passa por {@code finishDuel}. Sem este gancho, os
+     * widgets persistidos ficariam com o layout do combate e o autosave seguinte
+     * gravaria esse estado no projeto do usuario.
+     */
+    @Override
+    public void onDetach() {
+        if (hud != null) {
+            hud.hide();
+        }
+        super.onDetach();
     }
 
     public void tick() {
@@ -868,6 +884,91 @@ public final class BattleDirector extends IgnisScript {
             "EARLY", "pull_left",
             "LATE", "push_right",
             "NONE", "fade_down");
+
+    // Medicao de texto sem Graphics: serve tanto ao runtime quanto a prova offline.
+    private static final FontRenderContext TEXT_METRICS = new FontRenderContext(null, true, true);
+    private static final String ELLIPSIS = "...";
+
+    private static String fitToBox(String text, UILabel label) {
+        return fitToBox(text, label.getWidth(), label.getHeight(),
+                label.getFont(), label.getLineSpacing());
+    }
+
+    /**
+     * Quebra {@code text} nas palavras que cabem na largura e descarta o que passar da
+     * altura, marcando o corte. Determinista: mesma caixa e mesma fonte sempre produzem
+     * as mesmas linhas, o que torna a contencao provavel fora do editor.
+     */
+    static String fitToBox(String text, double width, double height, Font font, int lineSpacing) {
+        if (text == null || text.isEmpty() || width <= 0 || height <= 0) {
+            return text == null ? "" : text;
+        }
+        double lineHeight = font.getLineMetrics("Ay", TEXT_METRICS).getHeight() + lineSpacing;
+        int maxLines = Math.max(1, (int) Math.floor(height / lineHeight));
+
+        List<String> lines = new ArrayList<>();
+        for (String paragraph : text.split("\n", -1)) {
+            wrapParagraph(paragraph, width, font, lines);
+        }
+        if (lines.size() <= maxLines) {
+            return String.join("\n", lines);
+        }
+        List<String> kept = new ArrayList<>(lines.subList(0, maxLines));
+        int last = maxLines - 1;
+        kept.set(last, truncate(kept.get(last), width, font));
+        return String.join("\n", kept);
+    }
+
+    private static void wrapParagraph(String paragraph, double width, Font font,
+            List<String> lines) {
+        if (paragraph.isEmpty()) {
+            lines.add("");
+            return;
+        }
+        StringBuilder line = new StringBuilder();
+        for (String word : paragraph.split(" ")) {
+            if (line.length() == 0) {
+                line.append(word);
+                continue;
+            }
+            String candidate = line + " " + word;
+            if (textWidth(candidate, font) <= width) {
+                line.setLength(0);
+                line.append(candidate);
+            } else {
+                lines.add(line.toString());
+                line.setLength(0);
+                line.append(word);
+            }
+        }
+        // Palavra unica maior que a caixa ainda precisa caber: corta com reticencias.
+        String tail = line.toString();
+        lines.add(textWidth(tail, font) <= width ? tail : truncate(tail, width, font));
+    }
+
+    /**
+     * Sempre termina em reticencias: quem chama ja decidiu que ha conteudo descartado,
+     * e uma ultima linha sem marca nenhuma esconderia o corte do leitor.
+     */
+    private static String truncate(String text, double width, Font font) {
+        if (textWidth(text + ELLIPSIS, font) <= width) {
+            return text + ELLIPSIS;
+        }
+        StringBuilder shortened = new StringBuilder(text);
+        while (shortened.length() > 0
+                && textWidth(shortened + ELLIPSIS, font) > width) {
+            shortened.setLength(shortened.length() - 1);
+        }
+        return shortened + ELLIPSIS;
+    }
+
+    private static double textWidth(String text, Font font) {
+        return font.getStringBounds(text, TEXT_METRICS).getWidth();
+    }
+
+    private static double clamp(double value, double minimum, double maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
 
     /** Forma legivel do grau sem depender de cor, tambem para quem le so texto. */
     private static String glyphOf(String shape) {
@@ -1684,6 +1785,7 @@ public final class BattleDirector extends IgnisScript {
          * produz exatamente a mesma tela que aplicar uma vez.
          */
         private void captureAuthoredBounds() {
+            captureAuthoredState();
             anchorOfWidget.clear();
             anchor(ANCHOR_PLAYER, "BattlePlayerPanel", "BattlePlayerLabel", "BattleMagiculesBar");
             anchor(ANCHOR_LEADER, "BattleLeaderPanel", "BattleLeaderLabel", "BattleHpBar",
@@ -1711,13 +1813,61 @@ public final class BattleDirector extends IgnisScript {
         }
 
         private void remember(String widgetName, String anchorRole) {
-            UIComponent widget = canvas.findByName(widgetName);
-            if (widget == null) return;
-            if (anchorRole != null) {
-                anchorOfWidget.put(widgetName, anchorRole);
+            if (canvas.findByName(widgetName) == null || anchorRole == null) return;
+            anchorOfWidget.put(widgetName, anchorRole);
+        }
+
+        /**
+         * Fotografa TODOS os filhos do canvas — nao so os que o manifesto nomeia — antes
+         * de qualquer escrita do presenter. Sao objetos de cena: o que ficar mutado aqui
+         * o autosave grava no projeto do usuario.
+         */
+        private void captureAuthoredState() {
+            if (!authoredState.isEmpty()) {
+                return; // baseline e por sessao; recapturar apos o layout seria gravar o wide
             }
-            authoredBounds.computeIfAbsent(widgetName, key -> new Bounds(
-                    widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+            for (UIComponent child : canvas.getChildrenOfType(UIComponent.class)) {
+                if (child.getName() != null) {
+                    authoredState.put(child.getName(), WidgetState.capture(child));
+                }
+            }
+            warnIfBaselineLooksMutated();
+        }
+
+        /**
+         * O canvas e autorado em coordenadas {@code compact}. Se o baseline chegar
+         * diferente disso, alguem salvou a cena com o HUD ja transformado — e continuar
+         * calado transformaria o acidente em novo padrao.
+         */
+        private void warnIfBaselineLooksMutated() {
+            WidgetState dimmer = authoredState.get(
+                    visuals.getJSONObject("widgets").optString("dimmer", "BattleDimmer"));
+            JSONObject minimum = visuals.getJSONObject("canvas").getJSONObject("minimumViewport");
+            if (dimmer == null) return;
+            if (Math.abs(dimmer.width - minimum.getDouble("width")) > 1
+                    || Math.abs(dimmer.height - minimum.getDouble("height")) > 1) {
+                log("BattleDirector: ATENCAO — baseline do BattleHudCanvas veio em "
+                        + (int) dimmer.width + "x" + (int) dimmer.height + ", e nao no compact "
+                        + minimum.getInt("width") + "x" + minimum.getInt("height")
+                        + ". A cena pode ter sido salva com o HUD ja transformado.");
+            }
+        }
+
+        /** Devolve os 32 widgets exatamente como o Codex os autorou. */
+        private void restoreAuthoredState() {
+            for (Map.Entry<String, WidgetState> entry : authoredState.entrySet()) {
+                UIComponent widget = canvas == null ? null : canvas.findByName(entry.getKey());
+                if (widget != null) {
+                    entry.getValue().restore(widget);
+                }
+            }
+            appliedViewportWidth = 0;
+            appliedViewportHeight = 0;
+        }
+
+        private Bounds authoredBoundsOf(String widgetName) {
+            WidgetState state = authoredState.get(widgetName);
+            return state == null ? null : state.bounds();
         }
 
         private double viewportWidth() {
@@ -1767,7 +1917,7 @@ public final class BattleDirector extends IgnisScript {
                     continue; // o dock e resolvido pelo grid, logo abaixo
                 }
                 UIComponent widget = canvas.findByName(entry.getKey());
-                Bounds authored = authoredBounds.get(entry.getKey());
+                Bounds authored = authoredBoundsOf(entry.getKey());
                 if (widget == null || authored == null) continue;
                 Bounds from = boundsOf(origin, entry.getValue());
                 Bounds to = scaled(boundsOf(target, entry.getValue()), scale, offsetX, offsetY);
@@ -1819,25 +1969,40 @@ public final class BattleDirector extends IgnisScript {
             int rows = Math.max(1, arrangement.optInt("rows", 2));
             double gap = arrangement.optDouble("gap", 8) * scale;
 
-            JSONObject hitTarget = visuals.getJSONObject("accessibility")
-                    .optJSONObject("minimumHitTarget");
+            JSONObject accessibility = visuals.getJSONObject("accessibility");
+            JSONObject hitTarget = accessibility.optJSONObject("minimumHitTarget");
             double minCellWidth = hitTarget == null ? 72 : hitTarget.optDouble("width", 72);
             double minCellHeight = hitTarget == null ? 52 : hitTarget.optDouble("height", 52);
+            JSONObject maxTarget = accessibility.optJSONObject("maximumCommandTarget");
+            double maxCellWidth = arrangement.optDouble("maximumCellWidth",
+                    maxTarget == null ? 184 : maxTarget.optDouble("width", 184));
+            double maxCellHeight = arrangement.optDouble("maximumCellHeight",
+                    maxTarget == null ? 72 : maxTarget.optDouble("height", 72));
 
-            double cellWidth = Math.max(minCellWidth, (dock.width - gap * (columns - 1)) / columns);
-            double cellHeight = Math.max(minCellHeight, (dock.height - gap * (rows - 1)) / rows);
+            // O teto vale em PIXEIS FINAIS: e numa janela grande, com escala acima de 1,
+            // que a celula estoura — foi assim que o QA viu 206x169.
+            double cellWidth = clamp((dock.width - gap * (columns - 1)) / columns,
+                    minCellWidth, maxCellWidth);
+            double cellHeight = clamp((dock.height - gap * (rows - 1)) / rows,
+                    minCellHeight, maxCellHeight);
+            // Sobra do dock vira margem simetrica, entao limitar o botao nao o joga
+            // para o canto esquerdo do painel.
+            double usedWidth = columns * cellWidth + gap * (columns - 1);
+            double usedHeight = rows * cellHeight + gap * (rows - 1);
+            double originX = dock.x + Math.max(0, (dock.width - usedWidth) / 2.0);
+            double originY = dock.y + Math.max(0, (dock.height - usedHeight) / 2.0);
 
             int index = 0;
             for (Map.Entry<String, UIButton> entry : commandButtons.entrySet()) {
-                double x = dock.x + (index % columns) * (cellWidth + gap);
-                double y = dock.y + (index / columns) * (cellHeight + gap);
+                double x = originX + (index % columns) * (cellWidth + gap);
+                double y = originY + (index / columns) * (cellHeight + gap);
                 UIButton button = entry.getValue();
-                Bounds authored = authoredBounds.get(button.getName());
+                Bounds authored = authoredBoundsOf(button.getName());
                 place(button, new Bounds(x, y, cellWidth, cellHeight),
                         viewWidth, viewHeight, margin);
 
                 UIComponent icon = commandIcons.get(entry.getKey());
-                Bounds iconAuthored = icon == null ? null : authoredBounds.get(icon.getName());
+                Bounds iconAuthored = icon == null ? null : authoredBoundsOf(icon.getName());
                 if (icon != null && authored != null && iconAuthored != null) {
                     // O icone conserva o deslocamento relativo com que foi autorado dentro
                     // do botao, encolhendo junto quando a celula encolhe.
@@ -1865,7 +2030,7 @@ public final class BattleDirector extends IgnisScript {
         private void layoutTopCenter(String widgetName, double scale,
                 double viewWidth, double margin) {
             UIComponent widget = canvas.findByName(widgetName);
-            Bounds authored = authoredBounds.get(widgetName);
+            Bounds authored = authoredBoundsOf(widgetName);
             if (widget == null || authored == null) return;
             double width = authored.width * scale;
             double height = authored.height * scale;
@@ -1894,19 +2059,18 @@ public final class BattleDirector extends IgnisScript {
             focusFirstCommand();
         }
 
+        /**
+         * Some o duelo devolvendo a cena ao estado autorado. Nao basta apagar os widgets:
+         * eles sao persistidos, entao ocultar sem restaurar deixaria bounds, texto e
+         * enabled do duelo prontos para o proximo autosave gravar no projeto. Quem
+         * esconde o HUD e o objeto pai, que ja nasce oculto por contrato.
+         */
         @Override
         public void hide() {
-            for (UIComponent widget : widgets.values()) {
-                widget.setVisible(false);
+            restoreAuthoredState();
+            if (canvasObject != null) {
+                canvasObject.setVisible(false);
             }
-            for (UIButton button : commandButtons.values()) {
-                button.setVisible(false);
-            }
-            for (UIComponent icon : commandIcons.values()) {
-                icon.setVisible(false);
-            }
-            setRetryVisible(false);
-            canvasObject.setVisible(false);
         }
 
         /** Retry so existe visualmente onde ele e valido; fora disso nem clicavel fica. */
@@ -1923,11 +2087,11 @@ public final class BattleDirector extends IgnisScript {
             setBar("moraleBar", snap.morale, snap.maxMorale);
             setText("phaseBadge", snap.phaseTitle + "  -  Turno " + snap.turn
                     + "  -  " + snap.timingLabel);
-            setText("intentionLabel", snap.intentionName
+            setTextFitted("intentionLabel", snap.intentionName
                     + (snap.intentionTelegraphed ? "  [!]" : "")
                     + "\n" + snap.intentionHint
                     + (snap.analyzed ? "\n" + String.join(" | ", snap.revealed) : ""));
-            setText("statusLine", snap.statusMessage);
+            setTextFitted("statusLine", snap.statusMessage);
             setSprite("intentionIcon", snap.intentionShape);
 
             boolean interactive = snap.mode == Mode.COMMAND;
@@ -1965,8 +2129,24 @@ public final class BattleDirector extends IgnisScript {
             setRole("resultPanel", finished);
             setRetryVisible(finished && snap.retryOffered);
             if (finished) {
-                setText("statusLine", snap.outcomeText);
+                setTextFitted("statusLine", snap.outcomeText);
             }
+        }
+
+        /**
+         * Escreve texto ja quebrado e truncado para a caixa do widget. {@code UILabel} so
+         * quebra em {@code \n} — sem isto, uma copy mais longa (a analise do Grande Sabio,
+         * o texto de rendicao) atravessa o painel, que foi o que o QA viu.
+         */
+        private void setTextFitted(String role, String text) {
+            UIComponent widget = widgets.get(role);
+            if (widget == null) return;
+            if (widget instanceof UILabel label) {
+                label.setMultiline(true);
+                label.setText(fitToBox(text, label));
+                return;
+            }
+            setText(role, text);
         }
 
         @Override
@@ -2039,6 +2219,86 @@ public final class BattleDirector extends IgnisScript {
             commandIcons.clear();
             anchorOfWidget.clear();
             retryButton = null;
+        }
+    }
+
+    /**
+     * Fotografia de tudo que o presenter escreve num widget PERSISTIDO da cena. Existe
+     * porque esses widgets nao sao descartaveis: o autosave grava no `.ignis` o que
+     * estiver neles quando o editor salvar, entao o duelo tem de devolver cada
+     * propriedade que tocou.
+     */
+    private static final class WidgetState {
+
+        private final double x;
+        private final double y;
+        private final double width;
+        private final double height;
+        private final boolean visible;
+        private final boolean enabled;
+        private final String text;
+        private final Color textColor;
+        private final String imagePath;
+        private final float progressValue;
+        private final float progressMax;
+        private final Boolean multiline;
+
+        private WidgetState(UIComponent widget) {
+            this.x = widget.getX();
+            this.y = widget.getY();
+            this.width = widget.getWidth();
+            this.height = widget.getHeight();
+            this.visible = widget.isVisible();
+            this.enabled = widget.isEnabled();
+            this.textColor = widget.getTextColor();
+            // multiline entra aqui porque setTextFitted() o liga para quebrar a copy —
+            // e ele e serializado, entao ligar sem devolver contamina o autosave.
+            this.multiline = widget instanceof UILabel label ? label.isMultiline() : null;
+            if (widget instanceof UILabel label) {
+                this.text = label.getText();
+            } else if (widget instanceof UIButton button) {
+                this.text = button.getText();
+            } else {
+                this.text = null;
+            }
+            this.imagePath = widget instanceof UIImage image ? image.getImagePath() : null;
+            if (widget instanceof UIProgressBar bar) {
+                this.progressValue = bar.getCurrentValue();
+                this.progressMax = bar.getMaxValue();
+            } else {
+                this.progressValue = Float.NaN;
+                this.progressMax = Float.NaN;
+            }
+        }
+
+        static WidgetState capture(UIComponent widget) {
+            return new WidgetState(widget);
+        }
+
+        void restore(UIComponent widget) {
+            widget.setPosition(x, y);
+            widget.setSize(width, height);
+            widget.setVisible(visible);
+            widget.setEnabled(enabled);
+            widget.setTextColor(textColor);
+            if (multiline != null && widget instanceof UILabel wrapped) {
+                wrapped.setMultiline(multiline);
+            }
+            if (text != null && widget instanceof UILabel label) {
+                label.setText(text);
+            } else if (text != null && widget instanceof UIButton button) {
+                button.setText(text);
+            }
+            if (imagePath != null && widget instanceof UIImage image) {
+                image.setImagePath(imagePath);
+            }
+            if (!Float.isNaN(progressValue) && widget instanceof UIProgressBar bar) {
+                bar.setValue(progressValue, progressMax);
+            }
+        }
+
+        Bounds bounds() {
+            return new Bounds(x, y, width, height);
         }
     }
 

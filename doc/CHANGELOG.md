@@ -6,6 +6,12 @@
 
 ## [Não lançado]
 
+### Preservação de estado autorado e quebra de texto no BattleDirector (TensuraGame)
+O HUD de batalha persistido na cena (`BattleHudCanvas`) podia sofrer contaminação de propriedades quando o auto-save do editor ocorria durante a execução do combate ou na interrupção da simulação (Stop/onDetach). Além disso, textos longos gerados por análises dinâmicas do Grande Sábio ou status de combate extrapolavam a largura dos painéis.
+- **Contenção determinística de texto (`fitToBox` e `setTextFitted`):** cálculo e truncamento de linhas com reticências baseados em `FontRenderContext` e `Font.getLineMetrics`, garantindo que rótulos (`UILabel`) fiquem contidos no espaço dos painéis de combate.
+- **Fotografia e restauração de baseline (`WidgetState`):** captura integral das propriedades dos widgets antes da primeira mutação e restauração completa em `hide()` e no hook `onDetach()` do ciclo de vida, evitando a gravação de posições ou estados transientes no arquivo `.ignis`.
+- **Sincronização de binários:** atualização do pacote `ignis-engine-api.jar` e da cena `TensuraGame.ignis`.
+
 ### Suporte a bibliotecas privadas de projeto (`project/libs/`)
 `ScriptManager` compilava scripts um arquivo por vez, sem incluir os demais `.java` do projeto nem `.class` pré-compilados no classpath — qualquer projeto com lógica própria espalhada em mais de um arquivo (ex: classes de domínio reutilizadas por vários scripts) esbarrava em `cannot find symbol` ao compilar pelo editor. Agora `ScriptManager` procura `.jar` soltos em `project/libs/` e os inclui tanto no classpath de compilação (`compileScript`) quanto no `URLClassLoader` de runtime (`reloadClassLoader`) — por-projeto, opcional, sem acoplar a engine a nenhuma dependência específica de jogo. Ver `doc/PROJECT_LIBS_GUIDE.md`. Validado com o projeto `RimuruSurvivors` (`domain-lib` empacotado em `project/libs/rimuru-survivors-domain.jar`, 23 testes JUnit).
 

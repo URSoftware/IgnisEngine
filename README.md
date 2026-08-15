@@ -109,6 +109,7 @@ Toda a documentacao tecnica detalhada do projeto esta organizada de forma modula
 * [Referencia da API de Scripts](doc/IGNIS_SCRIPT_API.md): Tabela de metodos e constantes do IgnisScript.
 * [Manual de Consulta Rapida](doc/IGNISSCRIPT_QUICK_REFERENCE.md): Resumo sintatico rapido das funcoes de scripting.
 * [Manual de Prefabs](doc/PREFAB_SCRIPTS_GUIDE.md): Modelagem e instanciao de prefabs de objetos de jogo.
+* [Guia de Bibliotecas de Projeto](doc/PROJECT_LIBS_GUIDE.md): Carregamento e classpath de bibliotecas JAR privadas por projeto.
 
 ### Fisica e Colisoes
 * [Sistema de Colisoes Integrado](doc/IGNIS_COLLISION_SYSTEM.md): Teoria fisica das colisoes AABB e Circle.
@@ -119,6 +120,8 @@ Toda a documentacao tecnica detalhada do projeto esta organizada de forma modula
 * [Sistema de Alertas Visuais](doc/ALERT_SYSTEM_IMPLEMENTATION.md): Notificacoes temporizadas na Viewport.
 * [Guia do Builder](doc/BUILDER_GUIDE.md): Empacotamento de executaveis Java e exportacao nativa C++.
 * [Guia do Cliente do Marketplace](doc/MARKETPLACE_CLIENT_GUIDE.md): Integracao com marketplace Next.js e download de plugins.
+* [Guia do Servidor MCP](doc/MCP_SERVER_GUIDE.md): Integracao com agentes de IA e catalogo de ferramentas do Model Context Protocol.
+* [Guia de Colaboracao em Tempo Real](doc/COLLABORATION_GUIDE.md): Sessao multi-usuario e sincronizacao de cena via TCP.
 
 ---
 
