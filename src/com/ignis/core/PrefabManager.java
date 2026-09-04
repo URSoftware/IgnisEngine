@@ -188,6 +188,7 @@ public class PrefabManager {
         if (!prefabFile.exists()) return;
 
         try {
+            invalidatePrefabCache(prefabName);
             JSONObject prefabJson = prefabJson(prefabFile);
             JSONObject transform = prefabJson.optJSONObject("transform");
 
