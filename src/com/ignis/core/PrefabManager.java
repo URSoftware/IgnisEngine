@@ -188,6 +188,9 @@ public class PrefabManager {
         if (!prefabFile.exists()) return;
 
         try {
+            // propagateChanges deve refletir o estado atual do arquivo mesmo quando o
+            // mtime nao avanca (ex.: duas escritas no mesmo tick de 1s).
+            invalidatePrefabCache(prefabName);
             JSONObject prefabJson = prefabJson(prefabFile);
             JSONObject transform = prefabJson.optJSONObject("transform");
 

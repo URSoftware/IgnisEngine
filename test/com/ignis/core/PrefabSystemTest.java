@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,7 +76,8 @@ class PrefabSystemTest {
 
     @Test
     void propagateChangesUpdatesInstancesPreservingOverrides() throws Exception {
-        writePrefab("Hero", 32, "textures/hero.png");
+        Path prefabFile = writePrefab("Hero", 32, "textures/hero.png");
+        long originalStamp = prefabFile.toFile().lastModified();
         Game game = new Game();
         PrefabManager manager = newManager(game);
         game.setPrefabManager(manager);
@@ -88,6 +90,7 @@ class PrefabSystemTest {
 
         // Atualiza o Prefab base (mudando spritePath de textures/hero.png para textures/hero_v2.png)
         writePrefab("Hero", 32, "textures/hero_v2.png");
+        Files.setLastModifiedTime(prefabFile, FileTime.fromMillis(originalStamp));
         manager.propagateChanges("Hero");
 
         // X deve ser preservado (99.0), e spritePath deve ser atualizado (textures/hero_v2.png)
