@@ -75,7 +75,7 @@ class PrefabSystemTest {
 
     @Test
     void propagateChangesUpdatesInstancesPreservingOverrides() throws Exception {
-        writePrefab("Hero", 32, "textures/hero.png");
+        Path prefabFile = writePrefab("Hero", 32, "textures/hero.png");
         Game game = new Game();
         PrefabManager manager = newManager(game);
         game.setPrefabManager(manager);
@@ -87,7 +87,10 @@ class PrefabSystemTest {
         instance.setX(99.0);
 
         // Atualiza o Prefab base (mudando spritePath de textures/hero.png para textures/hero_v2.png)
+        java.nio.file.attribute.FileTime originalStamp = Files.getLastModifiedTime(prefabFile);
         writePrefab("Hero", 32, "textures/hero_v2.png");
+        // Reproduz a reescrita no mesmo tick do filesystem sem depender do timing do CI.
+        Files.setLastModifiedTime(prefabFile, originalStamp);
         manager.propagateChanges("Hero");
 
         // X deve ser preservado (99.0), e spritePath deve ser atualizado (textures/hero_v2.png)

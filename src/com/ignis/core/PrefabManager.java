@@ -188,6 +188,9 @@ public class PrefabManager {
         if (!prefabFile.exists()) return;
 
         try {
+            // Propagacao explicita deve ler a edicao atual, mesmo no mesmo tick de mtime.
+            // Spawns continuam reutilizando o cache para evitar I/O por instancia.
+            invalidatePrefabCache(prefabName);
             JSONObject prefabJson = prefabJson(prefabFile);
             JSONObject transform = prefabJson.optJSONObject("transform");
 
